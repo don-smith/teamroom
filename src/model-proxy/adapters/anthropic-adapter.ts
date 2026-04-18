@@ -1,10 +1,16 @@
 import type { OutgoingHttpHeaders } from "node:http";
 import type { Provider, AuthMode } from "../../types.js";
 import type { ProviderAdapter } from "./adapter.js";
+import { AnthropicOAuthCache } from "./anthropic-oauth-cache.js";
 
 export type AnthropicAuth =
   | { mode: "api-key"; apiKey: string }
-  | { mode: "oauth"; oauthToken: string }; // wired in Task 13
+  | {
+      mode: "oauth";
+      oauthToken: string;
+      cache: AnthropicOAuthCache;
+      exchange: (oauthToken: string) => Promise<{ tempKey: string; expiresAt: number }>;
+    };
 
 interface Opts {
   auth: AnthropicAuth;
@@ -25,14 +31,26 @@ export class AnthropicAdapter implements ProviderAdapter {
     return this.opts.upstreamUrl ?? "https://api.anthropic.com";
   }
 
-  injectAuth(headers: OutgoingHttpHeaders): void {
+  async resolveAuth(headers: OutgoingHttpHeaders): Promise<void> {
     delete headers.authorization;
-    if (this.opts.auth.mode === "api-key") {
-      headers["x-api-key"] = this.opts.auth.apiKey;
+    const auth = this.opts.auth;
+    if (auth.mode === "api-key") {
+      headers["x-api-key"] = auth.apiKey;
       return;
     }
-    // OAuth mode wired in Task 13; throw for now to make the gap visible.
-    throw new Error("AnthropicAdapter OAuth mode not yet implemented (Task 13)");
+    // OAuth mode — capture `auth` locally so the discriminant narrowing
+    // carries into the fetcher closure (TS doesn't narrow `this.opts.auth`
+    // through closures).
+    const tempKey = await auth.cache.get(auth.oauthToken, () =>
+      auth.exchange(auth.oauthToken),
+    );
+    headers["x-api-key"] = tempKey;
+  }
+
+  onUpstreamUnauthorized(): void {
+    if (this.opts.auth.mode === "oauth") {
+      this.opts.auth.cache.evict(this.opts.auth.oauthToken);
+    }
   }
 
   extractUsage(responseBody: unknown): { inputTokens?: number; outputTokens?: number } {

@@ -20,7 +20,7 @@ export class LmStudioAdapter implements ProviderAdapter {
     return this.opts.upstreamUrl;
   }
 
-  injectAuth(headers: OutgoingHttpHeaders): void {
+  async resolveAuth(headers: OutgoingHttpHeaders): Promise<void> {
     headers.authorization = `Bearer ${this.opts.realKey}`;
     delete headers["x-api-key"];
   }

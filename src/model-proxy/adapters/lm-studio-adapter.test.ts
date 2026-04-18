@@ -12,13 +12,13 @@ describe("LmStudioAdapter", () => {
     expect(a.authMode).toBe("api-key");
   });
 
-  it("injectAuth replaces Authorization with the real key", () => {
+  it("resolveAuth replaces Authorization with the real key", async () => {
     const a = new LmStudioAdapter({ upstreamUrl: "http://x", realKey: "real-tok" });
     const headers: Record<string, string | string[] | undefined> = {
       authorization: "Bearer routing-token",
       "x-api-key": "routing-token",
     };
-    a.injectAuth(headers);
+    await a.resolveAuth(headers);
     expect(headers.authorization).toBe("Bearer real-tok");
     // x-api-key is also passed through but LM Studio uses Bearer; still cleared:
     expect(headers["x-api-key"]).toBeUndefined();
