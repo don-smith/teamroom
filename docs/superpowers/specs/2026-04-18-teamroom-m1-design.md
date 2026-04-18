@@ -24,7 +24,9 @@ Out of M1 (see §12 for the full deferred list): keep-alive containers, agent on
 
 ## 3. Architectural principles
 
-Four principles shape every decision in this spec. They are meant to be applied in M1 and carried forward into later milestones.
+Five principles shape every decision in this spec. They are meant to be applied in M1 and carried forward into later milestones.
+
+**Deliberate coupling and extensibility.** Every design decision is evaluated against what is shared and what is isolated, what is responsible for what, and how the choice affects the harness's ability to grow into memory, reasoning, delegation, collaboration, and richer eventing. The small M1 surface does not excuse casual coupling — coupling choices made accidentally here become very expensive to undo at M4+. Concretely: prefer narrow interfaces, per-agent isolation over shared mutable state, events over direct calls between subsystems, and explicit ownership of every responsibility. Extensibility tests applied to any proposal: can a new agent be added without touching existing agents? Can a new channel be added without touching the daemon? Can a new event type be published without ceremony? If any answer is "not easily," the design needs work.
 
 **Minimize long-running process dependencies.** The orchestrator has no runtime dependencies on other long-running processes. SQLite is in-process; Docker spawns ephemeral containers only; no separate broker, cache, or queue. When an in-process option can credibly do the job, use it.
 
@@ -60,9 +62,9 @@ Single machine, single filesystem, single SQLite file. Distributed deployment is
 │   └── <agent-name>/              # one folder per agent (M1: exactly one)
 │       ├── Dockerfile             # per-agent image (base extraction waits for agent #2)
 │       ├── agent.yaml             # name, model, image tag, prompt path
-│       ├── CLAUDE.md              # system prompt / instructions
-│       ├── session-id             # gitignored — Claude session ID, written by container
-│       └── store/                 # gitignored — writable scratch, mounted into container
+│       ├── CLAUDE.md              # system prompt / instructions (read-only mount into container)
+│       └── store/                 # gitignored — writable scratch, mounted into container at /store
+│           └── session-id         # Claude session ID, written by the agent runtime
 ├── src/
 │   ├── daemon/                    # orchestrator
 │   ├── cli/                       # teamroom send / tail / serve / status
@@ -81,7 +83,9 @@ Single machine, single filesystem, single SQLite file. Distributed deployment is
 └── tsconfig.json
 ```
 
-The agent folder is the single unit of per-agent state. Everything the agent "has" lives there. Copying the folder is the closest thing to "copy an agent." Checked into git: `Dockerfile`, `agent.yaml`, `CLAUDE.md`. Gitignored: `session-id`, `store/`.
+The agent folder is the single unit of per-agent state. Everything the agent "has" lives there. Copying the folder is the closest thing to "copy an agent." Checked into git: `Dockerfile`, `agent.yaml`, `CLAUDE.md`. Gitignored: `store/` (which includes `session-id` and any runtime scratch the agent writes).
+
+The agent's runtime state and identity are deliberately separated. `CLAUDE.md`, `Dockerfile`, and `agent.yaml` define *what the agent is* and are read-only from the agent's runtime perspective. `store/` is *what the agent is doing or has done* — writable runtime state, including the Claude session ID and anything the agent chooses to persist (LangGraph checkpoints, scratch notes, tool caches).
 
 Per-agent Dockerfile (not a shared base). When agent #2 arrives and duplication becomes real, a base image is extracted. `src/agent-runtime/` is copied into the image at build time; the build context is the repo root. The dev-loop cost of rebuilding on runtime change is accepted at M1 and revisited only if it becomes painful.
 
@@ -129,7 +133,7 @@ CREATE INDEX idx_turns_status ON turns(status);
 
 `turns` is separate from `messages` because they represent different concerns: messages are transport (what text moved), turns are processing (what work ran, where, with what outcome). The split keeps trace context, container lifecycle, and timing on a single row, supports one-inbound-to-many-outbound cleanly (Claude Agent SDK streams + tool-use interleaving), and makes crash recovery a single query. The alternative — status columns on `messages` — was rejected because it mixes transport with processing and would be awkward to retrofit when retries and multi-outbound behavior arrive.
 
-The Claude session ID persists only at `agents/<name>/session-id`. A `sessions` table was considered and dropped: a file is sufficient for M1, and the container writes it atomically from inside the mount without needing DB access. A DB table is introduced later if and when cross-agent session queries or audit history justify it.
+The Claude session ID persists only at `agents/<name>/store/session-id` (written by the agent runtime inside the container, visible at `/store/session-id` from the container's perspective). A `sessions` table was considered and dropped: a file is sufficient for M1, and the container writes it atomically from inside the mount without needing DB access. A DB table is introduced later if and when cross-agent session queries or audit history justify it.
 
 Migrations are numbered SQL files under `src/daemon/migrations/NNN_description.sql`, applied on daemon startup. No migration framework at M1.
 
@@ -155,11 +159,11 @@ Migrations are numbered SQL files under `src/daemon/migrations/NNN_description.s
         │      stdin: one JSON line {prompt, messageId, turnId, traceId}; then close
         ▼
   [Container: agent-runtime]
-        │ 9.  Invoke Claude SDK with prior session ID
+        │ 9.  Invoke LLM with prior session ID (M1: direct call; LangGraph later — see §9)
         │ 10. For each reply chunk: emit JSON line on stdout
         │       {"type":"reply","body":"...","messageId":"..."}
         │     Interim status/log events emitted similarly with other type values.
-        │ 11. Persist new session ID to /agent/session-id
+        │ 11. Persist new session ID to /store/session-id
         │ 12. Exit 0
         ▼
   [Daemon: stdout consumer]
@@ -195,7 +199,10 @@ The CLI is intentionally thin. Each command parses arguments and delegates to a 
 The interface between daemon and agent runtime.
 
 - **Image:** built from `agents/<name>/Dockerfile`. Tag derived from agent name (e.g., `teamroom-agent-corsa:latest`). Daemon builds on first run if the image is missing. How explicit rebuilds are triggered (a standalone CLI helper vs. `--rebuild` flag vs. manual `docker build`) is resolved in the implementation plan — see §15.
-- **Mounts:** `agents/<name>/` mounted at `/agent` writable. Nothing else.
+- **Mounts:**
+  - `agents/<name>/CLAUDE.md` → `/CLAUDE.md` (read-only). The agent's system prompt lives on the host and is read inside the container without rebuilding the image on prompt edits.
+  - `agents/<name>/store/` → `/store` (read-write). The agent's writable scratch space, including `/store/session-id` and any runtime state the agent chooses to persist (e.g., LangGraph checkpoints).
+  - Nothing else. The agent does not see the project source, other agents' folders, or the daemon's DB.
 - **Environment:** `TEAMROOM_TRACE_ID`, `TEAMROOM_TURN_ID`, `TEAMROOM_AGENT_NAME`, `CLAUDE_SESSION_ID` (may be empty on first turn), `ANTHROPIC_API_KEY`.
 - **Stdin:** exactly one JSON line = `{prompt, messageId, turnId, traceId}`. Daemon closes stdin after writing.
 - **Stdout:** JSON Lines. Each line is an event with a `type` discriminator:
@@ -206,6 +213,14 @@ The interface between daemon and agent runtime.
 - **Stderr:** unstructured; captured as log text.
 - **Exit:** 0 on clean completion. Non-zero marks the turn errored; the exit code and last ~2KB of stderr are captured in `turns.error`.
 - **Timeout:** default 5 minutes per turn, configurable via daemon env. On timeout, the daemon issues `docker kill`; the turn moves to `error` with `error='timeout'`.
+
+### 9.1 Agent internals are the agent's concern
+
+The daemon treats the container as opaque beyond the contract above. What framework the agent uses internally — a direct LLM call, Anthropic's Claude Agent SDK, LangGraph, something custom — is the agent's choice, not the daemon's. The contract is language-agnostic (stdin/stdout JSONL) so agents may be implemented in Node, Python, or anything else that can read stdin and write stdout.
+
+**Intended direction: LangGraph as the per-agent runtime framework.** Long-term, each agent is expected to run a LangGraph workflow inside its container — its own reasoning graph, state schema, and checkpointing. This gives each agent first-class agency and process. LangGraph checkpoint state lives in `/store` (the writable mount), which keeps it on the agent-isolation side of the boundary.
+
+**M1 deliberately defers LangGraph.** The first agent's runtime is a minimal Node.js shim — read stdin, call the LLM, stream reply events to stdout, persist the new session ID. No graph, no tools, no complex state. The goal is to prove the container contract and the surrounding daemon/DB/bus machinery, not to validate LangGraph's fit. Swapping the runtime to LangGraph later is a container-internal change and does not touch the daemon, the DB, or the bus.
 
 ## 10. NotifyBus
 
