@@ -4,15 +4,29 @@ The `claude-assistant` agent talks to the real Anthropic API through the model p
 
 ## OAuth (preferred — uses Claude Code subscription)
 
-If you've logged into Claude Code on this machine, the OAuth token is at `~/.claude/.credentials.json` and the proxy will pick it up automatically. No `.env` change needed.
+If you've logged into Claude Code on this machine, Team Room will pick up the OAuth token automatically — **on macOS** from the system Keychain (service `Claude Code-credentials`); **on Linux/Windows** from `~/.claude/.credentials.json`. No `.env` change needed.
 
-To verify: start the daemon (`teamroom serve`) and look for a startup log line indicating the proxy started with `anthropicAdapterPresent: true`. If you see `agent.unhealthy` or turns marked errored with `missing_credential`, discovery failed.
+To verify: start the daemon (`teamroom serve`) and confirm the boot log shows `anthropicAdapterPresent: true`. If turns for `claude-assistant` immediately error with `missing_credential`, discovery failed — see Troubleshooting below.
 
-To override the discovered location, set in `.env`:
+### Generating an explicit OAuth token (recommended for any non-interactive use)
+
+The most reliable way to get a value for `CLAUDE_CODE_OAUTH_TOKEN` is the Claude Code CLI itself:
+
+```bash
+claude setup-token
+```
+
+This walks you through browser OAuth authorization and prints a long-lived token (`sk-ant-oat01-...`, ~1-year validity) to stdout. Paste it into `.env`:
 
 ```
-CLAUDE_CODE_OAUTH_TOKEN=<the token value>
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
+
+When the env var is set, it overrides whatever's in the Keychain or the file fallback.
+
+### macOS Keychain access — first-time prompt
+
+The first time the daemon reads the Keychain entry, macOS may show an "Allow access" prompt for the `security` command-line tool. Click **Always Allow** to avoid being asked again. If you click Deny, the daemon falls through to the file fallback (which doesn't exist on macOS), then to `ANTHROPIC_API_KEY`, then to `null` (which fails fast for `provider:anthropic` agents). The simplest workaround is to set `CLAUDE_CODE_OAUTH_TOKEN` explicitly.
 
 ## API key (fallback, non-subscription)
 
@@ -27,9 +41,10 @@ If both an API key and an OAuth credential are present, OAuth wins.
 ## Discovery order (canonical)
 
 1. `CLAUDE_CODE_OAUTH_TOKEN` from `.env` → OAuth mode.
-2. `~/.claude/.credentials.json` (parsed for `oauth_token` / `access_token` / `token`) → OAuth mode.
-3. `ANTHROPIC_API_KEY` from `.env` → API-key mode.
-4. Otherwise the daemon starts but `provider:anthropic` agents fail fast with `missing_credential`.
+2. **macOS only**: macOS Keychain entry `Claude Code-credentials` → OAuth mode. The stored value may be either a raw `sk-ant-oat01-` token or a JSON blob; both shapes are accepted.
+3. `~/.claude/.credentials.json` (parsed for `oauth_token` / `access_token` / `token`) → OAuth mode. Used on Linux/Windows where Claude Code stores credentials in a file.
+4. `ANTHROPIC_API_KEY` from `.env` → API-key mode.
+5. Otherwise the daemon starts but `provider:anthropic` agents fail fast with `missing_credential`.
 
 ## What the proxy does with these
 
@@ -40,8 +55,9 @@ The container is mode-agnostic — its `AnthropicLlmClient` always sends `x-api-
 
 ## Troubleshooting
 
-- **`turn errored: missing_credential`** — the proxy didn't find an Anthropic credential at boot; check `.env` and `~/.claude/.credentials.json`.
-- **Repeated 401 from Anthropic in OAuth mode** — your Claude Code OAuth token may have expired or been revoked. Re-login to Claude Code (so a fresh token lands in `~/.claude/.credentials.json`) and restart the daemon.
+- **`turn errored: missing_credential`** — the proxy didn't find an Anthropic credential at boot. On macOS check the Keychain has an entry (`security find-generic-password -s "Claude Code-credentials"` should print metadata). If it doesn't, run `claude setup-token` and paste the result into `.env` as `CLAUDE_CODE_OAUTH_TOKEN`. On Linux check `~/.claude/.credentials.json`.
+- **macOS prompts for Keychain access on every daemon start.** Click **Always Allow** rather than Allow. If the prompt is dismissable / reproducible, set `CLAUDE_CODE_OAUTH_TOKEN` in `.env` to bypass the Keychain entirely.
+- **Repeated 401 from Anthropic in OAuth mode** — your OAuth token may have expired or been revoked. Run `claude setup-token` for a fresh one and update `.env` (or re-login to Claude Code so the Keychain entry refreshes), then restart the daemon.
 - **`oauth_exchange_403` or signed-request errors** — Anthropic may have gated programmatic exchange. See `docs/tabled.md` for the fallback (Claude Agent SDK in the container).
 - **`oauth_exchange_no_key`** — the exchange returned 2xx but the response didn't contain a recognizable temp-key field. Check the `oauth.exchange.completed` span and the upstream response body.
 
