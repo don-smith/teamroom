@@ -1,0 +1,4 @@
+name: claude-assistant
+provider: anthropic
+model: claude-sonnet-4-5
+image_tag: teamroom-agent-claude-assistant:latest
