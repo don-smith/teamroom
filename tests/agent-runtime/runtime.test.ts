@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTurn, type AnthropicClient } from "../../src/agent-runtime/runtime.js";
+import { runTurn, type LlmClient } from "../../src/agent-runtime/runtime.js";
 import { loadConversation } from "../../src/agent-runtime/session-store.js";
 
 describe("runTurn", () => {
@@ -19,9 +19,9 @@ describe("runTurn", () => {
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("calls Anthropic, emits reply event, persists user + assistant to conversation.jsonl", async () => {
+  it("calls the LLM, emits reply event, persists user + assistant to conversation.jsonl", async () => {
     const calls: { system: string; messages: unknown[] }[] = [];
-    const client: AnthropicClient = {
+    const client: LlmClient = {
       async createMessage({ system, messages, model }) {
         calls.push({ system, messages });
         expect(model).toBe("claude-opus-4-7");
@@ -57,7 +57,7 @@ describe("runTurn", () => {
       `${JSON.stringify({ role: "user", content: "a" })}\n${JSON.stringify({ role: "assistant", content: "b" })}\n`,
     );
     let captured: unknown[] = [];
-    const client: AnthropicClient = {
+    const client: LlmClient = {
       async createMessage({ messages }) {
         captured = messages;
         return { text: "c" };
@@ -81,7 +81,7 @@ describe("runTurn", () => {
   it("uses a default system prompt if AGENTS.md is missing", async () => {
     rmSync(agentsMd);
     let captured = "";
-    const client: AnthropicClient = {
+    const client: LlmClient = {
       async createMessage({ system }) {
         captured = system;
         return { text: "ok" };

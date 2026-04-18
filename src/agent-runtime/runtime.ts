@@ -8,23 +8,23 @@ export interface Envelope {
   traceId: string;
 }
 
-export interface AnthropicCreateArgs {
+export interface LlmCreateArgs {
   model: string;
   system: string;
   messages: ConversationMessage[];
 }
 
-export interface AnthropicCreateResult {
+export interface LlmCreateResult {
   text: string;
 }
 
-export interface AnthropicClient {
-  createMessage(args: AnthropicCreateArgs): Promise<AnthropicCreateResult>;
+export interface LlmClient {
+  createMessage(args: LlmCreateArgs): Promise<LlmCreateResult>;
 }
 
 export interface RunTurnDeps {
   envelope: Envelope;
-  client: AnthropicClient;
+  client: LlmClient;
   model: string;
   agentsMdPath: string;
   conversationPath: string;

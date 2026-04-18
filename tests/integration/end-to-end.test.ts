@@ -69,7 +69,7 @@ describe("end-to-end (stack assembled with test implementations)", () => {
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
       agentConfigs: new Map([[cfg.name, cfg]]),
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => randomUUID(),

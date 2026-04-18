@@ -1,18 +1,23 @@
 import { join, resolve } from "node:path";
 import { startDaemon } from "./daemon.js";
+import { readEnvFile } from "../env/env-file.js";
+
+const DEFAULT_CONTAINER_BASE_URL = "http://host.docker.internal:1234/v1";
 
 async function main(): Promise<void> {
   const root = resolve(process.cwd());
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    process.stderr.write("ANTHROPIC_API_KEY is required\n");
+  const env = readEnvFile(root, ["LM_STUDIO_API_TOKEN", "LM_STUDIO_BASE_URL"]);
+  const token = env.LM_STUDIO_API_TOKEN;
+  if (!token) {
+    process.stderr.write("LM_STUDIO_API_TOKEN missing from .env\n");
     process.exit(1);
   }
 
   const daemon = await startDaemon({
     dataDir: join(root, "data"),
     agentsDir: join(root, "agents"),
-    anthropicApiKey: apiKey,
+    modelBaseUrl: env.LM_STUDIO_BASE_URL ?? DEFAULT_CONTAINER_BASE_URL,
+    modelApiToken: token,
   });
 
   const shutdown = async () => {

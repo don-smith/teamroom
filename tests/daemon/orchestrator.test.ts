@@ -46,7 +46,7 @@ describe("Orchestrator", () => {
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
       agentConfigs: new Map([["assistant", agentConfig]]),
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -90,7 +90,7 @@ describe("Orchestrator", () => {
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
       agentConfigs: new Map([["assistant", agentConfig]]),
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -115,7 +115,7 @@ describe("Orchestrator", () => {
       bus: new InMemoryBus(),
       logger, clock, runner,
       agentConfigs: new Map([["assistant", agentConfig]]),
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => "x",

@@ -83,7 +83,7 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -127,7 +127,7 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       timeoutMs: 5000,
       genId: () => "generated-id",
     });
@@ -156,7 +156,7 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       timeoutMs: 100,
       genId: () => "generated-id",
     });
@@ -185,7 +185,7 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      anthropicApiKey: "sk-test",
+      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       timeoutMs: 5000,
       genId: () => "generated-id",
     });

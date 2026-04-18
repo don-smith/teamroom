@@ -15,7 +15,8 @@ export interface OrchestratorDeps {
   clock: Clock;
   runner: ContainerRunner;
   agentConfigs: Map<string, AgentConfig>;
-  anthropicApiKey: string;
+  modelBaseUrl: string;
+  modelApiToken: string;
   turnTimeoutMs: number;
   pollIntervalMs: number;
   genId: () => string;
@@ -46,7 +47,8 @@ export class Orchestrator {
           bus: this.deps.bus,
           logger: this.deps.logger,
           clock: this.deps.clock,
-          anthropicApiKey: this.deps.anthropicApiKey,
+          modelBaseUrl: this.deps.modelBaseUrl,
+          modelApiToken: this.deps.modelApiToken,
           timeoutMs: this.deps.turnTimeoutMs,
           genId: this.deps.genId,
         });

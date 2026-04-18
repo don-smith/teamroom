@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
 # M1 smoke test — exercises the full stack end-to-end.
-# Requires: ANTHROPIC_API_KEY set; Docker running.
+# Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running on localhost with the configured model loaded; Docker running.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "ANTHROPIC_API_KEY is required" >&2
+if [[ ! -f .env ]]; then
+  echo ".env file required (with LM_STUDIO_API_TOKEN)" >&2
+  exit 1
+fi
+
+if ! grep -q "^LM_STUDIO_API_TOKEN=" .env; then
+  echo "LM_STUDIO_API_TOKEN missing from .env" >&2
+  exit 1
+fi
+
+LM_STUDIO_HOST_URL="${LM_STUDIO_HOST_URL:-http://localhost:1234}"
+echo "==> Checking LM Studio reachable at $LM_STUDIO_HOST_URL"
+if ! curl -sS -m 3 -o /dev/null "${LM_STUDIO_HOST_URL}/v1/models"; then
+  echo "LM Studio not reachable at $LM_STUDIO_HOST_URL — start it and load a model" >&2
   exit 1
 fi
 

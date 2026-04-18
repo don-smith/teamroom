@@ -17,7 +17,8 @@ export interface ProcessTurnDeps {
   bus: NotifyBus;
   logger: Logger;
   clock: Clock;
-  anthropicApiKey: string;
+  modelBaseUrl: string;
+  modelApiToken: string;
   timeoutMs: number;
   genId: () => string;
 }
@@ -25,7 +26,7 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    anthropicApiKey, timeoutMs, genId,
+    modelBaseUrl, modelApiToken, timeoutMs, genId,
   } = deps;
 
   const turnId = genId();
@@ -78,7 +79,8 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       TEAMROOM_TURN_ID: turnId,
       TEAMROOM_AGENT_NAME: agentConfig.name,
       TEAMROOM_MODEL: agentConfig.model,
-      ANTHROPIC_API_KEY: anthropicApiKey,
+      TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
+      TEAMROOM_MODEL_API_TOKEN: modelApiToken,
     },
   };
 

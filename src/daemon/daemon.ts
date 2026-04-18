@@ -18,7 +18,8 @@ import { Orchestrator } from "./orchestrator.js";
 export interface DaemonOptions {
   dataDir: string;          // e.g. <repo>/data
   agentsDir: string;        // e.g. <repo>/agents
-  anthropicApiKey: string;
+  modelBaseUrl: string;     // container-side URL, e.g. http://host.docker.internal:1234/v1
+  modelApiToken: string;    // bearer token for the model endpoint
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
 }
@@ -79,7 +80,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const orchestrator = new Orchestrator({
     messageRepo, turnRepo, bus, logger: rootLogger, clock, runner,
     agentConfigs,
-    anthropicApiKey: opts.anthropicApiKey,
+    modelBaseUrl: opts.modelBaseUrl,
+    modelApiToken: opts.modelApiToken,
     turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
