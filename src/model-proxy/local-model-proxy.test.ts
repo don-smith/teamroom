@@ -236,4 +236,46 @@ describe("LocalModelProxy", () => {
     await proxy.stop();
     await upstream.close();
   });
+
+  it("accepts the routing token in Authorization: Bearer (OpenAI-SDK shape)", async () => {
+    // The OpenAI SDK does not send `x-api-key`; it sends `Authorization: Bearer <apiKey>`.
+    // The proxy must extract the routing token from either header so both
+    // container-side SDKs (Anthropic + OpenAI-compat) work without per-SDK plumbing.
+    const upstream = await startFakeUpstream(() => ({
+      status: 200,
+      body: JSON.stringify({
+        choices: [{ message: { content: "ok" } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    }));
+    const registry = new TokenRegistry();
+    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const proxy = new LocalModelProxy({
+      registry,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      logger,
+    });
+    const { port } = await proxy.start();
+    const tok = registry.mint({
+      agentId: "a",
+      turnId: "t",
+      traceId: "tr",
+      provider: "lm-studio",
+      model: "x",
+    });
+
+    const resp = await postToProxy(
+      port,
+      "/v1/chat/completions",
+      { authorization: `Bearer ${tok}` },
+      "{}",
+    );
+
+    expect(resp.status).toBe(200);
+    expect(upstream.recorded[0].headers.authorization).toBe("Bearer lm-real");
+    expect(upstream.recorded[0].headers["x-api-key"]).toBeUndefined();
+    await proxy.stop();
+    await upstream.close();
+  });
 });

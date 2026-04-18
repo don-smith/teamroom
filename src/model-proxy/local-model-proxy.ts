@@ -111,8 +111,19 @@ export class LocalModelProxy implements ModelProxy {
     const spanId = newSpanId();
     const startedAt = Date.now();
 
-    const tokenHeader = req.headers["x-api-key"];
-    const token = Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader;
+    // The Anthropic SDK sends the routing token as `x-api-key`; the OpenAI SDK
+    // sends it as `Authorization: Bearer <token>`. Accept either so both
+    // container-side SDKs work without per-SDK proxy plumbing.
+    const apiKeyHeader = req.headers["x-api-key"];
+    const apiKeyValue = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+    let token: string | undefined = apiKeyValue;
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+      if (authValue && authValue.startsWith("Bearer ")) {
+        token = authValue.slice("Bearer ".length).trim() || undefined;
+      }
+    }
 
     if (!token) {
       emit(this.opts.logger, "warn", buildSpan({
