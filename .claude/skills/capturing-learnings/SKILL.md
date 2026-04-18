@@ -24,6 +24,7 @@ After each approved spec, plan, or major commit set — and **before proceeding 
 2. **Are we carrying an assumption that hasn't been tested?** If yes, note it — ideally as a tabled entry or a memory update.
 3. **What in `docs/tabled.md` is ready to be processed?** Walk each entry; decide destination.
 4. **What should be promoted to an artifact (skill, runbook, memory) or remembered going forward?**
+5. **Any existing memory in `docs/memory/` that is now stale?** Glance through the index. If a memory's rationale has dissolved (milestone shipped, decision was reversed, scope narrowed), update or remove it. Announce the change per AGENTS.md.
 
 The checkpoint produces either (a) a concrete change (a file written, a memory updated, a skill created) or (b) an explicit "nothing to do" — never a vague promise to "come back to this later."
 
