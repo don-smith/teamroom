@@ -18,4 +18,4 @@ M1 scope: no topic registry, no durable delivery guarantees, no broker-side rout
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [types.ts](../types.ts) (`BusEvent`), `chokidar` npm package.
 - **Used by:** [daemon/README.md](../daemon/README.md) (turn-processor, reconcile publish), [cli/README.md](../cli/README.md) (`tail` subscribes).
-- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §10 NotifyBus.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 event bus, §3 `NotifyBus` seam decision.

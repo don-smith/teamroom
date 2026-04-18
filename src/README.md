@@ -19,6 +19,5 @@ The source tree is split by runtime responsibility. Most of it runs on the **hos
 ## Related
 
 - **Parent:** [repo root](../README.md)
-- **Spec:** [M1 design](../docs/specs/2026-04-18-teamroom-m1-design.md) — §4 architecture, §5 layout.
-- **Plan:** [M1 implementation plan](../docs/plans/2026-04-18-teamroom-m1-plan.md)
+- **As-built:** [M1](../docs/as-built/2026-04-18-teamroom-m1.md) — §2 architecture, §3 key decisions, §4 adaptations.
 - **Practices:** [ways-of-working](../docs/ways-of-working.md)

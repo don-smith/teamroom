@@ -18,4 +18,4 @@ Four short-lived subcommands (`serve`, `send`, `tail`, `status`) plus the comman
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [db/README.md](../db/README.md), [bus/README.md](../bus/README.md), [env/env-file.ts](../env/env-file.ts), [agent-config/README.md](../agent-config/README.md), [daemon/README.md](../daemon/README.md).
 - **Used by:** `package.json` `bin` entry (`teamroom` → `dist/cli/main.js`).
-- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §8 CLI surface.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §1 exit criteria, §2 processes and boundaries (CLI subcommands).

@@ -19,5 +19,5 @@ M1 deliberately uses a minimal runtime; **LangGraph is the intended long-term re
 - **Uses:** `openai` npm package, Node `fs` (for the writable `/store` mount and read-only `/AGENTS.md`).
 - **Used by:** the container `ENTRYPOINT` in each agent's `Dockerfile`. Not imported by any other `src/` module — the process boundary is strict.
 - **Host-side counterpart:** [agent-config/README.md](../agent-config/README.md) — the loader that prepares what this runtime needs at spawn time.
-- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §9 container contract, §9.1 agent internals are the agent's concern.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 container contract, §3 language-agnostic contract decision.
 - **Memory:** `project_teamroom_langgraph_direction` — intended M4+ replacement framework.

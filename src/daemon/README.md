@@ -19,4 +19,4 @@ The long-running process that owns the DB connection, polls for pending inbound 
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [db/README.md](../db/README.md), [bus/README.md](../bus/README.md), [container/README.md](../container/README.md), [agent-config/README.md](../agent-config/README.md), [env/env-file.ts](../env/env-file.ts), [clock/clock.ts](../clock/clock.ts), [logger/logger.ts](../logger/logger.ts).
 - **Used by:** [cli/serve.ts](../cli/README.md) (entry point for users).
-- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §3 principles (invariants), §4 architecture, §7 turn lifecycle, §12 error handling.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 processes and boundaries, §2 turn lifecycle, §3 "nothing silent/inconsistent/crashes" invariant, §5 reconciler blind spot and shutdown debts.

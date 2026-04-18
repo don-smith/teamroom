@@ -10,9 +10,9 @@ Milestone 1 — "One agent that works." A single hand-configured agent (`assista
 
 For M1 the agent calls a local LM Studio model via an OpenAI-compatible endpoint; a model proxy lands in M2 that generalises this to Anthropic, OpenAI, and other backends.
 
-- Design: `docs/specs/2026-04-18-teamroom-m1-design.md`
-- Plan: `docs/plans/2026-04-18-teamroom-m1-plan.md`
-- Practices: `docs/ways-of-working.md`
+- As-built: [`docs/as-built/2026-04-18-teamroom-m1.md`](docs/as-built/2026-04-18-teamroom-m1.md) — what shipped, key decisions, known debts.
+- Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
+- Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md)
 
 ## Quick start
 

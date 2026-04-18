@@ -17,4 +17,4 @@
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** Node `child_process` (DockerRunner only).
 - **Used by:** [daemon/README.md](../daemon/README.md) (turn-processor).
-- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §9 container contract (mounts, env, stdin/stdout protocol, exit codes, timeouts).
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 container contract (mounts, env, stdin/stdout protocol, exit codes, timeouts).
