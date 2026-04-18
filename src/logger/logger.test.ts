@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CapturingLogger, JsonLinesLogger } from "../src/logger/logger.js";
-import { ControllableClock } from "../src/clock/clock.js";
+import { CapturingLogger, JsonLinesLogger } from "./logger.js";
+import { ControllableClock } from "../clock/clock.js";
 
 describe("CapturingLogger", () => {
   it("captures log entries in order", () => {

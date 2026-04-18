@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SystemClock, ControllableClock } from "../src/clock/clock.js";
+import { SystemClock, ControllableClock } from "./clock.js";
 
 describe("SystemClock", () => {
   it("returns a valid ISO timestamp near Date.now()", () => {

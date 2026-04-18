@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createDatabase, type Db } from "../../src/db/database.js";
-import { runMigrations } from "../../src/db/migrator.js";
-import { AgentRepo } from "../../src/db/agent-repo.js";
-import { MessageRepo } from "../../src/db/message-repo.js";
-import { TurnRepo } from "../../src/db/turn-repo.js";
+import { createDatabase, type Db } from "./database.js";
+import { runMigrations } from "./migrator.js";
+import { AgentRepo } from "./agent-repo.js";
+import { MessageRepo } from "./message-repo.js";
+import { TurnRepo } from "./turn-repo.js";
 
 function freshDb(): Db {
   const db = createDatabase(":memory:");

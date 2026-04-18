@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConversation, appendMessage } from "../../src/agent-runtime/session-store.js";
+import { loadConversation, appendMessage } from "./session-store.js";
 
 describe("session-store", () => {
   let file: string;

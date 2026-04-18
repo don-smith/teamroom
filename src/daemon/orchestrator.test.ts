@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createDatabase } from "../../src/db/database.js";
-import { runMigrations } from "../../src/db/migrator.js";
-import { AgentRepo } from "../../src/db/agent-repo.js";
-import { MessageRepo } from "../../src/db/message-repo.js";
-import { TurnRepo } from "../../src/db/turn-repo.js";
-import { InMemoryBus } from "../../src/bus/in-memory-bus.js";
-import { FakeRunner } from "../../src/container/fake-runner.js";
-import { ControllableClock } from "../../src/clock/clock.js";
-import { CapturingLogger } from "../../src/logger/logger.js";
-import { Orchestrator } from "../../src/daemon/orchestrator.js";
-import type { AgentConfig } from "../../src/agent-config/agent-config.js";
+import { createDatabase } from "../db/database.js";
+import { runMigrations } from "../db/migrator.js";
+import { AgentRepo } from "../db/agent-repo.js";
+import { MessageRepo } from "../db/message-repo.js";
+import { TurnRepo } from "../db/turn-repo.js";
+import { InMemoryBus } from "../bus/in-memory-bus.js";
+import { FakeRunner } from "../container/fake-runner.js";
+import { ControllableClock } from "../clock/clock.js";
+import { CapturingLogger } from "../logger/logger.js";
+import { Orchestrator } from "./orchestrator.js";
+import type { AgentConfig } from "../agent-config/agent-config.js";
 
 const agentConfig: AgentConfig = {
   name: "assistant",

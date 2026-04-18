@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileNotifyBus } from "../../src/bus/file-notify-bus.js";
-import type { BusEvent } from "../../src/types.js";
+import { FileNotifyBus } from "./file-notify-bus.js";
+import type { BusEvent } from "../types.js";
 
 function evt(id: string, type: string): BusEvent {
   return { id, type, ts: "2026-04-18T00:00:00.000Z" };

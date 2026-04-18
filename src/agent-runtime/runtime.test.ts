@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTurn, type LlmClient } from "../../src/agent-runtime/runtime.js";
-import { loadConversation } from "../../src/agent-runtime/session-store.js";
+import { runTurn, type LlmClient } from "./runtime.js";
+import { loadConversation } from "./session-store.js";
 
 describe("runTurn", () => {
   let dir: string;

@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sendToDb } from "../../src/cli/send.js";
-import { createDatabase } from "../../src/db/database.js";
-import { runMigrations } from "../../src/db/migrator.js";
-import { AgentRepo } from "../../src/db/agent-repo.js";
-import { MessageRepo } from "../../src/db/message-repo.js";
+import { sendToDb } from "./send.js";
+import { createDatabase } from "../db/database.js";
+import { runMigrations } from "../db/migrator.js";
+import { AgentRepo } from "../db/agent-repo.js";
+import { MessageRepo } from "../db/message-repo.js";
 
 describe("sendToDb", () => {
   let dir: string;

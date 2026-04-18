@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createDatabase } from "../../src/db/database.js";
-import { runMigrations } from "../../src/db/migrator.js";
-import { AgentRepo } from "../../src/db/agent-repo.js";
-import { MessageRepo } from "../../src/db/message-repo.js";
-import { TurnRepo } from "../../src/db/turn-repo.js";
-import { InMemoryBus } from "../../src/bus/in-memory-bus.js";
-import { ControllableClock } from "../../src/clock/clock.js";
-import { CapturingLogger } from "../../src/logger/logger.js";
-import { reconcile } from "../../src/daemon/reconcile.js";
-import type { BusEvent } from "../../src/types.js";
+import { createDatabase } from "../db/database.js";
+import { runMigrations } from "../db/migrator.js";
+import { AgentRepo } from "../db/agent-repo.js";
+import { MessageRepo } from "../db/message-repo.js";
+import { TurnRepo } from "../db/turn-repo.js";
+import { InMemoryBus } from "../bus/in-memory-bus.js";
+import { ControllableClock } from "../clock/clock.js";
+import { CapturingLogger } from "../logger/logger.js";
+import { reconcile } from "./reconcile.js";
+import type { BusEvent } from "../types.js";
 
 function seedOrphan(
   clock: ControllableClock,

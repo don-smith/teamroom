@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createDatabase } from "../../src/db/database.js";
-import { runMigrations, getAppliedMigrations } from "../../src/db/migrator.js";
+import { createDatabase } from "./database.js";
+import { runMigrations, getAppliedMigrations } from "./migrator.js";
 
 describe("migrator", () => {
   it("creates the schema on a fresh in-memory DB", () => {

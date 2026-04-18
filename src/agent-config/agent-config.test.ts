@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadAgentConfig } from "../../src/agent-config/agent-config.js";
+import { loadAgentConfig } from "./agent-config.js";
 
 describe("loadAgentConfig", () => {
   let base: string;

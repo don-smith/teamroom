@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FakeRunner, type Script } from "../../src/container/fake-runner.js";
-import type { ContainerStdoutEvent } from "../../src/container/container-runner.js";
+import { FakeRunner, type Script } from "./fake-runner.js";
+import type { ContainerStdoutEvent } from "./container-runner.js";
 
 describe("FakeRunner", () => {
   it("replays scripted events in order and returns the scripted exit", async () => {

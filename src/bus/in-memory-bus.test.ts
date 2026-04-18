@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryBus } from "../../src/bus/in-memory-bus.js";
-import type { BusEvent } from "../../src/types.js";
+import { InMemoryBus } from "./in-memory-bus.js";
+import type { BusEvent } from "../types.js";
 
 function evt(id: string, type: string): BusEvent {
   return { id, type, ts: "2026-04-18T00:00:00.000Z" };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Agent, Message, Turn, BusEvent } from "../src/types.js";
+import type { Agent, Message, Turn, BusEvent } from "./types.js";
 
 describe("shared types", () => {
   it("compiles with all expected fields", () => {

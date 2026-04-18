@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDockerRunArgs } from "../../src/container/docker-command.js";
+import { buildDockerRunArgs } from "./docker-command.js";
 
 describe("buildDockerRunArgs", () => {
   it("produces the expected argv for a standard turn", () => {
