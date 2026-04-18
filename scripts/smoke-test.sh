@@ -17,10 +17,22 @@ if ! grep -q "^LM_STUDIO_API_TOKEN=" .env; then
   exit 1
 fi
 
-if ! grep -qE "^(ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN)=" .env 2>/dev/null \
-   && [[ ! -f "$HOME/.claude/.credentials.json" ]]; then
-  echo "Anthropic credentials not found (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN in .env, or ~/.claude/.credentials.json)" >&2
-  echo "See docs/runbooks/anthropic-auth.md" >&2
+have_anthropic_creds=0
+if grep -qE "^(ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN)=." .env 2>/dev/null; then
+  have_anthropic_creds=1
+elif [[ -f "$HOME/.claude/.credentials.json" ]]; then
+  have_anthropic_creds=1
+elif [[ "$(uname -s)" == "Darwin" ]] \
+     && security find-generic-password -s "Claude Code-credentials" >/dev/null 2>&1; then
+  have_anthropic_creds=1
+fi
+if [[ "$have_anthropic_creds" == "0" ]]; then
+  echo "Anthropic credentials not found." >&2
+  echo "  Tried: ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN in .env," >&2
+  echo "         ~/.claude/.credentials.json," >&2
+  echo "         macOS Keychain entry 'Claude Code-credentials'." >&2
+  echo "  Easiest fix: run 'claude setup-token' and paste its output as" >&2
+  echo "  CLAUDE_CODE_OAUTH_TOKEN=... in .env. See docs/runbooks/anthropic-auth.md." >&2
   exit 1
 fi
 
