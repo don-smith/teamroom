@@ -23,7 +23,10 @@ export async function serve(): Promise<void> {
     dataDir: join(root, "data"),
     agentsDir: join(root, "agents"),
     lmStudio: {
-      upstreamUrl: env.LM_STUDIO_BASE_URL ?? "http://host.docker.internal:1234",
+      // The proxy runs on the host, so it reaches LM Studio at localhost.
+      // (host.docker.internal only resolves *inside* containers — that hostname
+      // is what the container uses to reach the proxy, not the other way round.)
+      upstreamUrl: env.LM_STUDIO_BASE_URL ?? "http://localhost:1234",
       realKey: lmStudioToken,
     },
     anthropic,
