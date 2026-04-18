@@ -6,6 +6,10 @@
 
 M1 scope: no topic registry, no durable delivery guarantees, no broker-side routing. Subscribers filter by `event.type` string locally. The interface is the seam M3's event store will upgrade behind without touching callers.
 
+## Adding new events
+
+Don't add events without a real consumer. Even observability is fair game only when something actually subscribes to the new event — span-shaped log records cover the analytic use case until M3's bus rewrite lands a proper telemetry destination.
+
 ## Files
 
 - `notify-bus.ts` — `NotifyBus` interface + `EventFilter` type.
