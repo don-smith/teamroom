@@ -18,8 +18,15 @@ class StubModelProxy implements ModelProxy {
   start = async (): Promise<{ port: number }> => ({ port: 0 });
   stop = async (): Promise<void> => {};
   private next = 0;
-  mint = (_input: MintTokenInput): string => `tok-${this.next++}`;
-  evict = (_token: string): void => {};
+  public readonly mintCalls: MintTokenInput[] = [];
+  public readonly evictCalls: string[] = [];
+  mint = (input: MintTokenInput): string => {
+    this.mintCalls.push(input);
+    return `tok-${this.next++}`;
+  };
+  evict = (token: string): void => {
+    this.evictCalls.push(token);
+  };
 }
 
 function setup(): {
@@ -212,5 +219,157 @@ describe("processTurn", () => {
     expect(outbound.map((m) => m.body)).toEqual(["real reply"]);
     const warns = s.logger.entries.filter((e) => e.level === "warn");
     expect(warns.length).toBeGreaterThan(0);
+  });
+
+  it("calls markRunning with placeholder before runner.run, then updates with real container id", async () => {
+    const s = setup();
+    // Capture turnRepo.markRunning calls + their relative ordering vs runner.run.
+    const events: Array<{ kind: "markRunning"; containerId: string } | { kind: "run" }> = [];
+    const realMarkRunning = s.turnRepo.markRunning.bind(s.turnRepo);
+    s.turnRepo.markRunning = (id: string, containerId: string, startedAt: string): void => {
+      events.push({ kind: "markRunning", containerId });
+      realMarkRunning(id, containerId, startedAt);
+    };
+    const runner = new FakeRunner(() => {
+      events.push({ kind: "run" });
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    // Expect: markRunning("pending-spawn") → run → markRunning("fake-1")
+    expect(events.length).toBe(3);
+    expect(events[0]).toEqual({ kind: "markRunning", containerId: "pending-spawn" });
+    expect(events[1]).toEqual({ kind: "run" });
+    expect(events[2]).toEqual({ kind: "markRunning", containerId: "fake-1" });
+
+    // Final row state should hold the real container id.
+    const reread = s.messageRepo.findById("m-1");
+    const turn = s.turnRepo.findById(reread!.turnId!);
+    expect(turn?.containerId).toBe("fake-1");
+  });
+
+  it("mints a routing token and evicts it on success", async () => {
+    const s = setup();
+    const proxy = new StubModelProxy();
+    let mintAtRunStart: number | null = null;
+    let evictAtRunStart: number | null = null;
+    const runner = new FakeRunner(() => {
+      mintAtRunStart = proxy.mintCalls.length;
+      evictAtRunStart = proxy.evictCalls.length;
+      return { events: [{ type: "reply", body: "ok" }], exitCode: 0, stderr: "" };
+    });
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: proxy,
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    // mint() ran exactly once before runner.run; evict had not yet fired then.
+    expect(mintAtRunStart).toBe(1);
+    expect(evictAtRunStart).toBe(0);
+
+    // mint payload carries the right routing context.
+    expect(proxy.mintCalls).toHaveLength(1);
+    expect(proxy.mintCalls[0]).toMatchObject({
+      agentId: s.inbound.agentId,
+      traceId: s.inbound.traceId,
+      provider: s.agentConfig.provider,
+      model: s.agentConfig.model,
+    });
+
+    // evict() called exactly once with the same token mint() returned.
+    expect(proxy.evictCalls).toEqual(["tok-0"]);
+  });
+
+  it("evicts the routing token even when the container errors", async () => {
+    const s = setup();
+    const proxy = new StubModelProxy();
+    const runner = new FakeRunner(() => ({
+      events: [],
+      exitCode: 1,
+      stderr: "boom",
+    }));
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: proxy,
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+    expect(proxy.mintCalls).toHaveLength(1);
+    expect(proxy.evictCalls).toEqual(["tok-0"]);
+    const reread = s.messageRepo.findById("m-1");
+    const turn = s.turnRepo.findById(reread!.turnId!);
+    expect(turn?.status).toBe("error");
+  });
+
+  it("refuses provider:anthropic agents when anthropicAdapterPresent is false", async () => {
+    const s = setup();
+    const anthropicCfg: AgentConfig = { ...s.agentConfig, provider: "anthropic" };
+    const proxy = new StubModelProxy();
+    let runnerCalled = false;
+    const runner = new FakeRunner(() => {
+      runnerCalled = true;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: anthropicCfg,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: proxy,
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    // Runner must never be invoked; no token minted/evicted.
+    expect(runnerCalled).toBe(false);
+    expect(proxy.mintCalls).toHaveLength(0);
+    expect(proxy.evictCalls).toHaveLength(0);
+
+    // Turn row should be in error state with the expected error string.
+    const reread = s.messageRepo.findById("m-1");
+    const turn = s.turnRepo.findById(reread!.turnId!);
+    expect(turn?.status).toBe("error");
+    expect(turn?.error).toBe("missing_credential");
   });
 });

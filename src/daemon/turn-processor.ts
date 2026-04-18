@@ -20,7 +20,8 @@ export interface ProcessTurnDeps {
   clock: Clock;
   modelProxy: ModelProxy;
   modelBaseUrl: string;
-  /** True when an Anthropic adapter is configured. Task 18 will use this to refuse `provider:anthropic` turns when false. */
+  /** True when an Anthropic adapter is configured. Turns whose agent declares
+   *  `provider: anthropic` are refused with `missing_credential` when false. */
   anthropicAdapterPresent: boolean;
   timeoutMs: number;
   genId: () => string;
@@ -29,13 +30,8 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    modelBaseUrl, timeoutMs, genId,
+    modelProxy, modelBaseUrl, anthropicAdapterPresent, timeoutMs, genId,
   } = deps;
-  // `deps.modelProxy` and `deps.anthropicAdapterPresent` are accepted now for
-  // wiring; Task 18 will use them to mint/evict per-turn routing tokens and
-  // refuse turns whose provider has no adapter.
-  void deps.modelProxy;
-  void deps.anthropicAdapterPresent;
 
   const turnId = genId();
   const now = clock.nowIso();
@@ -46,7 +42,10 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     agentName: agentConfig.name,
   });
 
-  // 1. Create the turn row
+  // 1. Create the turn row, attach it to the inbound message, then mark
+  //    running with a placeholder container_id so the reconciler can see
+  //    that we got past intake even before the runner returns the real id
+  //    (closes M1 debt #1 part 1: pending → running before runner.run).
   turnRepo.create({
     id: turnId,
     agentId: inbound.agentId,
@@ -60,12 +59,33 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     createdAt: now,
   });
   messageRepo.attachTurn(inbound.id, turnId);
-  turnLogger.info("turn created");
+  turnRepo.markRunning(turnId, "pending-spawn", clock.nowIso());
 
-  // 2. Mark running (container id set after we get it back from the runner)
-  // We mark running before spawning with a placeholder id, then update.
-  // Simpler: emit turn.started now, call runner, then UPDATE on completion.
+  // 2. Refuse provider:anthropic agents when no Anthropic adapter is wired.
+  //    Fail fast with a structured error before minting a token or spawning.
+  if (agentConfig.provider === "anthropic" && !anthropicAdapterPresent) {
+    turnRepo.markError(turnId, "missing_credential", clock.nowIso());
+    await bus.publish({
+      id: genId(),
+      type: "turn.errored",
+      ts: clock.nowIso(),
+      agentId: inbound.agentId,
+      turnId,
+      traceId: inbound.traceId,
+      error: "missing_credential",
+    });
+    turnLogger.warn("turn errored: missing anthropic credential");
+    return;
+  }
 
+  // 3. Mint a per-turn routing token + emit turn.started.
+  const token = modelProxy.mint({
+    agentId: inbound.agentId,
+    turnId,
+    traceId: inbound.traceId,
+    provider: agentConfig.provider,
+    model: agentConfig.model,
+  });
   await bus.publish({
     id: genId(),
     type: "turn.started",
@@ -74,118 +94,126 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     turnId,
     traceId: inbound.traceId,
   });
+  turnLogger.info("turn.started");
 
-  const mounts: Mount[] = [
-    { hostPath: agentConfig.agentsMdPath, containerPath: "/AGENTS.md", readOnly: true },
-    { hostPath: agentConfig.storePath, containerPath: "/store", readOnly: false },
-  ];
-  const spec: DockerRunSpec = {
-    imageTag: agentConfig.imageTag,
-    mounts,
-    env: {
-      TEAMROOM_TRACE_ID: inbound.traceId,
-      TEAMROOM_TURN_ID: turnId,
-      TEAMROOM_AGENT_NAME: agentConfig.name,
-      TEAMROOM_MODEL: agentConfig.model,
-      TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
-      // Placeholder until Task 18 mints a per-turn routing token via modelProxy.
-      TEAMROOM_MODEL_API_TOKEN: "",
-    },
-  };
+  try {
+    const mounts: Mount[] = [
+      // M2 contract: AGENTS.md is read-write so agents may evolve their own
+      // operating doc across turns. See spec §2.
+      { hostPath: agentConfig.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
+      { hostPath: agentConfig.storePath, containerPath: "/store", readOnly: false },
+    ];
+    const spec: DockerRunSpec = {
+      imageTag: agentConfig.imageTag,
+      mounts,
+      env: {
+        TEAMROOM_TRACE_ID: inbound.traceId,
+        TEAMROOM_TURN_ID: turnId,
+        TEAMROOM_AGENT_NAME: agentConfig.name,
+        TEAMROOM_PROVIDER: agentConfig.provider,
+        TEAMROOM_MODEL: agentConfig.model,
+        TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
+        TEAMROOM_MODEL_API_TOKEN: token,
+      },
+    };
 
-  const stdinEnvelope = JSON.stringify({
-    prompt: inbound.body,
-    messageId: inbound.id,
-    turnId,
-    traceId: inbound.traceId,
-  });
+    const stdinEnvelope = JSON.stringify({
+      prompt: inbound.body,
+      messageId: inbound.id,
+      turnId,
+      traceId: inbound.traceId,
+    });
 
-  let replyCount = 0;
+    let replyCount = 0;
 
-  const result = await runner.run({
-    spec,
-    stdinJson: stdinEnvelope,
-    timeoutMs,
-    onEvent: (evt) => {
-      try {
-        if (evt.type === "reply") {
-          const outId = genId();
-          messageRepo.create({
-            id: outId,
-            agentId: inbound.agentId,
-            channel: inbound.channel,
-            direction: "out",
-            body: evt.body,
-            turnId,
-            traceId: inbound.traceId,
-            createdAt: clock.nowIso(),
-          });
-          replyCount += 1;
-          void bus.publish({
-            id: genId(),
-            type: "message.outbound",
-            ts: clock.nowIso(),
-            agentId: inbound.agentId,
-            messageId: outId,
-            turnId,
-            traceId: inbound.traceId,
-          });
-        } else if (evt.type === "status") {
-          turnLogger.info("status", { phase: evt.phase });
-        } else if (evt.type === "log") {
-          turnLogger.info("agent-log", { level: evt.level, msg: evt.msg });
-        } else {
-          turnLogger.warn("unknown stdout event", { raw: (evt as { raw?: string }).raw });
+    const result = await runner.run({
+      spec,
+      stdinJson: stdinEnvelope,
+      timeoutMs,
+      onEvent: (evt) => {
+        try {
+          if (evt.type === "reply") {
+            const outId = genId();
+            messageRepo.create({
+              id: outId,
+              agentId: inbound.agentId,
+              channel: inbound.channel,
+              direction: "out",
+              body: evt.body,
+              turnId,
+              traceId: inbound.traceId,
+              createdAt: clock.nowIso(),
+            });
+            replyCount += 1;
+            void bus.publish({
+              id: genId(),
+              type: "message.outbound",
+              ts: clock.nowIso(),
+              agentId: inbound.agentId,
+              messageId: outId,
+              turnId,
+              traceId: inbound.traceId,
+            });
+          } else if (evt.type === "status") {
+            turnLogger.info("status", { phase: evt.phase });
+          } else if (evt.type === "log") {
+            turnLogger.info("agent-log", { level: evt.level, msg: evt.msg });
+          } else {
+            turnLogger.warn("unknown stdout event", { raw: (evt as { raw?: string }).raw });
+          }
+        } catch (err) {
+          turnLogger.error("error handling stdout event", { error: String(err) });
         }
-      } catch (err) {
-        turnLogger.error("error handling stdout event", { error: String(err) });
-      }
-    },
-  });
+      },
+    });
 
-  // Attach containerId we got back (started_at is now set too)
-  turnRepo.markRunning(turnId, result.containerId, clock.nowIso());
+    // Update the turn row with the real container id (was "pending-spawn").
+    turnRepo.markRunning(turnId, result.containerId, clock.nowIso());
 
-  if (result.timedOut) {
-    turnRepo.markError(turnId, "timeout", clock.nowIso());
+    if (result.timedOut) {
+      turnRepo.markError(turnId, "timeout", clock.nowIso());
+      await bus.publish({
+        id: genId(),
+        type: "turn.errored",
+        ts: clock.nowIso(),
+        agentId: inbound.agentId,
+        turnId,
+        traceId: inbound.traceId,
+        error: "timeout",
+      });
+      turnLogger.warn("turn timed out");
+      return;
+    }
+
+    if (result.exitCode !== 0) {
+      const snippet = result.stderr.slice(-2048);
+      const errorText = `exit=${result.exitCode}; stderr=${snippet}`;
+      turnRepo.markError(turnId, errorText, clock.nowIso());
+      await bus.publish({
+        id: genId(),
+        type: "turn.errored",
+        ts: clock.nowIso(),
+        agentId: inbound.agentId,
+        turnId,
+        traceId: inbound.traceId,
+        error: errorText,
+      });
+      turnLogger.warn("turn errored", { exitCode: result.exitCode });
+      return;
+    }
+
+    turnRepo.markDone(turnId, clock.nowIso());
     await bus.publish({
       id: genId(),
-      type: "turn.errored",
+      type: "turn.completed",
       ts: clock.nowIso(),
       agentId: inbound.agentId,
       turnId,
       traceId: inbound.traceId,
-      error: "timeout",
     });
-    turnLogger.warn("turn timed out");
-    return;
+    turnLogger.info("turn done", { replyCount });
+  } finally {
+    // Always evict — keeps the registry from leaking entries on any path.
+    modelProxy.evict(token);
   }
-
-  if (result.exitCode !== 0) {
-    const snippet = result.stderr.slice(-2048);
-    const errorText = `exit=${result.exitCode}; stderr=${snippet}`;
-    turnRepo.markError(turnId, errorText, clock.nowIso());
-    await bus.publish({
-      id: genId(),
-      type: "turn.errored",
-      ts: clock.nowIso(),
-      agentId: inbound.agentId,
-      turnId,
-      traceId: inbound.traceId,
-      error: errorText,
-    });
-    turnLogger.warn("turn errored", { exitCode: result.exitCode });
-    return;
-  }
-
-  turnRepo.markDone(turnId, clock.nowIso());
-  await bus.publish({
-    id: genId(),
-    type: "turn.completed",
-    ts: clock.nowIso(),
-    agentId: inbound.agentId,
-    turnId,
-    traceId: inbound.traceId,
-  });
-  turnLogger.info("turn done", { replyCount });
 }
