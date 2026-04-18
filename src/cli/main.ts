@@ -12,9 +12,10 @@ program.command("serve").description("Run the daemon in the foreground").action(
 
 program
   .command("send <text...>")
-  .description("Queue an inbound message for the sole agent")
-  .action(async (text: string[]) => {
-    await send(text.join(" "));
+  .description("Queue an inbound message for an agent")
+  .option("--agent <name>", "agent folder name (defaults to alphabetically first)")
+  .action(async (text: string[], opts: { agent?: string }) => {
+    await send(text.join(" "), opts.agent);
   });
 
 program

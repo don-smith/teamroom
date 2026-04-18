@@ -17,6 +17,7 @@ export interface SendToDbResult {
 export interface SendToDbOpts {
   repoRoot: string;
   body: string;
+  agentName?: string;
 }
 
 export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
@@ -26,7 +27,15 @@ export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
 
   const entries = readdirSync(agentsDir).filter((e) => statSync(join(agentsDir, e)).isDirectory());
   if (entries.length === 0) throw new Error("no agent folders found");
-  const entry = entries[0]!;
+  let entry: string;
+  if (opts.agentName) {
+    if (!entries.includes(opts.agentName)) {
+      throw new Error(`agent '${opts.agentName}' not found in ${agentsDir}; available: ${entries.join(", ")}`);
+    }
+    entry = opts.agentName;
+  } else {
+    entry = entries[0]!;
+  }
   const cfg = loadAgentConfig(join(agentsDir, entry));
 
   const dataDir = join(root, "data");
@@ -57,8 +66,8 @@ export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
   return { traceId, messageId, agentName: cfg.name, daemonRunning };
 }
 
-export async function send(body: string): Promise<void> {
-  const result = await sendToDb({ repoRoot: process.cwd(), body });
+export async function send(body: string, agentName?: string): Promise<void> {
+  const result = await sendToDb({ repoRoot: process.cwd(), body, agentName });
   process.stdout.write(
     `queued for ${result.agentName} (trace: ${result.traceId})${
       result.daemonRunning ? "" : "  [warning: daemon not running — message will be processed when daemon starts]"
