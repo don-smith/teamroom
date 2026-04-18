@@ -8,7 +8,7 @@ Four short-lived subcommands (`serve`, `send`, `tail`, `status`) plus the comman
 
 - `main.ts` — entrypoint; wires the four subcommands via `commander`.
 - `serve.ts` — loads `.env`, calls `startDaemon()`, parks the process and wires SIGINT/SIGTERM to graceful shutdown.
-- `send.ts` — `sendToDb(opts)` writes an inbound message row. Works with daemon down (queues for later processing).
+- `send.ts` — `sendToDb(opts)` writes an inbound message row. Optional `agentName` selects which `agents/<name>/` folder to target (defaults to alphabetically first; `--agent` CLI flag exposes this). Works with daemon down (queues for later processing).
 - `tail.ts` — `tailRun(args)` subscribes to `message.outbound` events on the bus, fetches bodies from the DB, renders to stdout.
 - `status.ts` — queries the DB for per-status turn counts; prints daemon liveness via PID file probe.
 - `send.test.ts`, `tail.test.ts` — co-located unit tests. `serve.ts`, `status.ts`, `main.ts` have no direct tests (thin wiring).
