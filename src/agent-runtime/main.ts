@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { AnthropicLlmClient } from "./anthropic-llm-client.js";
 import { runTurn, type LlmClient, type Envelope } from "./runtime.js";
 
 const AGENTS_MD = "/AGENTS.md";
@@ -34,13 +35,28 @@ function makeOpenAiCompatibleClient(): LlmClient {
   };
 }
 
+function buildLlmClient(): LlmClient {
+  const provider = process.env.TEAMROOM_PROVIDER;
+  if (provider === "anthropic") {
+    const baseURL = process.env.TEAMROOM_MODEL_BASE_URL;
+    const apiKey = process.env.TEAMROOM_MODEL_API_TOKEN;
+    if (!baseURL) throw new Error("TEAMROOM_MODEL_BASE_URL is required");
+    if (!apiKey) throw new Error("TEAMROOM_MODEL_API_TOKEN is required");
+    return new AnthropicLlmClient({ baseURL, apiKey });
+  }
+  if (provider === "lm-studio") {
+    return makeOpenAiCompatibleClient();
+  }
+  throw new Error(`unknown TEAMROOM_PROVIDER: ${String(provider)}`);
+}
+
 async function main(): Promise<void> {
   try {
     const raw = await readStdinOnce();
     const envelope = JSON.parse(raw.trim()) as Envelope;
     const model = process.env.TEAMROOM_MODEL;
     if (!model) throw new Error("TEAMROOM_MODEL is required");
-    const client = makeOpenAiCompatibleClient();
+    const client = buildLlmClient();
     await runTurn({
       envelope,
       client,
