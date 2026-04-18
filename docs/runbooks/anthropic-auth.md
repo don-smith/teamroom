@@ -48,18 +48,21 @@ If both an API key and an OAuth credential are present, OAuth wins.
 
 ## What the proxy does with these
 
-- **API-key mode:** every request from the container has its `x-api-key` header replaced by the real `ANTHROPIC_API_KEY` before forwarding to `api.anthropic.com`.
-- **OAuth mode:** the proxy performs a server-to-server OAuth exchange the first time an Anthropic agent runs (`POST /api/oauth/claude_cli/create_api_key` with `Authorization: Bearer <oauth-token>`), caches the resulting temp API key (keyed by OAuth token), and substitutes that on subsequent calls. The temp key is refreshed when it nears expiry or when Anthropic returns 401 (proxy retries the original call exactly once after the refresh). Containers never see real credentials in either mode.
+- **OAuth mode (default — uses your subscription):** the container's `AnthropicLlmClient` is `claude-agent-sdk`, which spawns the Claude Code CLI as a subprocess. The CLI reads `ANTHROPIC_BASE_URL` from env and routes its `/v1/messages` calls through our proxy with `Authorization: Bearer <routing-token>` plus the full Claude Code identity headers (`User-Agent`, `anthropic-beta`, etc.). Our proxy looks up the routing token, substitutes the Bearer value with the real OAuth credential, merges `anthropic-beta: oauth-2025-04-20` into any existing beta flags, and forwards upstream. Anthropic accepts because the request is shaped like one Claude Code itself would send.
+- **API-key mode (fallback):** every request from the container has its `x-api-key` header replaced by the real `ANTHROPIC_API_KEY` before forwarding to `api.anthropic.com`. Used when you don't want to (or can't) use a Claude subscription.
 
-The container is mode-agnostic — its `AnthropicLlmClient` always sends `x-api-key: <routing-token>` and never knows which substitution mode the proxy is running.
+The container is mode-agnostic — it only ever sees a per-turn routing token, never a real Anthropic credential.
+
+### Why the OAuth path goes through the Claude Code CLI subprocess
+
+We tried sending `sk-ant-oat01-...` tokens (from `claude setup-token`) directly to `/v1/messages` with `Authorization: Bearer + anthropic-beta: oauth-2025-04-20`. Anthropic returned **HTTP 429 with no rate-limit headers** — i.e., gating ("you can't use this token this way"), not actual rate-limiting. That auth path isn't a documented public method for non-Claude-Code consumers. The supported workaround is what NanoClaw and similar tools do: run Claude Code itself in the container and intercept its outbound requests via `ANTHROPIC_BASE_URL`. The CLI handles the fiddly parts of the auth handshake; the proxy just substitutes credentials.
 
 ## Troubleshooting
 
 - **`turn errored: missing_credential`** — the proxy didn't find an Anthropic credential at boot. On macOS check the Keychain has an entry (`security find-generic-password -s "Claude Code-credentials"` should print metadata). If it doesn't, run `claude setup-token` and paste the result into `.env` as `CLAUDE_CODE_OAUTH_TOKEN`. On Linux check `~/.claude/.credentials.json`.
 - **macOS prompts for Keychain access on every daemon start.** Click **Always Allow** rather than Allow. If the prompt is dismissable / reproducible, set `CLAUDE_CODE_OAUTH_TOKEN` in `.env` to bypass the Keychain entirely.
 - **Repeated 401 from Anthropic in OAuth mode** — your OAuth token may have expired or been revoked. Run `claude setup-token` for a fresh one and update `.env` (or re-login to Claude Code so the Keychain entry refreshes), then restart the daemon.
-- **`oauth_exchange_403` or signed-request errors** — Anthropic may have gated programmatic exchange. See `docs/tabled.md` for the fallback (Claude Agent SDK in the container).
-- **`oauth_exchange_no_key`** — the exchange returned 2xx but the response didn't contain a recognizable temp-key field. Check the `oauth.exchange.completed` span and the upstream response body.
+- **`oauth exchange failed: status=403/429`** (legacy, should not occur with current code) — The original M2 design tried `POST /api/oauth/claude_cli/create_api_key` first; that path is gated. Current code uses the Claude Code CLI subprocess in the container instead, which is the only working programmatic path. If you see this error, you're on out-of-date code — `git pull` and `npm run build`.
 
 ## Related
 
