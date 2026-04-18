@@ -76,7 +76,7 @@ Current set of document categories. Add a row when a new role emerges; merge and
 | `docs/runbooks/*.md` | Procedural | Operational procedures (e.g., "add a new agent," "add a new channel"). | Kept current — runbooks rot fast; check on use. |
 | `README.md` (repo root and folder-level) | Semantic | Orientation and navigation; anchors for the knowledge graph. | Update when a folder's shape changes. |
 | `AGENTS.md` (repo root; may also appear per-agent) | Procedural | Standing instructions to AI assistants working in this repo or on this agent. Model-agnostic (Claude reads it, others do too). | Update when standing instructions change. |
-| Claude memory system entries | Cross-cutting | Recurring preferences and project context that survive across conversations. | Update or remove as context shifts. |
+| `docs/memory/*.md` (index at `MEMORY.md`) | Cross-cutting | Recurring user preferences and project context, in-repo so they are visible to git, the user, and any AI agent. Replaces the prior Claude-private auto-memory location. | Update or remove as context shifts; announce writes in conversation. |
 
 **Proliferation test** before creating any new markdown file: does the content belong in one of the above? If yes, extend. If no, justify the new category explicitly and add a row in the same change. The inventory is load-bearing — it's how the knowledge base stays navigable.
 
