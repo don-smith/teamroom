@@ -6,8 +6,8 @@ Exports `loadAgentConfig(agentDir)` which reads an agent's on-disk metadata (`ag
 
 ## Files
 
-- `agent-config.ts` — `loadAgentConfig(agentDir)`: validates folder shape + parses YAML + returns typed config.
-- `agent-config.test.ts` — co-located unit tests (valid load, missing files, missing YAML fields).
+- `agent-config.ts` — `loadAgentConfig(agentDir)`: validates folder shape + parses YAML (required fields: `name`, `model`, `image_tag`, `provider` ∈ {`anthropic`, `lm-studio`}) + returns typed config.
+- `agent-config.test.ts` — co-located unit tests (valid load, missing files, missing YAML fields, provider validation).
 
 ## Related
 
