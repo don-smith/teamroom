@@ -2,6 +2,8 @@
 
 *Last reviewed: 2026-04-18. Update the date when this document is revised.*
 
+**Scope of this document.** Ways-of-working holds the **semantic** layer: principles, the knowledge-base model, document inventory, evolution framing, cross-pollination signals, failure modes. The **procedural** layer — the specific rituals we run (epiphany tabling, end-of-artifact checkpoints, retros, as-builts, capturing learnings) — lives in invocable skills under `.claude/skills/`. That split keeps this document navigable and makes each practice callable by name when the moment arrives.
+
 ## Why this document exists
 
 Team Room is a product about building healthy agentic software teams — teams with explicit roles, shared context, observability, rituals, and continuous-improvement habits. The premise is that teams like that produce excellent systems.
@@ -33,33 +35,15 @@ We are not implementing a memory system until M4. We apply the memory framing no
 
 ## Reflection rhythms
 
-Three cadences plus one event-driven practice.
+Four cadences carry the practice. The mechanics of each live in an invocable skill; this section lists them and when they fire.
 
-### Event-driven: epiphanies
-
-When something unexpected surfaces mid-work — a realization, a fork in the road, a pattern we almost missed — we don't stop and redesign. We **table it**: add a short entry to `docs/tabled.md` with enough context to reconstruct later, then keep going. Tabled entries are processed later (during an end-of-artifact checkpoint or retro) into their probable destinations: spec amendments, runbook seeds, skill candidates, memory entries, or conscious drops.
-
-The rule: an epiphany is either acted on immediately (if trivially cheap) or tabled. Never lost, never derailing.
-
-### End-of-artifact checkpoints
-
-After each approved spec, plan, or major commit set. Before proceeding to the next artifact, four questions:
-
-1. Is the current artifact solid — does it include what it should?
-2. Are we carrying an assumption that hasn't been tested?
-3. What in `tabled.md` is ready to be processed?
-4. What should be promoted to an artifact (skill, runbook, memory) or remembered going forward?
-
-### End-of-milestone retrospective
-
-When a milestone closes, a dedicated retro covering four sections:
-
-- **Keep doing** — what worked and should continue.
-- **Stop or change** — what did not work and should adjust.
-- **Promote to artifact** — patterns worth extracting into skills, runbooks, scripts, or memory entries.
-- **Commit to memory** — what, if anything, belongs in Claude's cross-conversation memory system.
-
-Retros live at `docs/retros/YYYY-MM-DD-<milestone>.md` and are frozen once committed.
+| Cadence | When it fires | Skill |
+|---|---|---|
+| **Event-driven: epiphanies** | Anytime a realization surfaces mid-work that is not trivially in-scope. | `.claude/skills/epiphany-tabling/` |
+| **Pre-execution plan review** | After a plan is written, before executing. Both Claude and the user read and dry-run the plan before approving. Catches plan-level gaps (config/secrets, test layout, build assets, test/impl inconsistencies) before they become drifts during execution. | (inline rule for now; skill candidate once we see the second sighting) |
+| **End-of-artifact checkpoint** | After each approved spec, plan, or major commit set. | `.claude/skills/capturing-learnings/` |
+| **End-of-milestone retrospective** | At milestone close. Four sections (keep doing / stop or change / promote to artifact / commit to memory) with concrete owned action items. | `.claude/skills/writing-retros/` |
+| **Significant-work closeout** | When a milestone, major feature, or large refactor closes — produce an as-built and purge the scaffolding. Default expectation is **yes, write one**. | `.claude/skills/writing-as-built/` |
 
 ## Document inventory
 
@@ -79,17 +63,20 @@ Current set of document categories. Add a row when a new role emerges; merge and
 | `AGENTS.md` (repo root; may also appear per-agent) | Procedural | Standing instructions to AI assistants working in this repo or on this agent. Model-agnostic (Claude reads it, others do too). | Update when standing instructions change. |
 | `docs/memory/*.md` (index at `MEMORY.md`) | Cross-cutting | Recurring user preferences and project context, in-repo so they are visible to git, the user, and any AI agent. Replaces the prior Claude-private auto-memory location. | Update or remove as context shifts; announce writes in conversation. |
 
-**Proliferation test** before creating any new markdown file: does the content belong in one of the above? If yes, extend. If no, justify the new category explicitly and add a row in the same change. The inventory is load-bearing — it's how the knowledge base stays navigable.
+**Proliferation test** before creating any new markdown file: does the content belong in one of the above? If yes, extend. If no, justify the new category explicitly and add a row in the same change. The inventory is load-bearing — it's how the knowledge base stays navigable. (Mechanics in the `capturing-learnings` skill.)
 
 ## Capturing learnings
 
-Three artifact types carry learnings forward. Each has a different half-life and audience.
+Learnings turn into durable artifacts — skills, runbooks, memory entries, as-builts — or they turn into nothing. Four artifact types carry them forward:
 
-- **Skills** — process-level guidance that applies across projects. Lives in the Claude skills system. Promote to a skill when a pattern is general.
-- **Runbooks** — procedure-level guidance specific to Team Room, in `docs/runbooks/`. A runbook composes one or more skills into a Team-Room-specific procedure. *The skill/runbook boundary is still being refined — see `docs/tabled.md` for the current heuristic.*
-- **Memory entries** — recurring preferences, constraints, or project context that Claude should carry across conversations.
+- **Skills** — tactical, reusable how-tos. Live in `.claude/skills/<name>/` for project-local skills, or in a marketplace for cross-project skills.
+- **Runbooks** — broader processes or practices that may compose multiple skills. Live in `docs/runbooks/`.
+- **Memory entries** — recurring preferences, constraints, or project context that survive across conversations. Live in `docs/memory/`.
+- **As-builts** — permanent records of shipped work. Live in `docs/as-built/`.
 
-**Promotion rule: once is a moment; twice is a pattern.** Don't formalize on first occurrence. Premature formalization has the same cost structure as premature abstraction in code. Wait for the second sighting, then capture.
+**The promotion rule: once is a moment; twice is a pattern.** Don't formalize on first occurrence. Premature formalization has the same cost structure as premature abstraction in code. Wait for the second sighting, then capture.
+
+The mechanics of the end-of-artifact checkpoint, the skill-vs-runbook heuristic, and the proliferation test live in the `capturing-learnings` skill (`.claude/skills/capturing-learnings/`).
 
 ## Evolution — from assistant to team to harness
 
