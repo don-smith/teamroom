@@ -2,7 +2,8 @@
 # M2 smoke test — exercises both agents end-to-end through the model-proxy.
 # Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running with a model loaded;
 #   Docker running; Anthropic credentials discoverable (CLAUDE_CODE_OAUTH_TOKEN
-#   or ANTHROPIC_API_KEY in .env, or ~/.claude/.credentials.json).
+#   or ANTHROPIC_API_KEY in .env, or ~/.claude/.credentials.json, or — on
+#   macOS — the system Keychain entry "Claude Code-credentials").
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -50,11 +51,59 @@ echo "==> Building agent images"
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
 
+DAEMON_PID=""
+TAIL_PID=""
+
+cleanup() {
+  # Kill in the order: tail (cheap), daemon (so it stops spawning containers),
+  # then force-remove any agent containers that lingered. Suppress all errors —
+  # cleanup is best-effort and runs even when nothing was started.
+  if [[ -n "$TAIL_PID" ]]; then
+    kill "$TAIL_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$DAEMON_PID" ]]; then
+    kill "$DAEMON_PID" 2>/dev/null || true
+  fi
+  # Stop+remove any leftover teamroom-* containers (named per turn-processor.ts).
+  local leftover
+  leftover=$(docker ps -q --filter "name=^teamroom-" 2>/dev/null || true)
+  if [[ -n "$leftover" ]]; then
+    docker rm -f $leftover >/dev/null 2>&1 || true
+  fi
+  # Wait briefly for the daemon's own teardown to complete; don't hang on it.
+  if [[ -n "$DAEMON_PID" ]]; then
+    for _ in $(seq 1 20); do
+      kill -0 "$DAEMON_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -9 "$DAEMON_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+dump_failure_diagnostics() {
+  local agent="$1"
+  echo "" >&2
+  echo "==> Tail output (outbound messages we received):" >&2
+  cat /tmp/teamroom-smoke-output.txt >&2 || true
+  echo "" >&2
+  echo "==> Last 40 daemon log entries (most recent JSONL file):" >&2
+  local log_file
+  log_file=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
+  if [[ -n "$log_file" ]]; then
+    tail -n 40 "$log_file" >&2 || true
+  else
+    echo "  (no daemon log file found at data/logs/teamroom-*.jsonl)" >&2
+  fi
+  echo "" >&2
+  echo "==> Recent docker containers (--filter name=teamroom-, last 5):" >&2
+  docker ps -a --filter "name=^teamroom-" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>&1 | head -6 >&2 || true
+}
+
 echo "==> Starting daemon in background"
 rm -rf data
 node dist/cli/main.js serve &
 DAEMON_PID=$!
-trap "kill $DAEMON_PID 2>/dev/null || true; wait 2>/dev/null || true" EXIT
 
 # Wait for the daemon to signal it's up (pid file + agent registration).
 for _ in $(seq 1 50); do
@@ -81,19 +130,18 @@ run_agent() {
   echo "==> Waiting for $agent reply (up to 60s)"
   for _ in $(seq 1 120); do
     if grep -q "$marker" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
+      echo "==> $agent OK"
       return 0
     fi
     sleep 0.5
   done
   echo "==> FAIL: $agent did not reply with '$marker'" >&2
-  cat /tmp/teamroom-smoke-output.txt
+  dump_failure_diagnostics "$agent"
   return 1
 }
 
 run_agent studio-assistant "studio-ok"
 run_agent claude-assistant "claude-ok"
-
-kill "$TAIL_PID" 2>/dev/null || true
 
 echo "==> Verifying both providers' spans in the daemon log"
 LOG_FILE=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
@@ -111,7 +159,3 @@ if ! grep -q '"provider":"lm-studio"' "$LOG_FILE"; then
 fi
 
 echo "==> SMOKE PASS — both agents responded; both providers' spans present"
-
-echo "==> Stopping daemon"
-kill "$DAEMON_PID" 2>/dev/null || true
-wait "$DAEMON_PID" 2>/dev/null || true

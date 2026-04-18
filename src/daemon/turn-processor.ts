@@ -103,8 +103,13 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       { hostPath: agentConfig.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
       { hostPath: agentConfig.storePath, containerPath: "/store", readOnly: false },
     ];
+    // Container name encodes agent + turn so `docker ps` / `docker logs` are
+    // meaningful while a turn is in flight. The 8-char turnId suffix keeps
+    // names unique across concurrent turns of the same agent.
+    const containerName = `teamroom-${agentConfig.name}-${turnId.slice(0, 8)}`;
     const spec: DockerRunSpec = {
       imageTag: agentConfig.imageTag,
+      name: containerName,
       mounts,
       env: {
         TEAMROOM_TRACE_ID: inbound.traceId,

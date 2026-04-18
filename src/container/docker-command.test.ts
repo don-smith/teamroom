@@ -57,6 +57,29 @@ describe("buildDockerRunArgs", () => {
     expect(agentsMdMount).not.toMatch(/:ro$/);
   });
 
+  it("includes --name <value> when spec.name is provided", () => {
+    const argv = buildDockerRunArgs({
+      imageTag: "img:latest",
+      mounts: [],
+      env: {},
+      name: "teamroom-studio-assistant-abc12345",
+    });
+    expect(argv).toEqual([
+      "run", "--rm", "-i",
+      "--name", "teamroom-studio-assistant-abc12345",
+      "img:latest",
+    ]);
+  });
+
+  it("omits --name when spec.name is not provided", () => {
+    const argv = buildDockerRunArgs({
+      imageTag: "img:latest",
+      mounts: [],
+      env: {},
+    });
+    expect(argv).not.toContain("--name");
+  });
+
   it("orders env deterministically (sorted by key)", () => {
     const argv = buildDockerRunArgs({
       imageTag: "img:latest",
