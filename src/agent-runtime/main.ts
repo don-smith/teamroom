@@ -18,7 +18,14 @@ function makeOpenAiCompatibleClient(): LlmClient {
   const baseURL = process.env.TEAMROOM_MODEL_BASE_URL;
   if (!baseURL) throw new Error("TEAMROOM_MODEL_BASE_URL is required");
   const apiKey = process.env.TEAMROOM_MODEL_API_TOKEN ?? "not-required";
-  const sdk = new OpenAI({ baseURL, apiKey });
+  // The OpenAI SDK appends `/chat/completions` to baseURL — it does NOT add
+  // `/v1`. OpenAI-compatible servers (LM Studio, etc.) expect requests at
+  // `/v1/chat/completions`, so the `/v1` prefix has to be in baseURL itself.
+  // (This matches OpenAI's own published baseURL: `https://api.openai.com/v1`.)
+  // The Anthropic SDK has the opposite convention — it adds `/v1/messages`
+  // automatically — so we only adjust here, not in the proxy or daemon.
+  const baseURLWithV1 = baseURL.replace(/\/$/, "") + "/v1";
+  const sdk = new OpenAI({ baseURL: baseURLWithV1, apiKey });
   return {
     async createMessage({ model, system, messages }) {
       const resp = await sdk.chat.completions.create({
