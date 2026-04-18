@@ -14,32 +14,55 @@ For M1 the agent calls a local LM Studio model via an OpenAI-compatible endpoint
 - Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
 - Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md)
 
-## Quick start
+## Install the CLI
 
-Prerequisites: Node.js 20+, Docker Desktop, LM Studio running locally with a model loaded.
+Prerequisites: Node.js 20+, Docker Desktop running, LM Studio running locally with a model loaded, and a directory on your `PATH` that you control (e.g. `~/bin`).
 
 ```bash
-# Once
+# 1. Dependencies
 npm install
-echo 'LM_STUDIO_API_TOKEN=<your-lm-studio-token>' > .env   # .env is gitignored
 
-# Every time
+# 2. Configure secrets
+cp .env.example .env
+# edit .env and set LM_STUDIO_API_TOKEN to your LM Studio token
+
+# 3. Build the CLI
 npm run build
-npm test                                                   # unit + integration tests (fast)
-./scripts/smoke-test.sh                                    # end-to-end via Docker + LM Studio
+
+# 4. Install the teamroom binary into a PATH directory you choose.
+#    The script only writes into that directory — it does NOT modify your shell
+#    config or PATH. Make sure the directory is already on your PATH.
+npm run install-cli -- ~/bin
+#    (use --force if ~/bin/teamroom already exists and you want to overwrite it)
+
+# 5. Verify
+teamroom status
 ```
 
 ## Day-to-day use
 
 ```bash
-npm run build
+# One-time per model/agent change: rebuild the agent image
 docker build -t teamroom-agent-assistant:latest -f agents/assistant/Dockerfile .
 
-node dist/cli/main.js serve   &       # daemon in background
-node dist/cli/main.js tail            # stream replies
-node dist/cli/main.js send "hello"    # send a message (from another terminal)
-node dist/cli/main.js status          # daemon + turn stats
+# Three terminals
+teamroom serve                   # daemon (foreground — Ctrl+C to stop)
+teamroom tail                    # stream replies
+teamroom send "hello"            # queue an inbound message
+teamroom status                  # daemon + turn counts
 ```
+
+If the CLI code changes, rerun `npm run build` — the symlink points at `dist/cli/main.js` so rebuilds take effect without re-running `install-cli`.
+
+## Smoke test
+
+End-to-end sanity check against real Docker + real LM Studio:
+
+```bash
+./scripts/smoke-test.sh
+```
+
+Pass = "hello back" in the output. See `docs/runbooks/smoke-test.md` for preconditions and troubleshooting.
 
 ## Layout
 

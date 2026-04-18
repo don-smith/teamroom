@@ -10,7 +10,8 @@
     "build": "tsc && mkdir -p dist/db/migrations && cp src/db/migrations/*.sql dist/db/migrations/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "install-cli": "node scripts/install-cli.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
