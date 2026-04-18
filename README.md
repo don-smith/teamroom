@@ -6,17 +6,15 @@ A multi-agent harness modeled after a software delivery team.
 
 ## Current state
 
-Milestone 1 — "One agent that works." A single hand-configured agent (`studio-assistant`) runs in a fresh Docker container per turn. Terminal-only channel. No memory, no inter-agent messaging, no scheduling — those arrive in later milestones.
+Milestone 2 — "Model abstraction layer." Two agents now run concurrently against two backends: `studio-assistant` (LM Studio, local) and `claude-assistant` (Anthropic, real API via Claude Code OAuth or API key). Containers never see real upstream credentials — the in-daemon `ModelProxy` substitutes them per request, with span-shaped logs reconstructing each turn end-to-end. Two-mode Anthropic auth (OAuth preferred, API key fallback). Per-agent `provider` declared in `agent.yaml`. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
 
-For M1 the agent calls a local LM Studio model via an OpenAI-compatible endpoint; a model proxy lands in M2 that generalises this to Anthropic, OpenAI, and other backends.
-
-- As-built: [`docs/as-built/2026-04-18-teamroom-m1.md`](docs/as-built/2026-04-18-teamroom-m1.md) — what shipped, key decisions, known debts.
+- As-built: [`docs/as-built/2026-04-18-teamroom-m1.md`](docs/as-built/2026-04-18-teamroom-m1.md) — M1 shipped state. M2 as-built lands at milestone close.
 - Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
-- Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md)
+- Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md) (M1)
 
 ## Install the CLI
 
-Prerequisites: Node.js 20+, Docker Desktop running, LM Studio running locally with a model loaded, and a directory on your `PATH` that you control (e.g. `~/bin`).
+Prerequisites: Node.js 22+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`).
 
 ```bash
 # 1. Dependencies
@@ -42,14 +40,16 @@ teamroom status
 ## Day-to-day use
 
 ```bash
-# One-time per model/agent change: rebuild the agent image
+# One-time per model/agent change: rebuild each agent's image
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
+docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
 
 # Three terminals
-teamroom serve                   # daemon (foreground — Ctrl+C to stop)
-teamroom tail                    # stream replies
-teamroom send "hello"            # queue an inbound message
-teamroom status                  # daemon + turn counts
+teamroom serve                                          # daemon (foreground — Ctrl+C to stop)
+teamroom tail                                           # stream replies
+teamroom send --agent studio-assistant "hello"          # local LM Studio agent
+teamroom send --agent claude-assistant "hello"          # real Anthropic agent
+teamroom status                                         # daemon + turn counts
 ```
 
 If the CLI code changes, rerun `npm run build` — the symlink points at `dist/cli/main.js` so rebuilds take effect without re-running `install-cli`.
@@ -62,7 +62,7 @@ End-to-end sanity check against real Docker + real LM Studio:
 ./scripts/smoke-test.sh
 ```
 
-Pass = "hello back" in the output. See `docs/runbooks/smoke-test.md` for preconditions and troubleshooting.
+Pass = both agents respond AND both providers' `model.call.completed` spans show up in the daemon log. See [`docs/runbooks/smoke-test.md`](docs/runbooks/smoke-test.md) for preconditions and troubleshooting.
 
 ## Layout
 
