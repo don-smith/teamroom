@@ -131,6 +131,7 @@ describe("LocalModelProxy", () => {
       inputTokens: 1,
       outputTokens: 2,
       status: "ok",
+      httpStatus: 200,
     });
 
     await proxy.stop();
@@ -151,6 +152,7 @@ describe("LocalModelProxy", () => {
     expect(resp.status).toBe(401);
     const span = logger.entries.find((r) => r.event === "model.call.rejected");
     expect(span).toMatchObject({ errorClass: "unknown_token" });
+    expect(span?.tokenPrefix).toBe("ghost-to");
     await proxy.stop();
   });
 
@@ -226,7 +228,11 @@ describe("LocalModelProxy", () => {
     });
     const resp = await postToProxy(port, "/v1/chat/completions", { "x-api-key": tok }, "{}");
     expect(resp.status).toBe(504);
-    expect(logger.entries.find((r) => r.status === "upstream_timeout")).toBeTruthy();
+    const timeoutSpan = logger.entries.find(
+      (r) => r.event === "model.call.completed" && r.status === "upstream_timeout",
+    );
+    expect(timeoutSpan).toBeTruthy();
+    expect(timeoutSpan?.errorClass).toBe("timeout");
     await proxy.stop();
     await upstream.close();
   });

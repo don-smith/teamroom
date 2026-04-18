@@ -77,7 +77,9 @@ export class LocalModelProxy implements ModelProxy {
           // ignore
         }
         emit(this.opts.logger, "error", {
-          event: "model.call.errored",
+          event: "model.call.completed",
+          status: "upstream_error",
+          errorClass: "internal_error",
           message: err instanceof Error ? err.message : String(err),
         });
       });
@@ -130,7 +132,11 @@ export class LocalModelProxy implements ModelProxy {
         event: "model.call.rejected",
         traceId,
         spanId,
-        extra: { errorClass: "unknown_token", status: "rejected" },
+        extra: {
+          errorClass: "unknown_token",
+          status: "rejected",
+          tokenPrefix: token.slice(0, 8),
+        },
       }));
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "unknown routing token" }));
@@ -196,14 +202,14 @@ export class LocalModelProxy implements ModelProxy {
       await adapter.resolveAuth(outHeaders);
     } catch (err) {
       emit(this.opts.logger, "error", buildSpan({
-        event: "model.call.errored",
+        event: "model.call.rejected",
         traceId: entry.traceId,
         spanId,
         agentId: entry.agentId,
         turnId: entry.turnId,
         extra: {
           provider: entry.provider,
-          status: "auth_error",
+          status: "rejected",
           errorClass: "auth_error",
           message: err instanceof Error ? err.message : String(err),
         },
@@ -260,8 +266,12 @@ export class LocalModelProxy implements ModelProxy {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isTimeout = message === "upstream_timeout";
+      const errCode =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code ?? "")
+          : "";
       emit(this.opts.logger, "error", buildSpan({
-        event: "model.call.errored",
+        event: "model.call.completed",
         traceId: entry.traceId,
         spanId,
         agentId: entry.agentId,
@@ -269,7 +279,9 @@ export class LocalModelProxy implements ModelProxy {
         extra: {
           provider: entry.provider,
           status: isTimeout ? "upstream_timeout" : "upstream_error",
-          errorClass: isTimeout ? "upstream_timeout" : "upstream_error",
+          errorClass: isTimeout
+            ? "timeout"
+            : `${errCode || "network"}_${entry.provider}`,
           latencyMs: Date.now() - startedAt,
           message,
         },
@@ -283,6 +295,8 @@ export class LocalModelProxy implements ModelProxy {
     }
 
     // OAuth credential-refresh retry: exactly once on 401, OAuth mode only.
+    // Per spec §5, the retry is reflected in the final `model.call.completed`
+    // span's `retried: true` field rather than as a separate event.
     if (
       upstreamResp.status === 401 &&
       !retried &&
@@ -290,14 +304,6 @@ export class LocalModelProxy implements ModelProxy {
       typeof adapter.onUpstreamUnauthorized === "function"
     ) {
       adapter.onUpstreamUnauthorized();
-      emit(this.opts.logger, "info", buildSpan({
-        event: "model.call.retry",
-        traceId: entry.traceId,
-        spanId,
-        agentId: entry.agentId,
-        turnId: entry.turnId,
-        extra: { provider: entry.provider, reason: "credential_refresh" },
-      }));
       await this.forward({ ...args, retried: true });
       return;
     }
@@ -310,11 +316,11 @@ export class LocalModelProxy implements ModelProxy {
       parsedBody = undefined;
     }
     const usage = adapter.extractUsage(parsedBody);
-    const status = upstreamResp.status >= 200 && upstreamResp.status < 300 ? "ok" : "upstream_error";
-    const event = status === "ok" ? "model.call.completed" : "model.call.errored";
+    const isOk = upstreamResp.status >= 200 && upstreamResp.status < 300;
+    const status = isOk ? "ok" : "upstream_error";
 
-    emit(this.opts.logger, status === "ok" ? "info" : "error", buildSpan({
-      event,
+    emit(this.opts.logger, isOk ? "info" : "error", buildSpan({
+      event: "model.call.completed",
       traceId: entry.traceId,
       spanId,
       agentId: entry.agentId,
@@ -323,8 +329,10 @@ export class LocalModelProxy implements ModelProxy {
         provider: entry.provider,
         model: entry.model,
         status,
-        upstreamStatus: upstreamResp.status,
+        httpStatus: upstreamResp.status,
+        ...(isOk ? {} : { errorClass: `${upstreamResp.status}_${entry.provider}` }),
         latencyMs: Date.now() - startedAt,
+        ...(retried ? { retried: true } : {}),
         ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
         ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
       },
