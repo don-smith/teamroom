@@ -1,8 +1,7 @@
 ---
 name: Team Room — deliberate coupling and extensibility as a first-class concern
-description: For Team Room, every design decision is evaluated against what's shared vs. isolated, what's responsible for what, and how it affects the harness's ability to grow into memory, reasoning, delegation, collaboration, and eventing
+description: Coupling and extensibility are first-class architectural concerns; every boundary states what is shared vs. isolated, owned vs. used
 type: feedback
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 For Team Room, coupling and extensibility are architectural concerns held at the same level of priority as correctness. Every design decision is evaluated against: what is shared, what is isolated, what is responsible for what, and how this choice affects the harness's ability to grow. The harness starts small and minimal but is expected to become comprehensive — memory, reasoning, delegation, collaboration, rich eventing, multi-model routing. Coupling choices made accidentally at M1 become very expensive to undo at M4+.
 

@@ -2,7 +2,6 @@
 name: Team Room — see only as far as needed, not further
 description: For Team Room, aggressively defer formalization and abstraction until a concrete second example forces the shape
 type: feedback
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 For Team Room, the user explicitly wants to "see out as far as we need to, but not any further." Defer formalization of processes, tooling, and abstractions until there's a concrete second example to learn from. The first instance of anything (first agent, first channel, first tool integration) is allowed to be hand-crafted and imperfect — it exists to surface the shape, not to define the pattern.
 

@@ -1,6 +1,6 @@
 ---
 name: Team Room — Anthropic auth defaults to OAuth via Claude Code subscription
-description: For provider:anthropic agents, Team Room's default auth mode is OAuth via the user's Claude Pro/Max subscription (claude-agent-sdk in container, host-side proxy substitution). API-key mode exists as a fallback only. Don't suggest API-key mode as the default path — the user has been explicit about this multiple times.
+description: OAuth via the user's Claude Pro/Max subscription is the default for provider:anthropic; API-key mode is fallback only — don't suggest it as default
 type: project
 ---
 

@@ -2,7 +2,6 @@
 name: Team Room — design for testability via dependency injection, not mocks
 description: For Team Room, testability is an architectural concern — every effectful dependency goes behind an interface with a DI-injected real test implementation; prefer in-memory real implementations over mocking libraries
 type: feedback
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 For Team Room, testability is treated as an architectural concern and dependency injection is the preferred pattern. Every effectful dependency (DB, HTTP/LLM, container spawner, filesystem, bus, clock) lives behind a small interface that the daemon composes at startup. Tests compose the same interfaces using **in-memory real implementations**, not mocks. The contract between code-under-test and production is identical to the contract between code-under-test and the test harness.
 

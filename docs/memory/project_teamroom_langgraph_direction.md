@@ -2,7 +2,6 @@
 name: Team Room — LangGraph is the intended per-agent runtime framework
 description: Intended direction is LangGraph inside each agent container for per-agent agency, reasoning graphs, and state; M1 uses a minimal runtime but the container contract is designed to accommodate LangGraph later
 type: project
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 Intended direction for Team Room: each agent runs a LangGraph workflow inside its container. Each agent has its own agency, reasoning graph, state, and process. For M1 the agent-runtime is intentionally simple (direct LLM invocation is acceptable), but the container contract is designed to be language-agnostic and runtime-opaque so LangGraph slots in later without daemon-side changes.
 

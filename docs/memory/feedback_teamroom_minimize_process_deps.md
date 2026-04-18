@@ -2,7 +2,6 @@
 name: Team Room — minimize long-running process dependencies
 description: For Team Room, prefer designs where the long-running orchestrator has no dependencies on other long-running processes
 type: feedback
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 For Team Room, prefer designs where the long-running orchestrator process has no runtime dependencies on other long-running processes (databases, message brokers, caches, etc.). In-process / embedded alternatives (e.g. SQLite over Postgres) are preferred when they can credibly do the job.
 

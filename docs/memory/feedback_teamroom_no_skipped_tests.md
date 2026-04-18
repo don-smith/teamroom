@@ -1,6 +1,6 @@
 ---
 name: Team Room — no skipped tests; pass means full end-to-end success
-description: Integration tests run on every npm test, no opt-in gates, no silent skips. Failure preconditions surface as visible failures with remediation messages, not skipped tests. "Passing" requires the full success criterion (e.g., HTTP 200 + valid content), never an intermediate signal like "auth was accepted but request was rate-limited."
+description: No opt-in test gates and no silent skips; missing prereqs fail loudly with remediation. Pass means full E2E success, never an intermediate signal
 type: feedback
 ---
 

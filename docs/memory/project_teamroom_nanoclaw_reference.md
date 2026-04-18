@@ -1,6 +1,6 @@
 ---
 name: Team Room — NanoClaw is the design reference for container + credential patterns
-description: When facing decisions about how Team Room handles agent containers, credential proxies, or Anthropic SDK integration, check qwibitai/nanoclaw on GitHub first — many of these are solved problems there. The credential-proxy + claude-agent-sdk pattern was lifted directly during M2's OAuth pivot.
+description: qwibitai/nanoclaw is the design reference for container + credential patterns; check it first when designing in that space
 type: project
 ---
 

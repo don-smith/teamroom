@@ -1,8 +1,7 @@
 ---
 name: Team Room — build it with the team practices we want Team Room to produce
-description: Team Room is a product about healthy agentic software teams; its own development must use those same practices — reflection, retros, deliberate docs, continuous improvement, explicit roles — so the practice and the product stay consistent
+description: Team Room's own development uses the practices Team Room enables — reflection, retros, deliberate docs; pointer to docs/ways-of-working.md
 type: feedback
-originSessionId: 2b248c3a-2db2-43f8-bcf5-b41c02065a20
 ---
 Team Room is a product about building healthy agentic software teams. Its own development is expected to exemplify the practices Team Room is meant to enable: explicit roles and responsibilities, observability, reflection, retrospectives, continuous improvement, deliberate artifact management, and learning capture. Practice and product are meta-consistent — the way Team Room is built should match what a Team Room team would produce. Divergence between the two is a signal that either the practice or the product is off.
 
