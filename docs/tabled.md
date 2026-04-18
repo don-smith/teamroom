@@ -8,6 +8,25 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ---
 
+## M2 status snapshot (for the next session picking this up)
+
+All 33 original M2 plan tasks are complete. After Task 33 a series of follow-ups landed:
+- **OAuth gating discovery + pivot** (commits up through `973e5c4`): the spec'd vanilla-SDK-with-server-to-server-exchange path is gated by Anthropic. Pivoted to `@anthropic-ai/claude-agent-sdk` in the container with `ANTHROPIC_BASE_URL`-routed credential proxy substitution, modeled on NanoClaw. Captured in [`project_teamroom_anthropic_oauth_default`](memory/project_teamroom_anthropic_oauth_default.md) and [`project_teamroom_nanoclaw_reference`](memory/project_teamroom_nanoclaw_reference.md).
+- **Conversation continuity** (commit `e92954d`): claude-assistant now uses the SDK's session-resume mechanism so multi-turn conversations remember prior context. Sidecar UUID file at `/store/anthropic-session.txt`; CLAUDE_CONFIG_DIR points at `/store/claude-sdk` so the SDK's session JSONL survives `--rm`.
+- **Multi-turn coverage** (commit `1bc24f5`): smoke test now does a 2-turn codeword recall per agent; new `tests/integration/lm-studio-real.test.ts` mirrors the Anthropic OAuth integration test for the LM Studio path. Both fail loudly when prerequisites are missing — captured in [`feedback_teamroom_no_skipped_tests`](memory/feedback_teamroom_no_skipped_tests.md).
+- **Repo-level agent docs** (commit `02dbfd9`): `agents/README.md` documents the file-structure asymmetry between studio-assistant (lean) and claude-assistant (SDK state in `/store/claude-sdk/`, sidecar, etc.) — including the intentional two-sources-of-truth for claude-assistant's conversation history.
+- Smoke test passing end-to-end as of the user's last manual run; both agents replying; multi-turn recall confirmed.
+
+**Remaining work to close M2:**
+1. Update this `tabled.md` to drop entries that were resolved during M2 execution (the OAuth-exchange entry is fully obsolete; the LocalModelProxy future-work batch's items have been partially superseded; the plan-template-drift entries can graduate to the M2 retro).
+2. Optionally write the M2 retro using `superpowers:writing-retros`.
+3. Use `superpowers:writing-as-built` to produce `docs/as-built/2026-04-19-teamroom-m2.md` and purge the in-flight spec + plan files (M2-design + M2-plan) per the project convention.
+4. Task #38 (`teamroom debug-agent` CLI) was queued as a friction-reducer but is non-blocking; defer to M3 followups list.
+
+**How to resume:** read this snapshot + [`MEMORY.md`](memory/MEMORY.md) (the three new entries are the load-bearing context); the spec + plan files are still at `docs/specs/2026-04-18-m2-model-abstraction-design.md` and `docs/plans/2026-04-18-m2-model-abstraction-plan.md` and will be purged into the as-built at milestone close.
+
+---
+
 ## Open entries
 
 - **Runbook vs. skill boundary — working heuristic carried forward from M1 close.** Partial resolution landed in `.claude/skills/capturing-learnings/` and `docs/ways-of-working.md`: *skills are tactical how-tos (one specific thing), runbooks are broader processes or practices that often compose multiple skills, and both can invoke scripts.* This is a heuristic, not a rule — the next time we produce a runbook and a skill that share a boundary (most likely: the first agent-onboarding runbook in M2), revisit and decide whether the split still fits. Probable destination: refinement of the `capturing-learnings` skill text, or promotion of the pre-execution plan review from inline rhythm to its own skill.

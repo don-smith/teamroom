@@ -7,6 +7,9 @@
 - [Team Room — deliberate coupling and extensibility](feedback_teamroom_coupling_and_extensibility.md) — what's shared vs. isolated is a first-class architectural concern at every decision point
 - [Team Room — build it with the team practices we want Team Room to produce](feedback_teamroom_meta_consistency.md) — read docs/ways-of-working.md; apply reflection, retros, and deliberate docs to our own development
 - [Team Room — pre-execution plan review discipline](feedback_teamroom_plan_preexec_review.md) — Claude and user dry-run the plan before executing; catches drifts that otherwise surface as implementer rework
+- [Team Room — no skipped tests; pass means full E2E success](feedback_teamroom_no_skipped_tests.md) — integration tests run on every npm test, no opt-in gates; "passing" requires the full success criterion, never an intermediate signal like "auth accepted but rate-limited"
 
 ## Project
 - [Team Room — LangGraph is the intended per-agent runtime](project_teamroom_langgraph_direction.md) — agents will run LangGraph workflows eventually; M1 keeps the runtime simple but the container contract is language-agnostic to accommodate it
+- [Team Room — NanoClaw is the design reference for container + credential patterns](project_teamroom_nanoclaw_reference.md) — qwibitai/nanoclaw on GitHub; M2's OAuth pivot was modeled directly on it
+- [Team Room — Anthropic auth defaults to OAuth via Claude Code subscription](project_teamroom_anthropic_oauth_default.md) — claude-agent-sdk in container, host proxy substitution; API key is fallback only
