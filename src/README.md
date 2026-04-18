@@ -13,6 +13,7 @@ The source tree is split by runtime responsibility. Most of it runs on the **hos
 - [`container/`](container/README.md) — `ContainerRunner` seam; `DockerRunner` (prod), `FakeRunner` (tests).
 - [`agent-config/`](agent-config/README.md) — host-only loader for per-agent folder metadata.
 - [`daemon/`](daemon/README.md) — composition root, polling loop, turn processor, reconcile, safety nets.
+- [`model-proxy/`](model-proxy/README.md) — `ModelProxy` seam; in-daemon HTTP proxy that swaps routing tokens for real upstream credentials. Two-mode Anthropic auth.
 - [`cli/`](cli/README.md) — `teamroom` binary (`serve`, `send`, `tail`, `status`).
 - [`agent-runtime/`](agent-runtime/README.md) — the shim that runs *inside* each agent container.
 
