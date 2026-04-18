@@ -54,3 +54,14 @@ export interface TurnLifecycleEvent extends BusEvent {
   traceId: string;
   error?: string;
 }
+
+export type AuthMode = "api-key" | "oauth";
+
+export interface SpanFields {
+  event: string;
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  agentId?: string;
+  turnId?: string;
+}
