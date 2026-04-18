@@ -140,8 +140,52 @@ run_agent() {
   return 1
 }
 
+# Two-turn conversation memory check. Sends a unique codeword in turn 1, asks
+# for it back in turn 2. If conversation history is broken (container's
+# runtime not loading conversation.jsonl, or claude-agent-sdk session not
+# resuming, etc.) turn 2 won't recall and the smoke test fails. Each agent
+# gets its own codeword so failure messages are unambiguous.
+run_multiturn_check() {
+  local agent="$1"
+  # 8 random hex chars — unique per smoke run so accumulated history from
+  # prior runs can't accidentally satisfy the assertion.
+  local codeword="cw-$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 8)"
+
+  echo "==> [multi-turn] Sending to $agent — turn 1 (codeword: $codeword)"
+  : > /tmp/teamroom-smoke-output.txt
+  node dist/cli/main.js send --agent "$agent" "Remember this codeword: $codeword. Reply with exactly: ack-mt"
+  echo "==> [multi-turn] Waiting for $agent turn-1 ack (up to 60s)"
+  local ok=0
+  for _ in $(seq 1 120); do
+    if grep -q "ack-mt" /tmp/teamroom-smoke-output.txt 2>/dev/null; then ok=1; break; fi
+    sleep 0.5
+  done
+  if [[ "$ok" != "1" ]]; then
+    echo "==> FAIL: $agent multi-turn turn 1 didn't ack with 'ack-mt'" >&2
+    dump_failure_diagnostics "$agent"
+    return 1
+  fi
+
+  echo "==> [multi-turn] Sending to $agent — turn 2 (recall codeword)"
+  : > /tmp/teamroom-smoke-output.txt
+  node dist/cli/main.js send --agent "$agent" "What was the codeword I just told you? Reply with just the codeword, nothing else."
+  echo "==> [multi-turn] Waiting for $agent to recall '$codeword' (up to 60s)"
+  for _ in $(seq 1 120); do
+    if grep -q "$codeword" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
+      echo "==> [multi-turn] $agent OK (recalled $codeword)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "==> FAIL: $agent multi-turn turn 2 didn't recall codeword '$codeword' — conversation history broken" >&2
+  dump_failure_diagnostics "$agent"
+  return 1
+}
+
 run_agent studio-assistant "studio-ok"
+run_multiturn_check studio-assistant
 run_agent claude-assistant "claude-ok"
+run_multiturn_check claude-assistant
 
 echo "==> Verifying both providers' spans in the daemon log"
 LOG_FILE=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
