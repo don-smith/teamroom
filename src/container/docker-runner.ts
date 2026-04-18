@@ -61,7 +61,7 @@ export class DockerRunner implements ContainerRunner {
   }
 }
 
-function parseEvent(line: string): ContainerStdoutEvent {
+export function parseEvent(line: string): ContainerStdoutEvent {
   try {
     const obj = JSON.parse(line) as Record<string, unknown>;
     const type = obj.type;
@@ -69,10 +69,10 @@ function parseEvent(line: string): ContainerStdoutEvent {
       return { type: "reply", body: obj.body, messageId: typeof obj.messageId === "string" ? obj.messageId : undefined };
     }
     if (type === "status" && typeof obj.phase === "string") {
-      return { type: "status", phase: obj.phase, ...obj };
+      return { ...obj, type: "status", phase: obj.phase };
     }
     if (type === "log" && typeof obj.level === "string" && typeof obj.msg === "string") {
-      return { type: "log", level: obj.level, msg: obj.msg, ...obj };
+      return { ...obj, type: "log", level: obj.level, msg: obj.msg };
     }
     return { type: "unknown", raw: line };
   } catch {
