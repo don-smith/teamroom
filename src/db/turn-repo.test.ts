@@ -114,6 +114,35 @@ describe("TurnRepo", () => {
     expect(repo.countByStatus("done")).toBe(0);
   });
 
+  it("findAgedPending returns only pending rows with no containerId older than the cutoff", () => {
+    // Aged pending, no container — should match.
+    repo.create({
+      id: "t-aged", agentId: "studio-assistant", inboundMessageId: "m1", status: "pending",
+      containerId: null, error: null, traceId: "tr",
+      startedAt: null, finishedAt: null,
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+    // Fresh pending, no container — should be excluded.
+    repo.create({
+      id: "t-fresh", agentId: "studio-assistant", inboundMessageId: "m1", status: "pending",
+      containerId: null, error: null, traceId: "tr",
+      startedAt: null, finishedAt: null,
+      createdAt: "2026-04-18T00:01:30.000Z",
+    });
+    // Aged pending WITH container — should be excluded (container exists, runner can resync).
+    repo.create({
+      id: "t-with-container", agentId: "studio-assistant", inboundMessageId: "m1", status: "pending",
+      containerId: "container-xyz", error: null, traceId: "tr",
+      startedAt: null, finishedAt: null,
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+
+    const cutoff = "2026-04-18T00:01:00.000Z";
+    const aged = repo.findAgedPending(cutoff);
+    expect(aged).toHaveLength(1);
+    expect(aged[0]?.id).toBe("t-aged");
+  });
+
   it("returns latest done turn", () => {
     repo.create({
       id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "done",

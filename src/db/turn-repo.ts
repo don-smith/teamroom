@@ -78,6 +78,17 @@ export class TurnRepo {
     return rows.map(rowToTurn);
   }
 
+  findAgedPending(cutoffIso: string): Turn[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM turns
+           WHERE status='pending' AND container_id IS NULL AND created_at < ?
+           ORDER BY created_at`,
+      )
+      .all(cutoffIso) as TurnRow[];
+    return rows.map(rowToTurn);
+  }
+
   countByStatus(status: TurnStatus): number {
     const row = this.db
       .prepare(`SELECT COUNT(*) AS c FROM turns WHERE status=?`)

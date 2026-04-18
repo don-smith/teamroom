@@ -61,4 +61,77 @@ describe("reconcile", () => {
     // no assertion error is the test
     expect(turnRepo.findByStatus("running")).toHaveLength(0);
   });
+
+  it("marks aged pending rows (no containerId, older than threshold) as errored", async () => {
+    // Clock is "now" — pending row created 90s ago should be considered aged.
+    const clock = new ControllableClock("2026-04-18T00:01:30.000Z");
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+    new AgentRepo(db).create({
+      id: "studio-assistant",
+      configPath: "/abs",
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+    const messageRepo = new MessageRepo(db);
+    messageRepo.create({
+      id: "m-aged", agentId: "studio-assistant", channel: "cli", direction: "in",
+      body: "a", turnId: "t-aged", traceId: "tr-aged",
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+    const turnRepo = new TurnRepo(db);
+    turnRepo.create({
+      id: "t-aged", agentId: "studio-assistant", inboundMessageId: "m-aged",
+      status: "pending", containerId: null, error: null, traceId: "tr-aged",
+      startedAt: null, finishedAt: null,
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+    const bus = new InMemoryBus();
+    const logger = new CapturingLogger(clock);
+    const events: BusEvent[] = [];
+    (async () => {
+      for await (const e of bus.subscribe()) events.push(e);
+    })();
+
+    await reconcile({ turnRepo, bus, logger, clock, genId: () => "evt-aged" });
+
+    const t = turnRepo.findById("t-aged");
+    expect(t?.status).toBe("error");
+    expect(t?.error).toBe("daemon_restart_during_pending");
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(events.some(
+      (e) => e.type === "turn.errored" && e["turnId"] === "t-aged" && e["error"] === "daemon_restart_during_pending",
+    )).toBe(true);
+  });
+
+  it("leaves fresh pending rows alone", async () => {
+    const clock = new ControllableClock("2026-04-18T00:00:30.000Z");
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+    new AgentRepo(db).create({
+      id: "studio-assistant",
+      configPath: "/abs",
+      createdAt: "2026-04-18T00:00:00.000Z",
+    });
+    new MessageRepo(db).create({
+      id: "m-fresh", agentId: "studio-assistant", channel: "cli", direction: "in",
+      body: "a", turnId: "t-fresh", traceId: "tr-fresh",
+      createdAt: "2026-04-18T00:00:20.000Z",
+    });
+    const turnRepo = new TurnRepo(db);
+    turnRepo.create({
+      id: "t-fresh", agentId: "studio-assistant", inboundMessageId: "m-fresh",
+      status: "pending", containerId: null, error: null, traceId: "tr-fresh",
+      startedAt: null, finishedAt: null,
+      createdAt: "2026-04-18T00:00:20.000Z", // only 10s old — under 60s threshold
+    });
+    const bus = new InMemoryBus();
+    const logger = new CapturingLogger(clock);
+
+    await reconcile({ turnRepo, bus, logger, clock, genId: () => "evt-fresh" });
+
+    const t = turnRepo.findById("t-fresh");
+    expect(t?.status).toBe("pending");
+    expect(t?.error).toBeNull();
+  });
 });
