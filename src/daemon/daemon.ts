@@ -100,7 +100,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     await loopPromise;
     await bus.close();
     db.close();
-    try { unlinkSync(pidFile); } catch { /* PID file already gone */ }
+    try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
   };
 
   return { db, stop, orchestrator };
