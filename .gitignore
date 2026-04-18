@@ -2,7 +2,7 @@ node_modules/
 dist/
 data/
 coverage/
-agents/*/store/
+agents/*/store/*
 !agents/*/store/.gitkeep
 *.log
 .DS_Store
