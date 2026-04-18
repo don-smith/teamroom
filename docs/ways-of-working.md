@@ -70,8 +70,9 @@ Current set of document categories. Add a row when a new role emerges; merge and
 | `team-room-context.md` | Episodic | Original brainstorming snapshot; historical reference. | Frozen — superseded content goes in specs. |
 | `docs/ways-of-working.md` (this doc) | Procedural | Practices for building Team Room. | Update when practices evolve; note the date at top. |
 | `docs/tabled.md` | Working | Scratch pad for tabled epiphanies. | Always in place; entries added and removed as processed. |
-| `docs/specs/YYYY-MM-DD-*-design.md` | Semantic | Approved designs per milestone. | Update on explicit amendment; otherwise frozen at approval. |
-| `docs/plans/YYYY-MM-DD-*-plan.md` | Semantic | Implementation plans. | Live during implementation; closed at milestone end. |
+| `docs/specs/YYYY-MM-DD-*-design.md` | Semantic | **In-flight** designs for the active milestone. Purged into the as-built at milestone close; the folder is empty between milestones (retains `.gitkeep`). | Live during design → implementation; removed at close. |
+| `docs/plans/YYYY-MM-DD-*-plan.md` | Semantic | **In-flight** implementation plans. Purged into the as-built at milestone close; the folder is empty between milestones (retains `.gitkeep`). | Live during implementation; removed at close. |
+| `docs/as-built/YYYY-MM-DD-<topic>.md` | Semantic + Episodic | **Permanent** record of shipped work — architecture, decisions with WHY, adaptations, known limitations. Written via the `writing-as-built` skill at the close of any significant piece of work (milestone, major feature, large refactor). Default expectation: one as-built per piece of closed work. | Frozen at commit; never edited. |
 | `docs/retros/YYYY-MM-DD-<milestone>.md` | Episodic | Milestone retrospectives. | Frozen at milestone close. |
 | `docs/runbooks/*.md` | Procedural | Operational procedures (e.g., "add a new agent," "add a new channel"). | Kept current — runbooks rot fast; check on use. |
 | `README.md` (repo root and folder-level) | Semantic | Orientation and navigation; anchors for the knowledge graph. | Update when a folder's shape changes. |
