@@ -422,25 +422,54 @@ Refs: docs/specs/2026-04-18-m2-model-abstraction-design.md §9 item 7
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: Check whether any dep blocks Node 22**
+> **Background.** `@types/node` major versions don't strictly track Node.js majors — at the time of writing, the latest tags are `@types/node@22.x` (last in the 22 series, e.g. `22.19.17`), `24.x`, and `25.x` (the current `latest`). Any of these *technically* work with a Node 22 runtime; the major number reflects the TypeScript/types era more than the Node runtime version. We pin to `^22` to keep the major number visibly aligned with `engines.node: ">=22"` so future readers don't see a mismatch and worry. This matches the user's "verify types and runtime are aligned" intent (M1 retro lesson — `@types/node@^22.8.0` paired with `engines.node: ">=20"` was a real source of confusion).
+
+- [ ] **Step 1: Verify the latest 22.x version of @types/node**
 
 Run:
 
 ```bash
-npm ls --depth=0 2>&1 | grep -i "node@" || true
-node -e "const ls = require('child_process').execSync('npm ls --all --json'); const data = JSON.parse(ls.toString()); function walk(n, depth=0){ if(n.engines?.node) console.log(n.name+' requires node '+n.engines.node); for (const k of Object.keys(n.dependencies||{})) walk(n.dependencies[k]); } walk(data);"
+npm view '@types/node@^22' version | tail -1
 ```
 
-If any dep requires `<22`, **STOP** — leave `engines.node: ">=20"` and `@types/node: ^20.0.0` as-is, commit a one-line note in `docs/tabled.md` explaining which dep blocks the bump, then skip Steps 2–4 and go to Task 6.
+Expected: a single version string (e.g., `22.19.17`). Note the value — Step 3 uses it.
 
-- [ ] **Step 2: Bump engines.node and @types/node**
+If `npm view` returns nothing for `^22` (unlikely but possible if the 22 series gets unpublished), bump to the next available major that's still close to Node 22 — `^24` is acceptable. Document the choice in the commit message.
 
-In `package.json`:
+- [ ] **Step 2: Check whether any transitive dep requires Node `<22`**
+
+Run:
+
+```bash
+npm ls --all --json 2>/dev/null | node -e "
+let data = '';
+process.stdin.on('data', c => data += c);
+process.stdin.on('end', () => {
+  const root = JSON.parse(data);
+  const seen = new Set();
+  function walk(n, name) {
+    if (!n || typeof n !== 'object') return;
+    const key = name + '@' + (n.version ?? '');
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (n.engines && n.engines.node) console.log(name + '@' + n.version + ' requires node ' + n.engines.node);
+    for (const k of Object.keys(n.dependencies ?? {})) walk(n.dependencies[k], k);
+  }
+  for (const k of Object.keys(root.dependencies ?? {})) walk(root.dependencies[k], k);
+});
+"
+```
+
+If any printed `requires node` constraint excludes `>=22` (e.g., `^18` or `<22`), **STOP**: leave `engines.node: ">=20"` and `@types/node: ^20.0.0` as-is, append a one-line note to `docs/tabled.md` explaining which dep blocks the bump, then skip Steps 3–5 and go to Task 6.
+
+- [ ] **Step 3: Bump engines.node and @types/node**
+
+In `package.json`, replace the `devDependencies` and `engines` sections (use the exact `@types/node` major from Step 1 — this plan documents the value seen at writing time, but pin to whatever Step 1 reports):
 
 ```json
 "devDependencies": {
   "@types/better-sqlite3": "^7.6.11",
-  "@types/node": "^22.0.0",
+  "@types/node": "^22.19.17",
   "typescript": "^5.6.3",
   "vitest": "^2.1.3"
 },
@@ -449,23 +478,29 @@ In `package.json`:
 }
 ```
 
-- [ ] **Step 3: Reinstall and verify**
+(Use the version Step 1 actually printed; if it's higher than `22.19.17`, use that.)
+
+- [ ] **Step 4: Reinstall and verify**
 
 ```bash
+rm -rf node_modules package-lock.json
 npm install
 npm run typecheck
 npm test
 ```
 
-Expected: clean install, clean typecheck, all tests pass.
+Expected: clean install, clean typecheck, all tests pass. (We rebuild `package-lock.json` to make sure transitive `@types/node` references in other packages also resolve to the new range.)
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json
 git commit -m "chore(deps): bump @types/node and engines.node to 22 (M1 debt #4)
 
-Verified no transitive dep requires <22.
+@types/node pinned to ^22.19.17 (latest in the 22 series at install
+time; verified via 'npm view @types/node@^22'). Major version of
+@types/node intentionally matches engines.node for visible alignment.
+No transitive dep blocks the bump.
 
 Refs: docs/specs/2026-04-18-m2-model-abstraction-design.md §9 item 4
 "
