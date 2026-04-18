@@ -22,8 +22,8 @@ describe("daemon shutdown", () => {
   it("unlinks the PID file on clean stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      modelBaseUrl: "http://example.invalid",
-      modelApiToken: "x",
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      anthropic: null,
     });
     const pidFile = join(dataDir, "teamroom.pid");
     expect(existsSync(pidFile)).toBe(true);
@@ -34,8 +34,8 @@ describe("daemon shutdown", () => {
   it("stop() is idempotent", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      modelBaseUrl: "http://example.invalid",
-      modelApiToken: "x",
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      anthropic: null,
     });
     await daemon.stop();
     await expect(daemon.stop()).resolves.toBeUndefined();
@@ -44,8 +44,8 @@ describe("daemon shutdown", () => {
   it("stop() succeeds even if PID file was removed externally", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      modelBaseUrl: "http://example.invalid",
-      modelApiToken: "x",
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      anthropic: null,
     });
     unlinkSync(join(dataDir, "teamroom.pid"));
     await expect(daemon.stop()).resolves.toBeUndefined();

@@ -5,6 +5,7 @@ import type { ContainerRunner } from "../container/container-runner.js";
 import type { Logger } from "../logger/logger.js";
 import type { MessageRepo } from "../db/message-repo.js";
 import type { TurnRepo } from "../db/turn-repo.js";
+import type { ModelProxy } from "../model-proxy/model-proxy.js";
 import { processTurn } from "./turn-processor.js";
 
 export interface OrchestratorDeps {
@@ -15,8 +16,11 @@ export interface OrchestratorDeps {
   clock: Clock;
   runner: ContainerRunner;
   agentConfigs: Map<string, AgentConfig>;
+  modelProxy: ModelProxy;
+  /** Container-side URL pointing at the proxy, e.g. http://host.docker.internal:<proxy-port>. */
   modelBaseUrl: string;
-  modelApiToken: string;
+  /** Whether an Anthropic adapter was registered. Task 18 uses this to refuse `provider:anthropic` turns when false. */
+  anthropicAdapterPresent: boolean;
   turnTimeoutMs: number;
   pollIntervalMs: number;
   genId: () => string;
@@ -47,8 +51,9 @@ export class Orchestrator {
           bus: this.deps.bus,
           logger: this.deps.logger,
           clock: this.deps.clock,
+          modelProxy: this.deps.modelProxy,
           modelBaseUrl: this.deps.modelBaseUrl,
-          modelApiToken: this.deps.modelApiToken,
+          anthropicAdapterPresent: this.deps.anthropicAdapterPresent,
           timeoutMs: this.deps.turnTimeoutMs,
           genId: this.deps.genId,
         });

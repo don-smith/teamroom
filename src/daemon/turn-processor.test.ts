@@ -11,6 +11,16 @@ import { CapturingLogger } from "../logger/logger.js";
 import { processTurn } from "./turn-processor.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 import type { BusEvent, Message } from "../types.js";
+import type { ModelProxy, MintTokenInput } from "../model-proxy/model-proxy.js";
+
+/** Minimal in-memory ModelProxy stub for turn-processor tests. */
+class StubModelProxy implements ModelProxy {
+  start = async (): Promise<{ port: number }> => ({ port: 0 });
+  stop = async (): Promise<void> => {};
+  private next = 0;
+  mint = (_input: MintTokenInput): string => `tok-${this.next++}`;
+  evict = (_token: string): void => {};
+}
 
 function setup(): {
   db: Db;
@@ -84,7 +94,9 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -128,7 +140,9 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       timeoutMs: 5000,
       genId: () => "generated-id",
     });
@@ -157,7 +171,9 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       timeoutMs: 100,
       genId: () => "generated-id",
     });
@@ -186,7 +202,9 @@ describe("processTurn", () => {
       bus: s.bus,
       logger: s.logger,
       clock: s.clock,
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       timeoutMs: 5000,
       genId: () => "generated-id",
     });

@@ -6,6 +6,7 @@ import type { DockerRunSpec, Mount } from "../container/docker-command.js";
 import type { Logger } from "../logger/logger.js";
 import type { MessageRepo } from "../db/message-repo.js";
 import type { TurnRepo } from "../db/turn-repo.js";
+import type { ModelProxy } from "../model-proxy/model-proxy.js";
 import type { Message } from "../types.js";
 
 export interface ProcessTurnDeps {
@@ -17,8 +18,10 @@ export interface ProcessTurnDeps {
   bus: NotifyBus;
   logger: Logger;
   clock: Clock;
+  modelProxy: ModelProxy;
   modelBaseUrl: string;
-  modelApiToken: string;
+  /** True when an Anthropic adapter is configured. Task 18 will use this to refuse `provider:anthropic` turns when false. */
+  anthropicAdapterPresent: boolean;
   timeoutMs: number;
   genId: () => string;
 }
@@ -26,8 +29,13 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    modelBaseUrl, modelApiToken, timeoutMs, genId,
+    modelBaseUrl, timeoutMs, genId,
   } = deps;
+  // `deps.modelProxy` and `deps.anthropicAdapterPresent` are accepted now for
+  // wiring; Task 18 will use them to mint/evict per-turn routing tokens and
+  // refuse turns whose provider has no adapter.
+  void deps.modelProxy;
+  void deps.anthropicAdapterPresent;
 
   const turnId = genId();
   const now = clock.nowIso();
@@ -80,7 +88,8 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       TEAMROOM_AGENT_NAME: agentConfig.name,
       TEAMROOM_MODEL: agentConfig.model,
       TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
-      TEAMROOM_MODEL_API_TOKEN: modelApiToken,
+      // Placeholder until Task 18 mints a per-turn routing token via modelProxy.
+      TEAMROOM_MODEL_API_TOKEN: "",
     },
   };
 

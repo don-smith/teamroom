@@ -10,6 +10,16 @@ import { ControllableClock } from "../clock/clock.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { Orchestrator } from "./orchestrator.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
+import type { ModelProxy, MintTokenInput } from "../model-proxy/model-proxy.js";
+
+/** Minimal in-memory ModelProxy stub for orchestrator/turn-processor tests. */
+class StubModelProxy implements ModelProxy {
+  start = async (): Promise<{ port: number }> => ({ port: 0 });
+  stop = async (): Promise<void> => {};
+  private next = 0;
+  mint = (_input: MintTokenInput): string => `tok-${this.next++}`;
+  evict = (_token: string): void => {};
+}
 
 const agentConfig: AgentConfig = {
   name: "studio-assistant",
@@ -47,7 +57,9 @@ describe("Orchestrator", () => {
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
       agentConfigs: new Map([["studio-assistant", agentConfig]]),
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -91,7 +103,9 @@ describe("Orchestrator", () => {
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
       agentConfigs: new Map([["studio-assistant", agentConfig]]),
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -116,7 +130,9 @@ describe("Orchestrator", () => {
       bus: new InMemoryBus(),
       logger, clock, runner,
       agentConfigs: new Map([["studio-assistant", agentConfig]]),
-      modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => "x",
