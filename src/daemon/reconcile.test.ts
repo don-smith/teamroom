@@ -16,15 +16,15 @@ function seedOrphan(
   const db = createDatabase(":memory:");
   runMigrations(db);
   const now = clock.nowIso();
-  new AgentRepo(db).create({ id: "assistant", configPath: "/abs", createdAt: now });
+  new AgentRepo(db).create({ id: "studio-assistant", configPath: "/abs", createdAt: now });
   const messageRepo = new MessageRepo(db);
   messageRepo.create({
-    id: "m-1", agentId: "assistant", channel: "cli", direction: "in",
+    id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
     body: "a", turnId: "t-1", traceId: "tr-1", createdAt: now,
   });
   const turnRepo = new TurnRepo(db);
   turnRepo.create({
-    id: "t-1", agentId: "assistant", inboundMessageId: "m-1", status: "running",
+    id: "t-1", agentId: "studio-assistant", inboundMessageId: "m-1", status: "running",
     containerId: "c-x", error: null, traceId: "tr-1",
     startedAt: now, finishedAt: null, createdAt: now,
   });

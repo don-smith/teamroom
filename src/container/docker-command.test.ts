@@ -4,28 +4,28 @@ import { buildDockerRunArgs } from "./docker-command.js";
 describe("buildDockerRunArgs", () => {
   it("produces the expected argv for a standard turn", () => {
     const argv = buildDockerRunArgs({
-      imageTag: "teamroom-agent-assistant:latest",
+      imageTag: "teamroom-agent-studio-assistant:latest",
       mounts: [
-        { hostPath: "/abs/agents/assistant/AGENTS.md", containerPath: "/AGENTS.md", readOnly: true },
-        { hostPath: "/abs/agents/assistant/store", containerPath: "/store", readOnly: false },
+        { hostPath: "/abs/agents/studio-assistant/AGENTS.md", containerPath: "/AGENTS.md", readOnly: true },
+        { hostPath: "/abs/agents/studio-assistant/store", containerPath: "/store", readOnly: false },
       ],
       env: {
         TEAMROOM_TRACE_ID: "trace-1",
         TEAMROOM_TURN_ID: "turn-1",
-        TEAMROOM_AGENT_NAME: "assistant",
+        TEAMROOM_AGENT_NAME: "studio-assistant",
         ANTHROPIC_API_KEY: "sk-x",
       },
     });
 
     expect(argv).toEqual([
       "run", "--rm", "-i",
-      "-v", "/abs/agents/assistant/AGENTS.md:/AGENTS.md:ro",
-      "-v", "/abs/agents/assistant/store:/store",
+      "-v", "/abs/agents/studio-assistant/AGENTS.md:/AGENTS.md:ro",
+      "-v", "/abs/agents/studio-assistant/store:/store",
       "-e", "ANTHROPIC_API_KEY=sk-x",
-      "-e", "TEAMROOM_AGENT_NAME=assistant",
+      "-e", "TEAMROOM_AGENT_NAME=studio-assistant",
       "-e", "TEAMROOM_TRACE_ID=trace-1",
       "-e", "TEAMROOM_TURN_ID=turn-1",
-      "teamroom-agent-assistant:latest",
+      "teamroom-agent-studio-assistant:latest",
     ]);
   });
 

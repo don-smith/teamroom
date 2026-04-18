@@ -6,7 +6,7 @@ A multi-agent harness modeled after a software delivery team.
 
 ## Current state
 
-Milestone 1 — "One agent that works." A single hand-configured agent (`assistant`) runs in a fresh Docker container per turn. Terminal-only channel. No memory, no inter-agent messaging, no scheduling — those arrive in later milestones.
+Milestone 1 — "One agent that works." A single hand-configured agent (`studio-assistant`) runs in a fresh Docker container per turn. Terminal-only channel. No memory, no inter-agent messaging, no scheduling — those arrive in later milestones.
 
 For M1 the agent calls a local LM Studio model via an OpenAI-compatible endpoint; a model proxy lands in M2 that generalises this to Anthropic, OpenAI, and other backends.
 
@@ -43,7 +43,7 @@ teamroom status
 
 ```bash
 # One-time per model/agent change: rebuild the agent image
-docker build -t teamroom-agent-assistant:latest -f agents/assistant/Dockerfile .
+docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 
 # Three terminals
 teamroom serve                   # daemon (foreground — Ctrl+C to stop)

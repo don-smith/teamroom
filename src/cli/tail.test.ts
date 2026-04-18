@@ -22,10 +22,10 @@ describe("tailRun", () => {
   it("prints outbound messages as they are published on the bus", async () => {
     const db = createDatabase(join(dir, "data", "teamroom.db"));
     runMigrations(db);
-    new AgentRepo(db).create({ id: "assistant", configPath: "/abs", createdAt: "2026-04-18T00:00:00.000Z" });
+    new AgentRepo(db).create({ id: "studio-assistant", configPath: "/abs", createdAt: "2026-04-18T00:00:00.000Z" });
     const messageRepo = new MessageRepo(db);
     messageRepo.create({
-      id: "o-1", agentId: "assistant", channel: "cli", direction: "out",
+      id: "o-1", agentId: "studio-assistant", channel: "cli", direction: "out",
       body: "hello world", turnId: "t-1", traceId: "tr-1",
       createdAt: new Date().toISOString(),
     });
@@ -46,7 +46,7 @@ describe("tailRun", () => {
       id: "e-1",
       type: "message.outbound",
       ts: new Date().toISOString(),
-      agentId: "assistant",
+      agentId: "studio-assistant",
       messageId: "o-1",
       turnId: "t-1",
       traceId: "tr-1",

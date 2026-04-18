@@ -1,3 +1,0 @@
-name: assistant
-model: qwen/qwen3.5-9b
-image_tag: teamroom-agent-assistant:latest

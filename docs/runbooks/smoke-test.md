@@ -4,7 +4,7 @@ End-to-end verification that the full stack — daemon, CLI, real Docker, real L
 
 ## Preconditions
 
-- **LM Studio running** on `localhost:1234` with a model loaded. Default expected model: `qwen/qwen3.5-9b` (match whatever is in `agents/assistant/agent.yaml`).
+- **LM Studio running** on `localhost:1234` with a model loaded. Default expected model: `qwen/qwen3.5-9b` (match whatever is in `agents/studio-assistant/agent.yaml`).
 - **Docker Desktop running.** The smoke test builds the agent image and runs a container that reaches back to the host via `host.docker.internal`.
 - **`.env` file** at repo root containing `LM_STUDIO_API_TOKEN=<value>` matching your LM Studio instance.
 - **Node.js 20+**; `npm install` has run.
@@ -20,7 +20,7 @@ End-to-end verification that the full stack — daemon, CLI, real Docker, real L
 2. The script will:
    - Confirm LM Studio is reachable.
    - Run `npm run build`.
-   - Build the agent image (`teamroom-agent-assistant:latest`).
+   - Build the agent image (`teamroom-agent-studio-assistant:latest`).
    - Wipe `data/`, start the daemon, wait for `data/teamroom.pid`.
    - Start `teamroom tail` redirected to `/tmp/teamroom-smoke-output.txt`.
    - Send `"Hello from the smoke test — reply with exactly: hello back"`.
@@ -38,7 +38,7 @@ End-to-end verification that the full stack — daemon, CLI, real Docker, real L
 
 - **`LM Studio not reachable at http://localhost:1234`.** LM Studio isn't running, or is bound to a different host. Set `LM_STUDIO_HOST_URL=http://...` and re-run, or start LM Studio and load a model.
 - **`.env file required (with LM_STUDIO_API_TOKEN)`.** Copy `.env.example` to `.env` and fill in the token.
-- **`no available models` in tail output.** LM Studio is running but no model is loaded. Load the model referenced in `agents/assistant/agent.yaml`.
+- **`no available models` in tail output.** LM Studio is running but no model is loaded. Load the model referenced in `agents/studio-assistant/agent.yaml`.
 - **401 / auth error.** `LM_STUDIO_API_TOKEN` in `.env` does not match LM Studio's expected token. Check LM Studio's server settings.
 - **`Cannot connect to the Docker daemon`.** Docker Desktop is not running.
 - **Container cannot reach the host.** On macOS/Windows `host.docker.internal` is supplied by Docker Desktop. On Linux you may need `--add-host=host.docker.internal:host-gateway`. The smoke test currently assumes Docker Desktop.

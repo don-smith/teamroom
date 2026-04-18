@@ -20,14 +20,14 @@ describe("AgentRepo", () => {
 
   it("creates an agent and returns it", () => {
     repo.create({
-      id: "assistant",
-      configPath: "/abs/path/agents/assistant",
+      id: "studio-assistant",
+      configPath: "/abs/path/agents/studio-assistant",
       createdAt: "2026-04-18T00:00:00.000Z",
     });
-    const found = repo.findById("assistant");
+    const found = repo.findById("studio-assistant");
     expect(found).toEqual({
-      id: "assistant",
-      configPath: "/abs/path/agents/assistant",
+      id: "studio-assistant",
+      configPath: "/abs/path/agents/studio-assistant",
       createdAt: "2026-04-18T00:00:00.000Z",
     });
   });

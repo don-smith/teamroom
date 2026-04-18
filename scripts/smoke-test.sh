@@ -26,7 +26,7 @@ echo "==> Building TypeScript"
 npm run build
 
 echo "==> Building agent image"
-docker build -t teamroom-agent-assistant:latest -f agents/assistant/Dockerfile .
+docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 
 echo "==> Starting daemon in background"
 rm -rf data

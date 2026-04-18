@@ -13,11 +13,11 @@ describe("sendToDb", () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "teamroom-send-"));
     mkdirSync(join(dir, "data"), { recursive: true });
-    mkdirSync(join(dir, "agents", "assistant", "store"), { recursive: true });
-    writeFileSync(join(dir, "agents", "assistant", "AGENTS.md"), "prompt");
+    mkdirSync(join(dir, "agents", "studio-assistant", "store"), { recursive: true });
+    writeFileSync(join(dir, "agents", "studio-assistant", "AGENTS.md"), "prompt");
     writeFileSync(
-      join(dir, "agents", "assistant", "agent.yaml"),
-      "name: assistant\nmodel: m\nimage_tag: img\n",
+      join(dir, "agents", "studio-assistant", "agent.yaml"),
+      "name: studio-assistant\nmodel: m\nimage_tag: img\n",
     );
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -33,7 +33,7 @@ describe("sendToDb", () => {
     expect(inbound[0]?.body).toBe("hello");
     expect(inbound[0]?.channel).toBe("cli");
     expect(inbound[0]?.direction).toBe("in");
-    expect(inbound[0]?.agentId).toBe("assistant");
+    expect(inbound[0]?.agentId).toBe("studio-assistant");
   });
 
   it("creates the agent row lazily if the daemon hasn't yet", async () => {
@@ -41,7 +41,7 @@ describe("sendToDb", () => {
     const db = createDatabase(join(dir, "data", "teamroom.db"));
     runMigrations(db);
     const agents = new AgentRepo(db).findAll();
-    expect(agents.map((a) => a.id)).toEqual(["assistant"]);
+    expect(agents.map((a) => a.id)).toEqual(["studio-assistant"]);
   });
 
   it("rejects if no agents folder is present", async () => {

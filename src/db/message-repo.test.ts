@@ -8,8 +8,8 @@ function freshDb(): Db {
   const db = createDatabase(":memory:");
   runMigrations(db);
   new AgentRepo(db).create({
-    id: "assistant",
-    configPath: "/abs/agents/assistant",
+    id: "studio-assistant",
+    configPath: "/abs/agents/studio-assistant",
     createdAt: "2026-04-18T00:00:00.000Z",
   });
   return db;
@@ -27,7 +27,7 @@ describe("MessageRepo", () => {
   it("creates an inbound message and finds it as pending", () => {
     repo.create({
       id: "m1",
-      agentId: "assistant",
+      agentId: "studio-assistant",
       channel: "cli",
       direction: "in",
       body: "hello",
@@ -42,7 +42,7 @@ describe("MessageRepo", () => {
 
   it("excludes inbound messages that already have a turnId", () => {
     repo.create({
-      id: "m1", agentId: "assistant", channel: "cli", direction: "in",
+      id: "m1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "a", turnId: "t-1", traceId: "tr", createdAt: "2026-04-18T00:00:00.000Z",
     });
     expect(repo.findPendingInbound()).toEqual([]);
@@ -50,7 +50,7 @@ describe("MessageRepo", () => {
 
   it("attaches a turnId to a message", () => {
     repo.create({
-      id: "m1", agentId: "assistant", channel: "cli", direction: "in",
+      id: "m1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "a", turnId: null, traceId: "tr", createdAt: "2026-04-18T00:00:00.000Z",
     });
     repo.attachTurn("m1", "turn-abc");
@@ -62,11 +62,11 @@ describe("MessageRepo", () => {
   it("finds outbound messages after a given message id (for tail)", () => {
     const base = "2026-04-18T00:00:00.000Z";
     repo.create({
-      id: "o1", agentId: "assistant", channel: "cli", direction: "out",
+      id: "o1", agentId: "studio-assistant", channel: "cli", direction: "out",
       body: "r1", turnId: "t-1", traceId: "tr", createdAt: base,
     });
     repo.create({
-      id: "o2", agentId: "assistant", channel: "cli", direction: "out",
+      id: "o2", agentId: "studio-assistant", channel: "cli", direction: "out",
       body: "r2", turnId: "t-1", traceId: "tr",
       createdAt: "2026-04-18T00:00:01.000Z",
     });
@@ -77,7 +77,7 @@ describe("MessageRepo", () => {
   it("findOutboundAfter(null) returns all outbound", () => {
     const base = "2026-04-18T00:00:00.000Z";
     repo.create({
-      id: "o1", agentId: "assistant", channel: "cli", direction: "out",
+      id: "o1", agentId: "studio-assistant", channel: "cli", direction: "out",
       body: "r1", turnId: "t-1", traceId: "tr", createdAt: base,
     });
     expect(repo.findOutboundAfter(null).map((m) => m.id)).toEqual(["o1"]);

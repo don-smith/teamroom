@@ -12,12 +12,12 @@ import { Orchestrator } from "./orchestrator.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 
 const agentConfig: AgentConfig = {
-  name: "assistant",
+  name: "studio-assistant",
   model: "claude-opus-4-7",
-  imageTag: "teamroom-agent-assistant:latest",
-  configPath: "/abs/agents/assistant",
-  agentsMdPath: "/abs/agents/assistant/AGENTS.md",
-  storePath: "/abs/agents/assistant/store",
+  imageTag: "teamroom-agent-studio-assistant:latest",
+  configPath: "/abs/agents/studio-assistant",
+  agentsMdPath: "/abs/agents/studio-assistant/AGENTS.md",
+  storePath: "/abs/agents/studio-assistant/store",
 };
 
 describe("Orchestrator", () => {
@@ -36,16 +36,16 @@ describe("Orchestrator", () => {
       stderr: "",
     }));
 
-    agentRepo.create({ id: "assistant", configPath: "/abs", createdAt: clock.nowIso() });
+    agentRepo.create({ id: "studio-assistant", configPath: "/abs", createdAt: clock.nowIso() });
     messageRepo.create({
-      id: "m-1", agentId: "assistant", channel: "cli", direction: "in",
+      id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "ping", turnId: null, traceId: "tr-1", createdAt: clock.nowIso(),
     });
 
     let idCounter = 0;
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
-      agentConfigs: new Map([["assistant", agentConfig]]),
+      agentConfigs: new Map([["studio-assistant", agentConfig]]),
       modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
@@ -76,20 +76,20 @@ describe("Orchestrator", () => {
       };
     });
 
-    agentRepo.create({ id: "assistant", configPath: "/abs", createdAt: clock.nowIso() });
+    agentRepo.create({ id: "studio-assistant", configPath: "/abs", createdAt: clock.nowIso() });
     messageRepo.create({
-      id: "m-1", agentId: "assistant", channel: "cli", direction: "in",
+      id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "first", turnId: null, traceId: "tr-1", createdAt: "2026-04-18T00:00:00.000Z",
     });
     messageRepo.create({
-      id: "m-2", agentId: "assistant", channel: "cli", direction: "in",
+      id: "m-2", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "second", turnId: null, traceId: "tr-2", createdAt: "2026-04-18T00:00:01.000Z",
     });
 
     let idCounter = 0;
     const orch = new Orchestrator({
       messageRepo, turnRepo, bus, logger, clock, runner,
-      agentConfigs: new Map([["assistant", agentConfig]]),
+      agentConfigs: new Map([["studio-assistant", agentConfig]]),
       modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
@@ -114,7 +114,7 @@ describe("Orchestrator", () => {
       turnRepo: new TurnRepo(db),
       bus: new InMemoryBus(),
       logger, clock, runner,
-      agentConfigs: new Map([["assistant", agentConfig]]),
+      agentConfigs: new Map([["studio-assistant", agentConfig]]),
       modelBaseUrl: "http://localhost:1234/v1", modelApiToken: "test-token",
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,

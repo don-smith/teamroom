@@ -6,8 +6,8 @@ Exercise the CLI by hand with a real daemon, real Docker, and real LM Studio. Us
 
 - `teamroom` installed on your PATH (`npm run install-cli -- ~/bin`; see README).
 - `.env` populated with `LM_STUDIO_API_TOKEN`.
-- LM Studio running and the model in `agents/assistant/agent.yaml` loaded.
-- Docker Desktop running; `teamroom-agent-assistant:latest` built (`docker build -t teamroom-agent-assistant:latest -f agents/assistant/Dockerfile .`).
+- LM Studio running and the model in `agents/studio-assistant/agent.yaml` loaded.
+- Docker Desktop running; `teamroom-agent-studio-assistant:latest` built (`docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .`).
 - A fresh working directory for state: either start from a clean `data/` (`rm -rf data`) or know what's in it.
 
 ## Steps

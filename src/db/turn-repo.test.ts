@@ -9,13 +9,13 @@ function freshDb(): Db {
   const db = createDatabase(":memory:");
   runMigrations(db);
   new AgentRepo(db).create({
-    id: "assistant",
+    id: "studio-assistant",
     configPath: "/abs",
     createdAt: "2026-04-18T00:00:00.000Z",
   });
   new MessageRepo(db).create({
     id: "m1",
-    agentId: "assistant",
+    agentId: "studio-assistant",
     channel: "cli",
     direction: "in",
     body: "hi",
@@ -38,7 +38,7 @@ describe("TurnRepo", () => {
   it("creates a pending turn", () => {
     repo.create({
       id: "t1",
-      agentId: "assistant",
+      agentId: "studio-assistant",
       inboundMessageId: "m1",
       status: "pending",
       containerId: null,
@@ -54,7 +54,7 @@ describe("TurnRepo", () => {
 
   it("marks running with container id and startedAt", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "pending",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "pending",
       containerId: null, error: null, traceId: "tr", startedAt: null, finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
     });
@@ -67,7 +67,7 @@ describe("TurnRepo", () => {
 
   it("marks done with finishedAt", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "running",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "running",
       containerId: "c", error: null, traceId: "tr",
       startedAt: "2026-04-18T00:00:01.000Z", finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
@@ -79,7 +79,7 @@ describe("TurnRepo", () => {
 
   it("marks error with error text and finishedAt", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "running",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "running",
       containerId: "c", error: null, traceId: "tr",
       startedAt: "2026-04-18T00:00:01.000Z", finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
@@ -93,7 +93,7 @@ describe("TurnRepo", () => {
 
   it("finds turns by status", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "running",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "running",
       containerId: "c", error: null, traceId: "tr",
       startedAt: "2026-04-18T00:00:01.000Z", finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
@@ -105,7 +105,7 @@ describe("TurnRepo", () => {
 
   it("counts by status", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "pending",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "pending",
       containerId: null, error: null, traceId: "tr",
       startedAt: null, finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
@@ -116,7 +116,7 @@ describe("TurnRepo", () => {
 
   it("returns latest done turn", () => {
     repo.create({
-      id: "t1", agentId: "assistant", inboundMessageId: "m1", status: "done",
+      id: "t1", agentId: "studio-assistant", inboundMessageId: "m1", status: "done",
       containerId: "c", error: null, traceId: "tr",
       startedAt: "2026-04-18T00:00:00.000Z", finishedAt: "2026-04-18T00:00:10.000Z",
       createdAt: "2026-04-18T00:00:00.000Z",

@@ -32,10 +32,10 @@ function setup(): {
   const bus = new InMemoryBus();
   const logger = new CapturingLogger(clock);
 
-  agentRepo.create({ id: "assistant", configPath: "/abs", createdAt: clock.nowIso() });
+  agentRepo.create({ id: "studio-assistant", configPath: "/abs", createdAt: clock.nowIso() });
   const inbound: Message = {
     id: "m-1",
-    agentId: "assistant",
+    agentId: "studio-assistant",
     channel: "cli",
     direction: "in",
     body: "hello",
@@ -46,12 +46,12 @@ function setup(): {
   messageRepo.create(inbound);
 
   const agentConfig: AgentConfig = {
-    name: "assistant",
+    name: "studio-assistant",
     model: "claude-opus-4-7",
-    imageTag: "teamroom-agent-assistant:latest",
-    configPath: "/abs/agents/assistant",
-    agentsMdPath: "/abs/agents/assistant/AGENTS.md",
-    storePath: "/abs/agents/assistant/store",
+    imageTag: "teamroom-agent-studio-assistant:latest",
+    configPath: "/abs/agents/studio-assistant",
+    agentsMdPath: "/abs/agents/studio-assistant/AGENTS.md",
+    storePath: "/abs/agents/studio-assistant/store",
   };
 
   return { db, agentRepo, messageRepo, turnRepo, clock, bus, logger, inbound, agentConfig };

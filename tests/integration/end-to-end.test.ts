@@ -19,14 +19,14 @@ describe("end-to-end (stack assembled with test implementations)", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "teamroom-e2e-"));
-    mkdirSync(join(dir, "agents", "assistant", "store"), { recursive: true });
+    mkdirSync(join(dir, "agents", "studio-assistant", "store"), { recursive: true });
     writeFileSync(
-      join(dir, "agents", "assistant", "AGENTS.md"),
+      join(dir, "agents", "studio-assistant", "AGENTS.md"),
       "You are a test agent.",
     );
     writeFileSync(
-      join(dir, "agents", "assistant", "agent.yaml"),
-      "name: assistant\nmodel: m\nimage_tag: img\n",
+      join(dir, "agents", "studio-assistant", "agent.yaml"),
+      "name: studio-assistant\nmodel: m\nimage_tag: img\n",
     );
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -40,7 +40,7 @@ describe("end-to-end (stack assembled with test implementations)", () => {
     const turnRepo = new TurnRepo(db);
     const logger = new CapturingLogger(clock);
     const bus = new InMemoryBus();
-    const cfg = loadAgentConfig(join(dir, "agents", "assistant"));
+    const cfg = loadAgentConfig(join(dir, "agents", "studio-assistant"));
 
     agentRepo.create({ id: cfg.name, configPath: cfg.configPath, createdAt: clock.nowIso() });
 

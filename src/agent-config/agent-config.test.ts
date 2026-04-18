@@ -10,13 +10,13 @@ describe("loadAgentConfig", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
-    agentDir = join(base, "assistant");
+    agentDir = join(base, "studio-assistant");
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(join(agentDir, "store"), { recursive: true });
     writeFileSync(join(agentDir, "AGENTS.md"), "# Assistant prompt");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: assistant\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-assistant:latest\n",
+      "name: studio-assistant\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-studio-assistant:latest\n",
     );
   });
 
@@ -26,9 +26,9 @@ describe("loadAgentConfig", () => {
 
   it("loads a valid agent config", () => {
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.name).toBe("assistant");
+    expect(cfg.name).toBe("studio-assistant");
     expect(cfg.model).toBe("claude-opus-4-7");
-    expect(cfg.imageTag).toBe("teamroom-agent-assistant:latest");
+    expect(cfg.imageTag).toBe("teamroom-agent-studio-assistant:latest");
     expect(cfg.configPath).toBe(agentDir);
     expect(cfg.agentsMdPath).toBe(join(agentDir, "AGENTS.md"));
     expect(cfg.storePath).toBe(join(agentDir, "store"));
@@ -50,7 +50,7 @@ describe("loadAgentConfig", () => {
   });
 
   it("rejects when required yaml fields are missing", () => {
-    writeFileSync(join(agentDir, "agent.yaml"), "name: assistant\n");
+    writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
   });
 });
