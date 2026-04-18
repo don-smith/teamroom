@@ -1,0 +1,57 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { runTurn, type AnthropicClient, type Envelope } from "./runtime.js";
+
+const AGENTS_MD = "/AGENTS.md";
+const CONVERSATION_PATH = "/store/conversation.jsonl";
+
+async function readStdinOnce(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (c: Buffer) => chunks.push(c));
+    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", reject);
+  });
+}
+
+function makeAnthropicAdapter(): AnthropicClient {
+  const sdk = new Anthropic();
+  return {
+    async createMessage({ model, system, messages }) {
+      const resp = await sdk.messages.create({
+        model,
+        system,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        max_tokens: 1024,
+      });
+      const text = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("");
+      return { text };
+    },
+  };
+}
+
+async function main(): Promise<void> {
+  try {
+    const raw = await readStdinOnce();
+    const envelope = JSON.parse(raw.trim()) as Envelope;
+    const model = process.env.TEAMROOM_MODEL ?? "claude-opus-4-7";
+    const client = makeAnthropicAdapter();
+    await runTurn({
+      envelope,
+      client,
+      model,
+      agentsMdPath: AGENTS_MD,
+      conversationPath: CONVERSATION_PATH,
+      emit: (line) => process.stdout.write(line + "\n"),
+    });
+    process.exit(0);
+  } catch (err) {
+    process.stderr.write(`agent-runtime fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    if (err instanceof Error && err.stack) process.stderr.write(err.stack + "\n");
+    process.exit(2);
+  }
+}
+
+void main();
