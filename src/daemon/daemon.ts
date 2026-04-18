@@ -175,16 +175,15 @@ function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
  */
 function exchangeOAuthForTempKey(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ grant_type: "oauth_token", token: oauthToken });
     const req = httpsRequest(
       {
         protocol: "https:",
         host: "api.anthropic.com",
-        path: "/oauth/token",
+        path: "/api/oauth/claude_cli/create_api_key",
         method: "POST",
         headers: {
-          "content-type": "application/json",
-          "content-length": String(Buffer.byteLength(body)),
+          authorization: `Bearer ${oauthToken}`,
+          "content-length": "0",
         },
       },
       (res) => {
@@ -198,11 +197,11 @@ function exchangeOAuthForTempKey(oauthToken: string): Promise<{ tempKey: string;
           try {
             const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
             const tempKey =
+              (typeof parsed.api_key === "string" && parsed.api_key) ||
               (typeof parsed.temp_key === "string" && parsed.temp_key) ||
-              (typeof parsed.access_token === "string" && parsed.access_token) ||
-              (typeof parsed.token === "string" && parsed.token);
+              (typeof parsed.access_token === "string" && parsed.access_token);
             if (!tempKey) {
-              reject(new Error("oauth exchange: no temp key in response"));
+              reject(new Error("oauth_exchange_no_key"));
               return;
             }
             const expiresAt = parseExpiresAt(parsed);
@@ -215,7 +214,6 @@ function exchangeOAuthForTempKey(oauthToken: string): Promise<{ tempKey: string;
       },
     );
     req.on("error", reject);
-    req.write(body);
     req.end();
   });
 }
