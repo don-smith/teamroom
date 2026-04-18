@@ -1,33 +1,38 @@
 /**
- * Real-Anthropic OAuth integration test. Hits real api.anthropic.com with
- * max_tokens=10 — uses subscription quota, ~1 token of "real" cost per run
- * (negligible vs. a Claude Code conversation). The intent: verify that
- * AnthropicAdapter's outgoing header shape (Authorization: Bearer +
- * anthropic-beta: oauth-2025-04-20) is what real Anthropic accepts for
- * `sk-ant-oat01-...` tokens, without needing a full smoke-test cycle (Docker +
- * agent image + daemon + container) just to exercise auth.
+ * Real-Anthropic OAuth integration test. Hits real api.anthropic.com via the
+ * full SDK→proxy→Anthropic chain (claude-agent-sdk in this process spawns the
+ * Claude Code CLI as a subprocess, which honors ANTHROPIC_BASE_URL pointing at
+ * our LocalModelProxy, which substitutes the routing token for the real OAuth
+ * credential before forwarding upstream). Costs a tiny amount of subscription
+ * quota per run (~tens of tokens — negligible vs. a normal Claude Code
+ * conversation).
+ *
+ * This test exercises the SAME path the agent container uses in production —
+ * just without Docker and without the daemon. If this passes, the smoke test
+ * will pass too (modulo Docker/build issues that have their own diagnostics).
  *
  * Runs as part of `npm test`. Credentials are discovered via the same
  * discoverAnthropic() path the daemon uses (env CLAUDE_CODE_OAUTH_TOKEN, macOS
  * Keychain entry "Claude Code-credentials", or ~/.claude/.credentials.json on
- * Linux/Windows). If no creds are discoverable, the test reports a visible
- * "skipped" line so the operator knows to set them up — there's no silent
- * skip and no opt-in env var to remember.
+ * Linux/Windows). Fails loudly with a remediation message if creds aren't
+ * available — there's no silent skip.
+ *
+ * Requires the Claude Code CLI to be installed locally (the SDK spawns it):
+ *   npm install -g @anthropic-ai/claude-code
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { resolve } from "node:path";
-import { request as httpsRequest } from "node:https";
-import type { OutgoingHttpHeaders } from "node:http";
 import { readEnvFile } from "../../src/env/env-file.js";
 import { discoverAnthropic } from "../../src/env/anthropic-credentials.js";
+import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
+import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
 import { AnthropicAdapter } from "../../src/model-proxy/adapters/anthropic-adapter.js";
 import { AnthropicOAuthCache } from "../../src/model-proxy/adapters/anthropic-oauth-cache.js";
-
-interface RealResponse {
-  status: number;
-  body: string;
-}
+import { LmStudioAdapter } from "../../src/model-proxy/adapters/lm-studio-adapter.js";
+import { CapturingLogger } from "../../src/logger/logger.js";
+import { SystemClock } from "../../src/clock/clock.js";
+import { AnthropicLlmClient } from "../../src/agent-runtime/anthropic-llm-client.js";
 
 const env = readEnvFile(resolve(process.cwd()), [
   "CLAUDE_CODE_OAUTH_TOKEN",
@@ -35,25 +40,37 @@ const env = readEnvFile(resolve(process.cwd()), [
 ]);
 const creds = discoverAnthropic(env);
 
-describe("AnthropicAdapter — real Anthropic OAuth", () => {
-  it("Authorization: Bearer + anthropic-beta:oauth-2025-04-20 → not rejected by Anthropic", async () => {
+describe("AnthropicLlmClient — real Anthropic via proxy + claude-agent-sdk", () => {
+  // Capture and restore env vars we mutate so other tests aren't polluted.
+  const savedEnv = {
+    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
+  };
+  afterEach(() => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it("createMessage round-trip via proxy returns non-empty text from claude-opus-4-7", async () => {
     // Fail loudly if creds aren't set up — a skipped test is too easy to miss.
-    // The operator should see "no OAuth credential" in vitest output and act on it.
     expect(
       creds,
-      "no Anthropic credential discoverable — set CLAUDE_CODE_OAUTH_TOKEN in .env, log into Claude Code (macOS Keychain entry 'Claude Code-credentials' will be picked up automatically), or place ~/.claude/.credentials.json. See docs/runbooks/anthropic-auth.md.",
+      "no Anthropic credential discoverable — set CLAUDE_CODE_OAUTH_TOKEN in .env, log into Claude Code (macOS Keychain entry 'Claude Code-credentials' is picked up automatically), or place ~/.claude/.credentials.json. See docs/runbooks/anthropic-auth.md.",
     ).not.toBeNull();
     expect(
       creds?.mode,
-      `Anthropic credential resolved to mode=${creds?.mode}; this test only validates OAuth-mode auth. To run an API-key test, switch your .env to ANTHROPIC_API_KEY=... and rerun.`,
+      `Anthropic credential resolved to mode=${creds?.mode}. This test only validates the OAuth path. Switch to ANTHROPIC_API_KEY=... in .env to exercise the API-key path.`,
     ).toBe("oauth");
     if (!creds || creds.mode !== "oauth") throw new Error("unreachable after guards");
 
-    // Build headers exactly the way our adapter would for a real request.
+    // Stand up our proxy with a real AnthropicAdapter in OAuth mode pointing
+    // at real api.anthropic.com. The cache + exchange machinery is identical
+    // to what daemon.ts wires in production.
     const cache = new AnthropicOAuthCache();
-    // Direct-passthrough exchange: this matches what daemon.ts does in
-    // production now (the original spec'd /api/oauth/claude_cli/create_api_key
-    // exchange is gated; sk-ant-oat01-* tokens work directly).
     const exchange = async (token: string) => ({
       tempKey: token,
       expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
@@ -61,77 +78,45 @@ describe("AnthropicAdapter — real Anthropic OAuth", () => {
     const adapter = new AnthropicAdapter({
       auth: { mode: "oauth", oauthToken: creds.oauthToken, cache, exchange },
     });
-    const headers: OutgoingHttpHeaders = {};
-    await adapter.resolveAuth(headers);
-    headers["anthropic-version"] = "2023-06-01";
-    headers["content-type"] = "application/json";
-
-    // Sanity check what we're sending — these MUST be present for the test to be meaningful.
-    expect(headers.authorization).toMatch(/^Bearer /);
-    expect(headers["anthropic-beta"]).toContain("oauth-2025-04-20");
-    expect(headers["x-api-key"]).toBeUndefined();
-
-    // Pick a plausibly-current model id. Anthropic accepts both dotted-version
-    // ("claude-sonnet-4-5") and dated forms; we use the alias to match
-    // agents/claude-assistant/agent.yaml.
-    const requestBody = JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 10,
-      messages: [{ role: "user", content: "Reply with exactly: oauth-test-ok" }],
+    const lmStudio = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const registry = new TokenRegistry();
+    const proxy = new LocalModelProxy({
+      registry,
+      adapters: { anthropic: adapter, "lm-studio": lmStudio },
+      logger: new CapturingLogger(new SystemClock()),
     });
-    headers["content-length"] = String(Buffer.byteLength(requestBody));
+    const { port } = await proxy.start();
 
-    const url = new URL(adapter.upstreamUrl());
-    const resp = await new Promise<RealResponse>((resolveP, rejectP) => {
-      const req = httpsRequest(
-        {
-          host: url.hostname,
-          port: url.port ? Number(url.port) : 443,
-          path: "/v1/messages",
-          method: "POST",
-          headers,
-        },
-        (res) => {
-          const chunks: Buffer[] = [];
-          res.on("data", (c: Buffer) => chunks.push(c));
-          res.on("end", () =>
-            resolveP({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }),
-          );
-          res.on("error", rejectP);
-        },
-      );
-      req.on("error", rejectP);
-      req.write(requestBody);
-      req.end();
-    });
+    try {
+      const routingToken = registry.mint({
+        agentId: "claude-assistant",
+        turnId: "integration-test-turn",
+        traceId: "integration-test-trace",
+        provider: "anthropic",
+        model: "claude-opus-4-7",
+      });
 
-    // Always print the response so the operator sees what Anthropic returned.
-    // eslint-disable-next-line no-console
-    console.log(`[anthropic-oauth-real] status=${resp.status}, body=${resp.body.slice(0, 300)}`);
+      // Configure the SDK subprocess to route through our proxy by setting
+      // env vars before constructing the client. The SDK reads process.env.
+      process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}`;
+      process.env.ANTHROPIC_AUTH_TOKEN = routingToken;
+      // Make sure no API key shadowing leaks in.
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 
-    // The point of THIS test is "did Anthropic accept our auth shape?", not
-    // "is the model fully working." 401 or 403 = auth rejected (the bug we're
-    // hunting). Anything else (200, 429 rate-limit, 400 bad-model, 5xx
-    // upstream) = auth accepted; the request reached the model layer. Treat
-    // all those as PASS for the auth-validation purpose.
-    expect(
-      resp.status,
-      `Anthropic rejected the auth (status ${resp.status}). Body: ${resp.body.slice(0, 300)}`,
-    ).not.toBe(401);
-    expect(
-      resp.status,
-      `Anthropic rejected the auth (status ${resp.status}). Body: ${resp.body.slice(0, 300)}`,
-    ).not.toBe(403);
+      const client = new AnthropicLlmClient();
+      const result = await client.createMessage({
+        model: "claude-opus-4-7",
+        system: "Reply with a single short word.",
+        messages: [{ role: "user", content: "Reply with exactly: oauth-test-ok" }],
+      });
 
-    // Bonus: if it was a clean 200, sanity-check the response shape so a
-    // future regression in extractUsage/parsing is caught here too.
-    if (resp.status === 200) {
-      const parsed = JSON.parse(resp.body) as { content?: Array<{ type: string; text?: string }> };
-      expect(parsed.content, "response missing 'content' array").toBeTruthy();
-      const textBlock = parsed.content?.find((b) => b.type === "text");
-      expect(textBlock, "response had no 'text' block").toBeTruthy();
-      expect(typeof textBlock?.text, "text block missing string content").toBe("string");
+      // eslint-disable-next-line no-console
+      console.log(`[anthropic-oauth-real] result.text=${JSON.stringify(result.text).slice(0, 200)}`);
+      expect(result.text, "expected non-empty assistant text from /v1/messages").toBeTruthy();
+      expect(typeof result.text).toBe("string");
+    } finally {
+      await proxy.stop();
     }
-  }, 30_000); // 30s timeout — real API call, can take a few seconds
+  }, 60_000); // 60s — real CLI subprocess + real Anthropic call
 });
-

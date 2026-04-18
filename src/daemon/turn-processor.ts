@@ -107,6 +107,14 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     // meaningful while a turn is in flight. The 8-char turnId suffix keeps
     // names unique across concurrent turns of the same agent.
     const containerName = `teamroom-${agentConfig.name}-${turnId.slice(0, 8)}`;
+    // Env shape per provider:
+    //  - lm-studio: container's OpenAI-compat client uses TEAMROOM_MODEL_BASE_URL
+    //    + TEAMROOM_MODEL_API_TOKEN.
+    //  - anthropic: container's claude-agent-sdk subprocess (Claude Code CLI)
+    //    honors ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN — those names are
+    //    fixed by Anthropic, not us. We populate both blocks unconditionally
+    //    so a future agent that switches providers Just Works without
+    //    re-spawning.
     const spec: DockerRunSpec = {
       imageTag: agentConfig.imageTag,
       name: containerName,
@@ -117,8 +125,12 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
         TEAMROOM_AGENT_NAME: agentConfig.name,
         TEAMROOM_PROVIDER: agentConfig.provider,
         TEAMROOM_MODEL: agentConfig.model,
+        // OpenAI-compat slot (LM Studio + future OpenAI-shaped providers).
         TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
         TEAMROOM_MODEL_API_TOKEN: token,
+        // Claude Code CLI / claude-agent-sdk slot.
+        ANTHROPIC_BASE_URL: modelBaseUrl,
+        ANTHROPIC_AUTH_TOKEN: token,
       },
     };
 

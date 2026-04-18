@@ -45,11 +45,13 @@ function makeOpenAiCompatibleClient(): LlmClient {
 function buildLlmClient(): LlmClient {
   const provider = process.env.TEAMROOM_PROVIDER;
   if (provider === "anthropic") {
-    const baseURL = process.env.TEAMROOM_MODEL_BASE_URL;
-    const apiKey = process.env.TEAMROOM_MODEL_API_TOKEN;
-    if (!baseURL) throw new Error("TEAMROOM_MODEL_BASE_URL is required");
-    if (!apiKey) throw new Error("TEAMROOM_MODEL_API_TOKEN is required");
-    return new AnthropicLlmClient({ baseURL, apiKey });
+    // AnthropicLlmClient reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN
+    // from process.env directly (so the spawned Claude Code CLI subprocess
+    // sees them). The daemon's turn-processor injects both env vars at
+    // container-spawn time. No constructor wiring needed here.
+    if (!process.env.ANTHROPIC_BASE_URL) throw new Error("ANTHROPIC_BASE_URL is required");
+    if (!process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_AUTH_TOKEN is required");
+    return new AnthropicLlmClient();
   }
   if (provider === "lm-studio") {
     return makeOpenAiCompatibleClient();
