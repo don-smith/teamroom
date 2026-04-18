@@ -13,8 +13,8 @@
 **Exit criteria.**
 
 1. Two agents run concurrently against two different backends end-to-end:
-   - Existing `assistant` agent against local LM Studio (M1 path, now via the proxy).
-   - New `claude-assistant` agent against the real Anthropic API using either the user's Claude Code subscription (OAuth) or an API key.
+   - Renamed `studio-assistant` agent (M1's `assistant`, renamed for clarity since agents are increasingly named after their backing model) against local LM Studio (M1 path, now via the proxy).
+   - New `claude-assistant` agent against the real Anthropic API using either the user's Claude Code subscription (OAuth, preferred) or an API key (fallback).
 2. Real upstream credentials never appear in the container's environment, stdin, or `docker inspect` output. The proxy is the only process that holds them.
 3. End-to-end smoke test passes against real Anthropic + real LM Studio (the milestone-completion gate). Includes both agents.
 4. Full unit + integration suite passes (existing M1 tests still green; new tests cover the proxy, the new LLM client, and the absorbed M1 debts).
@@ -36,22 +36,25 @@ Process topology unchanged from M1 except the daemon now owns one extra in-proce
 │  Orchestrator ── processTurn ── Container spawn ──┐         │
 │       │              │                            │         │
 │       ▼              ▼                            │         │
-│   SQLite        ModelProxy (in-process listener)  │         │
-│                  127.0.0.1:PORT                   │         │
-│                  ▲                                │         │
-│                  │ HTTP/1.1                       │         │
-│                  │ X-Teamroom-Token: <ephemeral>  │         │
-│                  │ x-api-key OR Authorization     │         │
+│   SQLite        ModelProxy (in-process listener) ─┼─→ OAuth │
+│                  127.0.0.1:PORT                   │   temp- │
+│                  ▲                                │   key   │
+│                  │ HTTP/1.1                       │   cache │
+│                  │ x-api-key: <routing-token>     │         │
 │                  │                                │         │
 │  ┌───────────────┼────────────────────────────────┘         │
-│  │  Container (per-turn, opaque)                            │
+│  │  Container (per-turn, opaque, mode-agnostic)             │
 │  │    agent-runtime → LlmClient → openai|anthropic SDK      │
 │  │      SDK targets http://host.docker.internal:PORT        │
+│  │      apiKey = routing-token  (sent as x-api-key)         │
 │  └─────────────────────────────────────────────────────────┐│
 │                                                            ││
-│  Proxy → reads X-Teamroom-Token → registry lookup          ││
-│       → resolves agent + provider + real upstream creds    ││
-│       → swaps auth header(s) for the real credential       ││
+│  Proxy → reads x-api-key (= routing token) → registry      ││
+│       → resolves agent + provider + auth mode              ││
+│       → API-key mode: substitute x-api-key with real key   ││
+│       → OAuth mode:   ensure cached temp key is fresh,     ││
+│                       (server-to-server exchange if not),  ││
+│                       substitute x-api-key with temp key   ││
 │       → forwards to api.anthropic.com OR LM Studio         ││
 │       → emits span-shaped log when upstream completes      ││
 └─────────────────────────────────────────────────────────────┘
@@ -87,7 +90,8 @@ src/model-proxy/
 ├── token-registry.ts               # in-memory routing token → entry map
 ├── adapters/
 │   ├── adapter.ts                  # ProviderAdapter interface
-│   ├── anthropic-adapter.ts        # /v1/messages → api.anthropic.com (two auth modes)
+│   ├── anthropic-adapter.ts        # /v1/messages → api.anthropic.com
+│   ├── anthropic-oauth-cache.ts    # in-memory temp-key cache (OAuth mode only)
 │   └── lm-studio-adapter.ts        # /v1/chat/completions → LM Studio
 ├── span.ts                         # span-shaped log record builder + ID helpers
 └── *.test.ts                       # co-located unit tests
@@ -145,14 +149,14 @@ interface ProviderAdapter {
 }
 ```
 
-**Terminology — "routing token".** A single per-turn ephemeral identifier minted by the daemon and injected into the container env as `TEAMROOM_PROXY_ROUTING_TOKEN`. It serves two roles:
+**Terminology — "routing token".** A single per-turn ephemeral identifier minted by the daemon and injected into the container env as `TEAMROOM_MODEL_API_TOKEN`. The container's SDK sends it as `x-api-key` on every outbound call (the SDK's `apiKey` ctor option puts it there). It serves two roles for the proxy:
 
-- **Routing.** Always sent in the `X-Teamroom-Token` header on every outbound HTTP call — the proxy uses this for token-registry lookup.
-- **Auth placeholder.** In API-key mode it's also sent as `x-api-key` (the SDK puts it there via the `apiKey` ctor option); in OAuth mode it's also sent as `Authorization: Bearer <routing-token>` on the exchange call (acts as the placeholder Bearer token NanoClaw's pattern requires). The proxy strips and substitutes the real credential before forwarding.
+- **Routing.** The proxy reads `x-api-key`, looks it up in the registry → gets the entry → knows which agent and which provider this call is for.
+- **Auth placeholder.** The proxy substitutes `x-api-key` with a real upstream credential before forwarding — either the real `ANTHROPIC_API_KEY` (API-key mode) or a cached/freshly-fetched Anthropic temp API key (OAuth mode). LM Studio gets the same treatment with `LM_STUDIO_API_TOKEN`.
 
-The routing token is never the same as Anthropic's temp API key (which is issued by Anthropic during the OAuth exchange and lives only in the container, never in the proxy registry).
+The container is **mode-agnostic** — its only outbound auth scheme is `apiKey = routing-token` regardless of which Anthropic auth mode the proxy is configured for. All OAuth mechanics (exchange call, temp-key caching, refresh) live in the proxy. See §6 for the two modes.
 
-**Routing rule.** Proxy reads `X-Teamroom-Token` header (always present). Looks up the registry entry → gets `provider` → hands off to the adapter. The auth header is handled separately by the adapter — see §6 for the two modes.
+**Routing rule.** Proxy reads `x-api-key`. Looks up the registry entry → gets `provider` → hands off to the adapter for credential substitution and forwarding.
 
 ### 3.2 Updates to `src/daemon/`
 
@@ -160,7 +164,7 @@ The routing token is never the same as Anthropic's temp API key (which is issued
 - **`turn-processor.ts`.** New ordering:
   1. `markRunning(turnId, placeholderContainerId)` ← *moved before* `runner.run()` (debt #1).
   2. `mintToken({turnId, agentId, traceId, provider: agent.provider, model: agent.model})`.
-  3. `runner.run({ env: { ..., TEAMROOM_MODEL_BASE_URL, TEAMROOM_PROXY_ROUTING_TOKEN, TEAMROOM_PROVIDER, TEAMROOM_MODEL, TEAMROOM_TURN_ID, TEAMROOM_TRACE_ID, TEAMROOM_AGENT_ID }, ... })`.
+  3. `runner.run({ env: { ..., TEAMROOM_MODEL_BASE_URL, TEAMROOM_MODEL_API_TOKEN: token, TEAMROOM_PROVIDER, TEAMROOM_MODEL, TEAMROOM_TURN_ID, TEAMROOM_TRACE_ID, TEAMROOM_AGENT_ID }, ... })`.
   4. In a `finally` block: `evictToken(token)` regardless of success/error.
   5. Replace placeholder container_id with the real one once known (`turnRepo.attachContainer`).
 - **`reconcile.ts`.** Adds aged-`pending` reclamation: rows with `status='pending'`, no `container_id`, older than threshold → mark errored with `'daemon_restart_during_pending'`.
@@ -169,25 +173,27 @@ The routing token is never the same as Anthropic's temp API key (which is issued
 
 ### 3.3 Updates to `src/agent-runtime/`
 
-- **`main.ts`.** Reads `TEAMROOM_PROVIDER` env var. Factory picks the right `LlmClient` impl. Adds `X-Teamroom-Token` header (from `TEAMROOM_PROXY_ROUTING_TOKEN`) to every HTTP call regardless of SDK.
-- **`anthropic-llm-client.ts`** *(new)*. Uses `@anthropic-ai/sdk`, configured with `baseURL = TEAMROOM_MODEL_BASE_URL`. In API-key mode the SDK's `apiKey` ctor option carries the routing token (sent as `x-api-key`, where the proxy substitutes the real key). In OAuth mode the client first does the manual token-exchange dance (~30 LOC of `fetch`) using the routing token as the placeholder Bearer token, caches the temp API key Anthropic returns, then sends `/v1/messages` calls with that temp key. Both modes always include the `X-Teamroom-Token` routing header on every outbound call.
+- **`main.ts`.** Reads `TEAMROOM_PROVIDER` env var. Factory picks the right `LlmClient` impl.
+- **`anthropic-llm-client.ts`** *(new)*. Uses `@anthropic-ai/sdk`, configured with `baseURL = TEAMROOM_MODEL_BASE_URL` and `apiKey = TEAMROOM_MODEL_API_TOKEN` (the routing token). That's the entire client setup — **identical for both API-key and OAuth auth modes**. The container has no awareness of OAuth, exchange endpoints, or temp keys; that machinery lives entirely in the proxy. ~10–15 LOC total.
 - **`runtime.ts`.** Unchanged contract (`LlmClient` already abstracts the call).
 - Co-located `anthropic-llm-client.test.ts` — uses real local http test server stand-in (matching M1 pattern: real impls, no mocks).
 
-### 3.4 New agent: `agents/claude-assistant/`
+### 3.4 Agent population: rename `assistant` → `studio-assistant`, add `claude-assistant`
+
+**Rename M1's existing agent.** `agents/assistant/` → `agents/studio-assistant/`. Naming convention going forward: agents are named primarily after their backing model/provider so the role is obvious from the name. Studio (LM Studio), claude (Anthropic), etc. The rename is a cross-cutting touch (29 file matches across live code, configs, tests, docs); frozen historical docs (`docs/as-built/`, `docs/retros/`, `team-room-context.md`) are left unchanged because they accurately describe M1 reality.
+
+**New agent.** `agents/claude-assistant/`:
 
 ```
 agents/claude-assistant/
 ├── agent.yaml          # name, provider: anthropic, model: claude-..., image_tag
 ├── AGENTS.md           # mounted writable as /AGENTS.md
-├── Dockerfile          # node:20-alpine + dist/agent-runtime + @anthropic-ai/sdk
+├── Dockerfile          # node:22-alpine + dist/agent-runtime + @anthropic-ai/sdk
 └── store/
     └── .gitkeep
 ```
 
-`agent.yaml` schema gains a required `provider: anthropic | lm-studio` field. Existing `assistant/agent.yaml` updated to declare `provider: lm-studio` explicitly.
-
-Exact agent name TBD at implementation time (`claude-assistant` is a placeholder; could be e.g. `claude` or `anthropic-assistant`).
+`agent.yaml` schema gains a required `provider: anthropic | lm-studio` field. The `studio-assistant/agent.yaml` (renamed from `assistant/agent.yaml`) gains an explicit `provider: lm-studio`.
 
 ### 3.5 `.env` and credential discovery
 
@@ -199,12 +205,14 @@ ANTHROPIC_API_KEY=...          # optional; presence selects API-key mode
 CLAUDE_CODE_OAUTH_TOKEN=...    # optional; selects OAuth mode (subscription)
 ```
 
-**Credential discovery order (proxy startup):**
+**Credential discovery order (proxy startup) — OAuth preferred:**
 
-1. If `ANTHROPIC_API_KEY` is set in `.env` → API-key mode wins.
-2. Else if `CLAUDE_CODE_OAUTH_TOKEN` is set in `.env` → OAuth mode.
-3. Else read `~/.claude/.credentials.json` (where Claude Code stores its OAuth token after login) → OAuth mode if found.
+1. If `CLAUDE_CODE_OAUTH_TOKEN` is set in `.env` → OAuth mode.
+2. Else if `~/.claude/.credentials.json` exists with a usable OAuth token (where Claude Code stores it after login) → OAuth mode.
+3. Else if `ANTHROPIC_API_KEY` is set in `.env` → API-key mode (fallback for non-subscription use).
 4. Else: fail at startup with a clear error if any agent's `agent.yaml` declares `provider: anthropic`. Other agents still function.
+
+Rationale: the user's primary use case is the Claude Code subscription (OAuth). API-key is a supported fallback for non-subscription consumption, but if both are present, OAuth wins.
 
 Documented in `docs/runbooks/anthropic-auth.md` (new).
 
@@ -220,7 +228,7 @@ Documented in `docs/runbooks/anthropic-auth.md` (new).
 
 ## 4. Data flow (one turn, end-to-end)
 
-Tracing a single inbound message destined for the new `claude-assistant` (Anthropic) agent. Same flow applies to `assistant`/LM Studio with provider-specific bits swapped.
+Tracing a single inbound message destined for the new `claude-assistant` (Anthropic) agent. Same flow applies to `studio-assistant`/LM Studio with provider-specific bits swapped.
 
 ```
 t0  CLI         teamroom send --agent claude-assistant "hello"
@@ -249,7 +257,7 @@ t3  Daemon      DockerRunner.run({
                     TEAMROOM_PROVIDER:"anthropic",
                     TEAMROOM_MODEL,
                     TEAMROOM_MODEL_BASE_URL: "http://host.docker.internal:" + port,
-                    TEAMROOM_PROXY_ROUTING_TOKEN: token,
+                    TEAMROOM_MODEL_API_TOKEN: token,   // routing token
                   },
                   mounts: [/AGENTS.md (rw), /store (rw)],
                   stdin: JSON.stringify({inbound, turnId, agentId})
@@ -261,43 +269,56 @@ t4  Container   agent-runtime/main.ts:
                   history = loadConversation("/store/conversation.jsonl")
                   agentsMd = readFileSync("/AGENTS.md")
                   llm = env.TEAMROOM_PROVIDER === "anthropic"
-                    ? new AnthropicLlmClient({...})
+                    ? new AnthropicLlmClient({                       // mode-agnostic
+                        baseURL: env.TEAMROOM_MODEL_BASE_URL,
+                        apiKey:  env.TEAMROOM_MODEL_API_TOKEN,       // routing token
+                        model:   env.TEAMROOM_MODEL })
                     : new OpenAILlmClient({...})
                   reply = await runTurn({llm, history, agentsMd, inbound})
-
-t5a OAuth-only: AnthropicLlmClient first does the OAuth exchange dance.
-                The routing token doubles as the placeholder Bearer token:
-                  POST /api/oauth/claude_cli/create_api_key
-                    Authorization: Bearer <routing-token>
-                    X-Teamroom-Token: <routing-token>
-                  → proxy substitutes Authorization with real OAuth token
-                  → Anthropic returns temp API key
-                  → AnthropicLlmClient caches temp key for the rest of the turn
 
 t5  Container→  AnthropicLlmClient.chat(messages, system):
     Proxy         POST /v1/messages
                     Host: host.docker.internal:PORT
-                    x-api-key: <temp-key (OAuth) | routing-token (API-key mode)>
-                    X-Teamroom-Token: <routing-token>
+                    x-api-key: <routing-token>          ← always; no OAuth-aware code
                     anthropic-version: 2023-06-01
                     Body: {model, system, messages, max_tokens}
 
-t6  Proxy       routingToken = headers["x-teamroom-token"]
+t6  Proxy       routingToken = headers["x-api-key"]
                 entry = tokenRegistry.lookup(routingToken)
                   ⇒ {agentId, provider:"anthropic", model, traceId, turnId}
                 adapter = adapters[entry.provider]  // anthropic-adapter
                                                      // adapter.authMode set at startup
-                clone headers; adapter.injectAuth(headers):
-                  - API-key mode: replace x-api-key with real ANTHROPIC_API_KEY
-                  - OAuth mode + Authorization header present (exchange call):
-                    replace Authorization with real OAuth Bearer token
-                  - OAuth mode + no Authorization header (post-exchange call):
-                    pass through unmodified
+
+                // — API-key mode —
+                IF adapter.authMode === "api-key":
+                  headers["x-api-key"] = real ANTHROPIC_API_KEY
+
+                // — OAuth mode (proxy handles all of it) —
+                ELSE IF adapter.authMode === "oauth":
+                  IF cache[oauthToken]?.expiresAt > now() + safetyMargin:
+                    tempKey = cache[oauthToken].tempKey
+                  ELSE:
+                    // server-to-server exchange — container never sees this
+                    resp = POST api.anthropic.com/api/oauth/claude_cli/create_api_key
+                             Authorization: Bearer <real OAuth token>
+                    cache[oauthToken] = {
+                      tempKey: resp.api_key,
+                      expiresAt: resp.expires_at
+                    }
+                    tempKey = resp.api_key
+                    logger.info({event:"oauth.exchange.completed", traceId, ...})
+                  headers["x-api-key"] = tempKey
+
                 stripHopByHop(headers)
                 start = clock.now()
                 → forward to api.anthropic.com with adapter.upstreamUrl()
 
 t7  Proxy       receive upstream response:
+                  IF status === 401 AND adapter.authMode === "oauth"
+                       AND not already retried:
+                    // credential-refresh retry (the only retry in M2's proxy)
+                    evict cache[oauthToken]
+                    GOTO t6 with retried=true
                   pipe(upstream → client)
                   parsedBody = JSON.parse(buffered)
                   usage = adapter.extractUsage(parsedBody)
@@ -329,7 +350,7 @@ t10 Daemon      finally { modelProxy.evictToken(token) }
 t11 tail        Receives "message.outbound", fetches body, prints reply
 ```
 
-**Span-shaped records emitted across this turn:** `turn.started` (t2, daemon), `model.call.completed` (t7, proxy; one per upstream call — t5a's OAuth exchange also emits a span), `turn.completed` (t10, daemon). All carry the same `traceId`.
+**Span-shaped records emitted across this turn:** `turn.started` (t2, daemon), `model.call.completed` (t7, proxy; one per upstream `/v1/messages` call), and `oauth.exchange.completed` (t6, proxy; only when the temp-key cache missed and an exchange round-trip happened). `turn.completed` (t10, daemon). All carry the same `traceId`.
 
 **Crash boundaries.**
 
@@ -354,41 +375,48 @@ Following the M1 principle — *nothing silent, nothing inconsistent, nothing cr
 | Proxy listener errors (in-process to daemon) | Propagate to daemon's global safety-nets (M1 `uncaughtException` handler). Log fatal; attempt one listener restart; if that fails, mark daemon unhealthy. | Daemon does not exit (per M1 principle). |
 | Configuration error: `provider:anthropic` agent but no Anthropic credential | Daemon refuses turns for that agent only; logs `agent.unhealthy` once on startup; inbound still queues but immediately marks errored with `"missing_credential"`. | Other agents continue normally — localized failure, not daemon-wide stop. |
 
-**No retries in M2.** Anthropic SDKs already retry transient network errors with backoff. Adding daemon-level retry without per-agent budgeting risks runaway cost. Future milestone (with budgeting): per-agent retry policy lives in agent-runtime config, not in the proxy.
+**No retries in M2 — except one.** Anthropic SDKs already retry transient network errors with backoff. Adding daemon-level retry without per-agent budgeting risks runaway cost. Future milestone (with budgeting): per-agent retry policy lives in agent-runtime config, not in the proxy.
+
+The single allowed retry is **credential refresh** in OAuth mode. If a `/v1/messages` call returns 401 from Anthropic and the proxy is in OAuth mode, the proxy evicts the cached temp key, performs a fresh OAuth exchange, and retries the call **once** with the new temp key. Rationale: this is fundamentally different from a transient-error retry — we know exactly why it failed (temp key expired or revoked) and can fix it deterministically. Bounded to one retry; no exponential backoff; if the second call also fails, the error propagates normally.
 
 ---
 
 ## 6. Authentication modes
 
-The proxy auto-detects the auth mode at startup based on which env vars are present (see §3.5). The two modes work differently end-to-end.
+The proxy auto-detects the auth mode at startup based on which env vars are present (see §3.5). **Both modes look identical from the container's perspective** — the container always sends `x-api-key: <routing-token>` and never knows which mode is active. All credential resolution and OAuth machinery live in the proxy.
 
 ### 6.1 API-key mode
 
-Selected when `ANTHROPIC_API_KEY` is set.
+Selected when no OAuth credential is present and `ANTHROPIC_API_KEY` is set.
 
-- **Container side.** `AnthropicLlmClient` constructs the SDK with `apiKey` = the routing token (so the SDK sends it as `x-api-key`). Every outbound call also includes `X-Teamroom-Token: <routing-token>` (added by the agent-runtime's HTTP layer regardless of SDK).
-- **Proxy side.** On every request, `anthropic-adapter.injectAuth` replaces `x-api-key` with the real `ANTHROPIC_API_KEY` before forwarding.
-- **Routing.** Proxy looks up `X-Teamroom-Token` for agent attribution; it does not depend on the value of `x-api-key`.
+- **Container side.** `AnthropicLlmClient` is `new Anthropic({ baseURL, apiKey: routing-token })`. SDK sends `x-api-key: <routing-token>` on every request.
+- **Proxy side.** On every request, `anthropic-adapter.injectAuth` replaces `x-api-key` with the real `ANTHROPIC_API_KEY` before forwarding to `api.anthropic.com`.
+- **Routing.** Proxy looks up `x-api-key` (which is the routing token before substitution) in the registry to get the agent context. Substitution happens after lookup.
 
-### 6.2 OAuth mode (Claude Code subscription)
+### 6.2 OAuth mode (Claude Code subscription, preferred)
 
-Selected when no `ANTHROPIC_API_KEY` and either `CLAUDE_CODE_OAUTH_TOKEN` env or `~/.claude/.credentials.json` is present.
+Selected when `CLAUDE_CODE_OAUTH_TOKEN` env is set, or `~/.claude/.credentials.json` is readable. OAuth wins over API-key when both are present.
 
-- **Container side.** `AnthropicLlmClient` first performs the OAuth exchange (~30 LOC of `fetch`):
-  1. `POST /api/oauth/claude_cli/create_api_key` with `Authorization: Bearer <routing-token>` and `X-Teamroom-Token: <routing-token>`. The routing token serves as the placeholder Bearer token (NanoClaw's pattern requires *some* non-empty Authorization header to know it should substitute).
-  2. Proxy sees the `Authorization` header on this call, substitutes in the real OAuth token, forwards to Anthropic.
-  3. Anthropic returns a temp API key.
-  4. Client caches the temp key in memory for the rest of the turn.
-- All subsequent `/v1/messages` calls send `x-api-key: <temp-key-from-anthropic>` (no `Authorization` header). The proxy passes the `x-api-key` through unmodified — but still emits a `model.call.completed` span using the `X-Teamroom-Token` header for agent attribution.
-- **Routing.** Same `X-Teamroom-Token` header on every call. **This is why we need the routing-vs-auth split:** without a separate routing header, post-exchange calls (which carry only the Anthropic-issued temp key in `x-api-key`) would be unattributable to an agent.
+- **Container side.** Identical to API-key mode — `new Anthropic({ baseURL, apiKey: routing-token })`. Container has zero OAuth-aware code.
+- **Proxy side.** On each request:
+  1. Look up routing token in the registry → agent context.
+  2. Check the OAuth-temp-key cache (`anthropic-oauth-cache.ts`) — keyed by the OAuth token itself (not by agent), so multiple agents sharing one OAuth token also share one cache entry.
+  3. **Cache fresh** (i.e., `expiresAt > now() + safetyMargin`): substitute `x-api-key` with the cached temp key.
+  4. **Cache stale or missing**: do a server-to-server exchange with `api.anthropic.com/api/oauth/claude_cli/create_api_key` using the real OAuth token; cache the returned temp key with its `expires_at`; substitute `x-api-key` with the new temp key. Emit an `oauth.exchange.completed` span.
+  5. Forward `/v1/messages` to `api.anthropic.com`.
+  6. **On 401 from Anthropic** with the substituted temp key: evict the cache entry, refetch, retry the original call **once** (see §5 — the only retry the M2 proxy performs).
+- **Container is never involved in the exchange.** This is the meaningful simplification over NanoClaw's pattern (where the container did the exchange). Consequences:
+  - Per-turn exchange round-trips drop to roughly "once per temp-key TTL" instead of "once per turn." Far less likely to be flagged as unusual behavior by Anthropic.
+  - Container-side code is identical for both modes; mode-switching is invisible to the agent.
+  - Cache key is the credential being substituted (the OAuth token), not the agent — so future "multiple agents on one subscription" works naturally.
 
 ### 6.3 Mode-detection failure
 
-If neither credential source resolves and an agent declares `provider:anthropic`, the daemon logs the failure once and routes that agent's turns to the `missing_credential` error path (see §5). The `assistant`/LM Studio agent still functions normally.
+If no Anthropic credential resolves and an agent declares `provider:anthropic`, the daemon logs the failure once on startup and routes that agent's turns to the `missing_credential` error path (see §5). The `studio-assistant`/LM Studio agent still functions normally.
 
 ### 6.4 Anthropic OAuth-gating risk (tabled fallback plan)
 
-Anthropic has been actively restricting programmatic use of subscription tokens outside Claude Code. If our manual exchange (`@anthropic-ai/sdk` + ~30 LOC) gets gated — most likely as a 401/403 on the exchange call or a signed-request requirement we can't reproduce — the documented fallback is to switch the container to the **Claude Agent SDK (Node)**, which Anthropic sanctions for this use case. Decision happens at implementation time; the fallback is captured in [`docs/tabled.md`](../tabled.md).
+Anthropic has been actively restricting programmatic use of subscription tokens outside Claude Code. If our server-to-server exchange in the proxy gets gated — most likely as a 401/403 on the exchange call or a signed-request / device-attestation requirement we can't reproduce — the documented fallback is to switch the container's runtime to the **Claude Agent SDK (Node)**, which Anthropic sanctions for this use case (and which would itself perform the exchange). Decision happens at implementation time; the fallback is captured in [`docs/tabled.md`](../tabled.md).
 
 ---
 
@@ -402,17 +430,21 @@ Holding the M1 line: in-memory real implementations, no `vi.mock`/`jest.mock`, c
 
 - `local-model-proxy.test.ts`
   - `start()` listens on 127.0.0.1, OS-assigned port; `stop()` releases.
-  - End-to-end with a real local **fake-upstream** http server: proxy receives request with routing token, swaps auth, forwards, pipes response back, emits span via `CapturingLogger`.
-  - Routing token unknown → 401 + `model.call.rejected` span (token prefix only).
+  - End-to-end with a real local **fake-upstream** http server: proxy receives request with routing token in `x-api-key`, swaps it for the configured real credential, forwards, pipes response back, emits span via `CapturingLogger`.
+  - Routing token unknown (not in registry) → 401 + `model.call.rejected` span (token prefix only).
   - Upstream returns 429 → forwarded as-is, span carries `status:"upstream_error"`.
   - Upstream timeout → 504, span carries `status:"upstream_timeout"`.
   - Concurrent in-flight tokens don't cross-contaminate.
-  - OAuth mode: exchange-call substitutes Authorization; subsequent requests pass through unmodified.
-  - API-key mode: every request gets `x-api-key` substituted.
+  - **OAuth mode, cache miss:** proxy issues server-to-server exchange to fake-upstream's exchange endpoint, caches result, then forwards `/v1/messages` with the temp key. `oauth.exchange.completed` span emitted.
+  - **OAuth mode, cache hit:** second call within TTL does not re-issue exchange; only one `/v1/messages` round-trip is observed by fake-upstream.
+  - **OAuth mode, expired temp key:** fake-upstream returns 401 once; proxy evicts cache, re-exchanges, retries — second attempt succeeds. Exactly one retry; if the second attempt also 401s, error propagates.
+  - **API-key mode:** every request gets `x-api-key` substituted with the real key; no exchange call ever happens.
 
 - `token-registry.test.ts` — mint/lookup/evict; lookup-after-evict returns undefined; concurrent mints produce unique tokens.
 
 - `adapters/anthropic-adapter.test.ts` — `upstreamUrl()` resolves correctly; `injectAuth` for both modes; `extractUsage` from canned Anthropic body (`usage.input_tokens`, `usage.output_tokens`).
+
+- `adapters/anthropic-oauth-cache.test.ts` *(new)* — fresh-check honors `expiresAt` minus safety margin; eviction works; concurrent fetch-on-miss does not duplicate exchange calls (single-flight semantics).
 
 - `adapters/lm-studio-adapter.test.ts` — same coverage for OpenAI-compat shape (`usage.prompt_tokens`, `usage.completion_tokens`).
 
@@ -420,10 +452,8 @@ Holding the M1 line: in-memory real implementations, no `vi.mock`/`jest.mock`, c
 
 - `anthropic-llm-client.test.ts`
   - `chat()` against a real local http test server returns the parsed reply text.
-  - OAuth-mode happy path: client makes the exchange call, then the `/v1/messages` call.
-  - OAuth-mode exchange failure (test server returns 401 on the exchange) → throws with the upstream error.
-  - API-key-mode happy path: SDK sends `x-api-key`; test server confirms header presence.
-  - Every outbound request includes `X-Teamroom-Token`.
+  - SDK sends `x-api-key` with the configured `apiKey` value (the routing token); test server confirms header presence.
+  - Tests are mode-agnostic — there is no OAuth-aware code path in the container; the same test exercises both production modes.
 
 **`src/daemon/` (extensions to existing tests):**
 
@@ -434,10 +464,11 @@ Holding the M1 line: in-memory real implementations, no `vi.mock`/`jest.mock`, c
 
 ### 7.2 Integration tests
 
-`tests/integration/proxy-end-to-end.test.ts` — new. Wires real `LocalModelProxy`, real `SQLite :memory:`, real `InMemoryBus`, real `FakeRunner`, and real fake-upstream http server. Two scenarios:
+`tests/integration/proxy-end-to-end.test.ts` — new. Wires real `LocalModelProxy`, real `SQLite :memory:`, real `InMemoryBus`, real `FakeRunner`, and real fake-upstream http server. Three scenarios:
 
-1. **Anthropic path (both modes).** Insert inbound for `claude-assistant`. Daemon mints token; FakeRunner acts as a container by sending an http request to the proxy using its received env vars, then writes a reply event on its mock stdout. Assert: proxy received the request with the routing token; fake upstream received the request with the *real* credential; outbound message stored; bus event fired; routing token evicted post-turn.
-2. **Provider isolation.** Two agents, two turns interleaved. Assert each agent's request goes to its own provider's upstream with its own real key; no cross-talk between routing tokens.
+1. **Anthropic path, API-key mode.** Insert inbound for `claude-assistant` with API-key creds configured. Daemon mints token; FakeRunner acts as a container by sending an http request to the proxy using its received env vars, then writes a reply event on its mock stdout. Assert: proxy received the request with `x-api-key=<routing-token>`; fake upstream received the request with `x-api-key=<real-anthropic-api-key>`; outbound message stored; bus event fired; routing token evicted post-turn.
+2. **Anthropic path, OAuth mode.** Same but with OAuth creds configured. First turn: assert proxy issued a server-to-server exchange to fake-upstream's exchange endpoint; cached temp key; forwarded `/v1/messages` with temp key. Second turn within TTL: assert no new exchange; cached temp key reused. Third turn after fake-upstream forces 401 on temp key: assert proxy evicted cache, re-exchanged, retried — exactly one retry.
+3. **Provider isolation.** `studio-assistant` (LM Studio) and `claude-assistant` (Anthropic) interleaved. Assert each agent's request goes to its own provider's upstream with its own real key; no cross-talk between routing tokens.
 
 The existing M1 integration test (`tests/integration/end-to-end.test.ts`) stays — extended by adding the proxy to its composition root rather than rewritten.
 
@@ -447,9 +478,9 @@ The existing M1 integration test (`tests/integration/end-to-end.test.ts`) stays 
 
 1. Build both agent images.
 2. Start daemon (proxy comes up automatically).
-3. `teamroom send --agent assistant "hello"` → expect reply via LM Studio (existing path).
+3. `teamroom send --agent studio-assistant "hello"` → expect reply via LM Studio (existing path, renamed).
 4. `teamroom send --agent claude-assistant "hello"` → expect reply via real Anthropic.
-5. Both turns complete; both `model.call.completed` spans visible in the log.
+5. Both turns complete; both `model.call.completed` spans visible in the log; in OAuth mode an `oauth.exchange.completed` span is also visible (once across the run).
 
 **Pass criterion.** Both agents responded; both providers' spans grep-able. Preconditions: Docker running, LM Studio running with a model loaded, Anthropic creds (API key OR OAuth token) discoverable. Documented in `docs/runbooks/smoke-test.md` (existing — updated).
 
@@ -467,23 +498,27 @@ The existing M1 integration test (`tests/integration/end-to-end.test.ts`) stays 
 - **Span vocabulary.** Every effectful boundary emits one structured log record with `traceId`, `spanId`, optional `parentSpanId`, `agentId` (where known), `turnId` (where applicable), timestamps, and event-specific fields. Events:
   - `turn.started`, `turn.completed`, `turn.errored` (daemon)
   - `model.call.completed`, `model.call.rejected` (proxy)
+  - `oauth.exchange.completed` (proxy; OAuth mode only, on cache miss)
   - `container.spawn.started`, `container.spawn.completed` (daemon)
+- **Bus events vs. log events with the same name — both intentional, distinct destinations.** The bus also fires `turn.started` / `turn.completed` / `turn.errored` (M1 behavior, payload-free notifications used by `tail` and future subscribers). The log emits the same-named events as **span-shaped records** for trace reconstruction. Same logical happening, two destinations, neither replacing the other. M3's bus rewrite is the moment to revisit whether log events should also fire onto the bus.
 - **End-to-end reconstructability.** Daemon, container, and proxy all emit the same vocabulary — a `cat | jq` over the JSONL log files reconstructs a full turn trace.
-- **No new persistence in M2.** No `model_usage` table. No bus events for telemetry. The destination evolves in M3 once the bus rewrite earns the second sighting; until then, span-shaped log records are the same data with a one-pass migration when the real telemetry layer arrives (per Q6 dialogue).
+- **No new persistence in M2.** No `model_usage` table. No new bus events for telemetry. The destination evolves in M3 once the bus rewrite earns the second sighting; until then, span-shaped log records are the same data with a one-pass migration when the real telemetry layer arrives (per Q6 dialogue).
 - **Token-prefix only on rejection.** Unknown-token rejections log `tokenPrefix: <first-8-chars>` for debug, never the full token.
-- **Sensitive payloads not logged.** Request and response bodies are not in spans. Only metadata (sizes, model, status, token counts).
+- **Sensitive payloads not logged.** Request and response bodies are not in spans. Only metadata (sizes, model, status, token counts). OAuth tokens, temp API keys, and real provider keys never appear in any log.
 
 ---
 
-## 9. M1 debts absorbed in M2
+## 9. M1 debts and cross-cutting cleanups absorbed in M2
 
-Carried forward from the M1 retro and as-built:
+Carried forward from the M1 retro and as-built, plus M2-spec cleanups added during brainstorm:
 
 1. **Reconciler `pending`-blind-spot.** Fix shape (i): `markRunning` *before* `runner.run()` with a placeholder container_id, plus reconcile sweeps aged `pending` rows. Touched naturally because we're already modifying `processTurn` to mint/evict tokens.
 2. **Daemon shutdown polish.** Static `import * as fs from "node:fs"`; `stop()` unlinks PID file; `let stopped = false` guard around `db.close()`.
 3. **`parseEvent` spread ordering.** One-line spread reorder; typed `type` field always wins over malformed JSON payload.
 4. **`@types/node` vs runtime target.** Bump to `^22` and `engines.node: ">=22"` if no transitive dep blocks it; otherwise revert `@types/node` to `^20`. Decision at implementation time after `npm ls` check.
 5. **Agent-onboarding runbook (skeleton).** `docs/runbooks/agent-onboarding.md` written as part of hiring `claude-assistant`. Skeleton only — explicit note that real specialized-agent onboarding will need much more (flowcharts, skill assignments, tool inventories) and that the expectation is agent roles emerge from observed use before they're formally onboarded.
+6. **Rename `assistant` → `studio-assistant`.** Cross-cutting touch (29 file matches; frozen historical docs left unchanged). Done as the first commit in the M2 implementation plan so it's easy to bisect. Convention going forward: agents named after their backing model/provider.
+7. **Bus README YAGNI principle.** One-line addition to `src/bus/README.md`: don't add events without a real consumer; even observability is fair game only when there's a subscriber. Codifies the M2 dialogue in the place future contributors will look first.
 
 ---
 
@@ -515,12 +550,14 @@ Also out of scope (no need to table — derivable from principles):
 
 These don't block design approval but should be on the implementation plan's pre-execution review list:
 
-1. **Anthropic OAuth-exchange gating** — see §6.4. Fallback documented; decision at implementation time.
-2. **`host.docker.internal` resolution on Linux.** Works out-of-box on Docker Desktop (Mac/Windows); on Linux the daemon may need `--add-host=host.docker.internal:host-gateway` on the run args. Cheap defensive add.
-3. **Per-turn token races.** If a container is unusually slow, an evicted token could be retried by a still-in-flight upstream-slow request. M2 simple stance: token lifetime = turn lifetime; any post-eviction request rejects. Acceptable.
-4. **Anthropic SDK retries vs proxy timeout.** SDK retries by default; if proxy timeout fires first, SDK might think the request was retryable. Solution: align timeouts (proxy timeout > SDK total retry budget) or disable SDK retries inside `AnthropicLlmClient`.
-5. **Writable single-file `/AGENTS.md` mount on macOS.** Single-file Docker mounts have well-known quirks. Fallback: mount the directory rw and access `AGENTS.md` from within. Decision at implementation time after a smoke test.
-6. **Reading `~/.claude/.credentials.json` from the daemon process.** Format may evolve with Claude Code updates; treat the file as best-effort and produce a clear error message if the structure is unrecognized.
+1. **Anthropic OAuth-exchange gating** — see §6.4. Fallback documented; decision at implementation time. Mitigated by proxy-side caching (per-turn exchange round-trips drop to ~once per temp-key TTL), but does not eliminate the risk if Anthropic gates the exchange endpoint outright.
+2. **OAuth temp-key TTL — verify on first real call.** The spec assumes Anthropic returns an `expires_at` (or equivalent) on the exchange response. If the actual field is named differently, has a different unit, or isn't returned at all, the cache needs adjustment. Capture exact field name + observed TTL in the M2 as-built once we have a real successful exchange.
+3. **`host.docker.internal` resolution on Linux.** Works out-of-box on Docker Desktop (Mac/Windows); on Linux the daemon may need `--add-host=host.docker.internal:host-gateway` on the run args. Cheap defensive add.
+4. **Per-turn token races.** If a container is unusually slow, an evicted token could be retried by a still-in-flight upstream-slow request. M2 simple stance: token lifetime = turn lifetime; any post-eviction request rejects. Acceptable.
+5. **Anthropic SDK retries vs proxy timeout.** SDK retries by default; if proxy timeout fires first, SDK might think the request was retryable. Solution: align timeouts (proxy timeout > SDK total retry budget) or disable SDK retries inside `AnthropicLlmClient`.
+6. **Writable single-file `/AGENTS.md` mount on macOS.** Single-file Docker mounts have well-known quirks. Fallback: mount the directory rw and access `AGENTS.md` from within. Decision at implementation time after a smoke test.
+7. **Reading `~/.claude/.credentials.json` from the daemon process.** Format may evolve with Claude Code updates; treat the file as best-effort and produce a clear error message if the structure is unrecognized.
+8. **OAuth-cache concurrency under multi-agent load.** If `claude-assistant` and a future second Anthropic agent both hit the proxy concurrently with the temp key cold, naïve fetch-on-miss will issue two exchange calls. Single-flight semantics in `anthropic-oauth-cache.ts` (one in-flight exchange per OAuth token; concurrent waiters share the result) mitigates this — covered by `anthropic-oauth-cache.test.ts`.
 
 ---
 
@@ -530,23 +567,33 @@ These don't block design approval but should be on the implementation plan's pre
 
 - `src/model-proxy/` (module)
 - `src/agent-runtime/anthropic-llm-client.ts` + `.test.ts`
-- `agents/<new-agent>/` (folder + `agent.yaml`, `AGENTS.md`, `Dockerfile`, `store/.gitkeep`)
+- `agents/claude-assistant/` (folder + `agent.yaml`, `AGENTS.md`, `Dockerfile`, `store/.gitkeep`)
 - `tests/integration/proxy-end-to-end.test.ts`
 - `docs/runbooks/agent-onboarding.md`
 - `docs/runbooks/anthropic-auth.md`
 - `docs/specs/2026-04-18-m2-model-abstraction-design.md` (this file)
 
+**Renamed:**
+
+- `agents/assistant/` → `agents/studio-assistant/` (folder rename + `agent.yaml` `name` field + ~25 references across live code, configs, tests, runbooks). Done as the first commit in the M2 plan.
+
 **Updated:**
 
 - `src/daemon/turn-processor.ts`, `reconcile.ts`, `safety-nets.ts`, `docker-runner.ts`
-- `src/agent-runtime/main.ts` (provider factory + routing-token header)
+- `src/agent-runtime/main.ts` (provider factory)
 - `src/types.ts` (if needed for new shared types — `Provider`, `AuthMode`, span shapes)
-- `agents/assistant/agent.yaml` (add explicit `provider: lm-studio`)
-- `.env.example` (add Anthropic vars)
-- `README.md` (note both backends)
-- `docs/runbooks/smoke-test.md` (extend for Anthropic path)
-- `package.json` (`@types/node`, `engines.node`)
+- `src/bus/README.md` (one-line YAGNI principle for new bus events)
+- `agents/studio-assistant/agent.yaml` (add explicit `provider: lm-studio`)
+- `.env.example` (add Anthropic vars; OAuth preferred)
+- `README.md` (note both backends, rename references)
+- `docs/runbooks/smoke-test.md` (extend for Anthropic path; rename references)
+- `docs/runbooks/manual-cli-testing.md` (rename references)
+- `package.json` (`@types/node`, `engines.node`; conditional bump to 22)
 - Module READMEs for any module touched (per ways-of-working: doc updates land in the same change)
+
+**Not touched (frozen historical docs):**
+
+- `docs/as-built/2026-04-18-teamroom-m1.md`, `docs/retros/2026-04-18-m1.md`, `team-room-context.md`. These accurately describe M1 reality (the agent *was* called `assistant`); the rename is M2 reality.
 
 ---
 
