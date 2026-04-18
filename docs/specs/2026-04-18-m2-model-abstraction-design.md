@@ -93,21 +93,39 @@ src/model-proxy/
 └── *.test.ts                       # co-located unit tests
 ```
 
-**`ModelProxy` interface (sketch).**
+**Shared types (sketch).**
 
 ```ts
+type Provider = "anthropic" | "lm-studio";
+type AuthMode = "api-key" | "oauth";
+
 interface MintTokenInput {
   turnId: string;
   agentId: string;
   traceId: string;
-  provider: "anthropic" | "lm-studio";
+  provider: Provider;
   model: string;
 }
 
+// Value stored in the token registry — keyed by the routing token.
+// Real upstream credentials are NOT stored here; they live in the adapter,
+// resolved per-call. See multi-model tabled item: this shape will evolve.
+interface TokenEntry {
+  agentId: string;
+  turnId: string;
+  traceId: string;
+  provider: Provider;
+  model: string;
+}
+```
+
+**`ModelProxy` interface (sketch).**
+
+```ts
 interface ModelProxy {
   start(): Promise<{ port: number }>;     // listens on 127.0.0.1, OS-assigned port
   stop(): Promise<void>;
-  mintToken(input: MintTokenInput): string;
+  mintToken(input: MintTokenInput): string; // returns the routing token
   evictToken(token: string): void;        // called from processTurn `finally`
 }
 ```
@@ -116,9 +134,10 @@ interface ModelProxy {
 
 ```ts
 interface ProviderAdapter {
-  readonly id: "anthropic" | "lm-studio";
+  readonly id: Provider;
+  readonly authMode: AuthMode;           // resolved at proxy startup from .env
   upstreamUrl(): string;
-  injectAuth(headers: OutgoingHttpHeaders, mode: AuthMode): void;
+  injectAuth(headers: OutgoingHttpHeaders): void;
   extractUsage(responseBody: unknown): {
     inputTokens?: number;
     outputTokens?: number;
@@ -126,7 +145,14 @@ interface ProviderAdapter {
 }
 ```
 
-**Routing rule.** Proxy reads `X-Teamroom-Token` header (always present, injected by daemon into container env, added by container's HTTP client on every outbound call). Looks up the registry entry → gets `provider` → hands off to the adapter. The auth header (`Authorization` or `x-api-key`) is handled separately by the adapter — see §6 for the two modes.
+**Terminology — "routing token".** A single per-turn ephemeral identifier minted by the daemon and injected into the container env as `TEAMROOM_PROXY_ROUTING_TOKEN`. It serves two roles:
+
+- **Routing.** Always sent in the `X-Teamroom-Token` header on every outbound HTTP call — the proxy uses this for token-registry lookup.
+- **Auth placeholder.** In API-key mode it's also sent as `x-api-key` (the SDK puts it there via the `apiKey` ctor option); in OAuth mode it's also sent as `Authorization: Bearer <routing-token>` on the exchange call (acts as the placeholder Bearer token NanoClaw's pattern requires). The proxy strips and substitutes the real credential before forwarding.
+
+The routing token is never the same as Anthropic's temp API key (which is issued by Anthropic during the OAuth exchange and lives only in the container, never in the proxy registry).
+
+**Routing rule.** Proxy reads `X-Teamroom-Token` header (always present). Looks up the registry entry → gets `provider` → hands off to the adapter. The auth header is handled separately by the adapter — see §6 for the two modes.
 
 ### 3.2 Updates to `src/daemon/`
 
@@ -144,7 +170,7 @@ interface ProviderAdapter {
 ### 3.3 Updates to `src/agent-runtime/`
 
 - **`main.ts`.** Reads `TEAMROOM_PROVIDER` env var. Factory picks the right `LlmClient` impl. Adds `X-Teamroom-Token` header (from `TEAMROOM_PROXY_ROUTING_TOKEN`) to every HTTP call regardless of SDK.
-- **`anthropic-llm-client.ts`** *(new)*. Uses `@anthropic-ai/sdk`, configured with `baseURL = TEAMROOM_MODEL_BASE_URL`. In API-key mode the SDK's `apiKey` ctor option carries the ephemeral token (sent as `x-api-key`); in OAuth mode the client first does the manual token-exchange dance (~30 LOC), caches the temp API key Anthropic returns, then sends `/v1/messages` calls with that temp key. Both modes always include the `X-Teamroom-Token` routing header.
+- **`anthropic-llm-client.ts`** *(new)*. Uses `@anthropic-ai/sdk`, configured with `baseURL = TEAMROOM_MODEL_BASE_URL`. In API-key mode the SDK's `apiKey` ctor option carries the routing token (sent as `x-api-key`, where the proxy substitutes the real key). In OAuth mode the client first does the manual token-exchange dance (~30 LOC of `fetch`) using the routing token as the placeholder Bearer token, caches the temp API key Anthropic returns, then sends `/v1/messages` calls with that temp key. Both modes always include the `X-Teamroom-Token` routing header on every outbound call.
 - **`runtime.ts`.** Unchanged contract (`LlmClient` already abstracts the call).
 - Co-located `anthropic-llm-client.test.ts` — uses real local http test server stand-in (matching M1 pattern: real impls, no mocks).
 
@@ -239,10 +265,11 @@ t4  Container   agent-runtime/main.ts:
                     : new OpenAILlmClient({...})
                   reply = await runTurn({llm, history, agentsMd, inbound})
 
-t5a OAuth-only: AnthropicLlmClient first does the OAuth exchange dance:
+t5a OAuth-only: AnthropicLlmClient first does the OAuth exchange dance.
+                The routing token doubles as the placeholder Bearer token:
                   POST /api/oauth/claude_cli/create_api_key
-                    Authorization: Bearer <ephemeral OAuth placeholder>
-                    X-Teamroom-Token: <ephemeral routing token>
+                    Authorization: Bearer <routing-token>
+                    X-Teamroom-Token: <routing-token>
                   → proxy substitutes Authorization with real OAuth token
                   → Anthropic returns temp API key
                   → AnthropicLlmClient caches temp key for the rest of the turn
@@ -250,8 +277,8 @@ t5a OAuth-only: AnthropicLlmClient first does the OAuth exchange dance:
 t5  Container→  AnthropicLlmClient.chat(messages, system):
     Proxy         POST /v1/messages
                     Host: host.docker.internal:PORT
-                    x-api-key: <temp-key (OAuth) | ephemeral (API-key mode)>
-                    X-Teamroom-Token: <ephemeral routing token>
+                    x-api-key: <temp-key (OAuth) | routing-token (API-key mode)>
+                    X-Teamroom-Token: <routing-token>
                     anthropic-version: 2023-06-01
                     Body: {model, system, messages, max_tokens}
 
@@ -259,9 +286,13 @@ t6  Proxy       routingToken = headers["x-teamroom-token"]
                 entry = tokenRegistry.lookup(routingToken)
                   ⇒ {agentId, provider:"anthropic", model, traceId, turnId}
                 adapter = adapters[entry.provider]  // anthropic-adapter
-                clone headers; adapter.injectAuth(headers, mode):
-                  - API-key mode: replace x-api-key with real key
-                  - OAuth mode (post-exchange): leave x-api-key as-is
+                                                     // adapter.authMode set at startup
+                clone headers; adapter.injectAuth(headers):
+                  - API-key mode: replace x-api-key with real ANTHROPIC_API_KEY
+                  - OAuth mode + Authorization header present (exchange call):
+                    replace Authorization with real OAuth Bearer token
+                  - OAuth mode + no Authorization header (post-exchange call):
+                    pass through unmodified
                 stripHopByHop(headers)
                 start = clock.now()
                 → forward to api.anthropic.com with adapter.upstreamUrl()
@@ -335,21 +366,21 @@ The proxy auto-detects the auth mode at startup based on which env vars are pres
 
 Selected when `ANTHROPIC_API_KEY` is set.
 
-- **Container side.** `AnthropicLlmClient` constructs the SDK with `apiKey` = the routing token (it gets sent as `x-api-key` by the SDK). All `/v1/messages` calls go directly to the proxy.
+- **Container side.** `AnthropicLlmClient` constructs the SDK with `apiKey` = the routing token (so the SDK sends it as `x-api-key`). Every outbound call also includes `X-Teamroom-Token: <routing-token>` (added by the agent-runtime's HTTP layer regardless of SDK).
 - **Proxy side.** On every request, `anthropic-adapter.injectAuth` replaces `x-api-key` with the real `ANTHROPIC_API_KEY` before forwarding.
-- **Routing.** `X-Teamroom-Token` header carries the routing token (separate from auth).
+- **Routing.** Proxy looks up `X-Teamroom-Token` for agent attribution; it does not depend on the value of `x-api-key`.
 
 ### 6.2 OAuth mode (Claude Code subscription)
 
 Selected when no `ANTHROPIC_API_KEY` and either `CLAUDE_CODE_OAUTH_TOKEN` env or `~/.claude/.credentials.json` is present.
 
 - **Container side.** `AnthropicLlmClient` first performs the OAuth exchange (~30 LOC of `fetch`):
-  1. `POST /api/oauth/claude_cli/create_api_key` with `Authorization: Bearer <placeholder>` and `X-Teamroom-Token: <routing-token>`.
-  2. Proxy intercepts (sees the `Authorization` header), substitutes the real OAuth token, forwards to Anthropic.
+  1. `POST /api/oauth/claude_cli/create_api_key` with `Authorization: Bearer <routing-token>` and `X-Teamroom-Token: <routing-token>`. The routing token serves as the placeholder Bearer token (NanoClaw's pattern requires *some* non-empty Authorization header to know it should substitute).
+  2. Proxy sees the `Authorization` header on this call, substitutes in the real OAuth token, forwards to Anthropic.
   3. Anthropic returns a temp API key.
   4. Client caches the temp key in memory for the rest of the turn.
-- All subsequent `/v1/messages` calls send `x-api-key: <temp-key>` (no `Authorization` header). Proxy passes them through unmodified, but still emits a `model.call.completed` span (routing token + temp key both present in the log context — no secret leakage in the span itself).
-- **Routing.** Same `X-Teamroom-Token` header. **This is why we need the routing-vs-auth split:** without it, post-exchange calls would be unattributable to an agent.
+- All subsequent `/v1/messages` calls send `x-api-key: <temp-key-from-anthropic>` (no `Authorization` header). The proxy passes the `x-api-key` through unmodified — but still emits a `model.call.completed` span using the `X-Teamroom-Token` header for agent attribution.
+- **Routing.** Same `X-Teamroom-Token` header on every call. **This is why we need the routing-vs-auth split:** without a separate routing header, post-exchange calls (which carry only the Anthropic-issued temp key in `x-api-key`) would be unattributable to an agent.
 
 ### 6.3 Mode-detection failure
 
