@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import chokidar from "chokidar";
+import chokidar, { type FSWatcher } from "chokidar";
 import type { BusEvent } from "../types.js";
 import type { EventFilter, NotifyBus } from "./notify-bus.js";
 
@@ -8,7 +8,7 @@ export class FileNotifyBus implements NotifyBus {
   private readonly eventsFile: string;
   private readonly notifyFile: string;
   private closedFlag = false;
-  private watchers: chokidar.FSWatcher[] = [];
+  private watchers: FSWatcher[] = [];
   private sleepingResolvers = new Set<() => void>();
 
   constructor(private readonly dir: string) {
