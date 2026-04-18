@@ -49,6 +49,7 @@ function setup(): {
     name: "studio-assistant",
     model: "claude-opus-4-7",
     imageTag: "teamroom-agent-studio-assistant:latest",
+    provider: "lm-studio",
     configPath: "/abs/agents/studio-assistant",
     agentsMdPath: "/abs/agents/studio-assistant/AGENTS.md",
     storePath: "/abs/agents/studio-assistant/store",

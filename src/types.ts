@@ -1,5 +1,6 @@
 export type MessageDirection = "in" | "out";
 export type TurnStatus = "pending" | "running" | "done" | "error";
+export type Provider = "anthropic" | "lm-studio";
 
 export interface Agent {
   id: string;

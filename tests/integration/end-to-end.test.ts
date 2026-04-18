@@ -26,7 +26,7 @@ describe("end-to-end (stack assembled with test implementations)", () => {
     );
     writeFileSync(
       join(dir, "agents", "studio-assistant", "agent.yaml"),
-      "name: studio-assistant\nmodel: m\nimage_tag: img\n",
+      "name: studio-assistant\nmodel: m\nimage_tag: img\nprovider: lm-studio\n",
     );
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));

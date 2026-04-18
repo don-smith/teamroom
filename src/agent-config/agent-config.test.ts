@@ -16,7 +16,7 @@ describe("loadAgentConfig", () => {
     writeFileSync(join(agentDir, "AGENTS.md"), "# Assistant prompt");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: studio-assistant\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-studio-assistant:latest\n",
+      "name: studio-assistant\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-studio-assistant:latest\nprovider: lm-studio\n",
     );
   });
 
@@ -29,6 +29,7 @@ describe("loadAgentConfig", () => {
     expect(cfg.name).toBe("studio-assistant");
     expect(cfg.model).toBe("claude-opus-4-7");
     expect(cfg.imageTag).toBe("teamroom-agent-studio-assistant:latest");
+    expect(cfg.provider).toBe("lm-studio");
     expect(cfg.configPath).toBe(agentDir);
     expect(cfg.agentsMdPath).toBe(join(agentDir, "AGENTS.md"));
     expect(cfg.storePath).toBe(join(agentDir, "store"));
@@ -52,5 +53,47 @@ describe("loadAgentConfig", () => {
   it("rejects when required yaml fields are missing", () => {
     writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
+  });
+});
+
+describe("loadAgentConfig — provider field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "studio-assistant");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("returns provider when present", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("anthropic");
+  });
+
+  it("throws when provider is missing", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
+  });
+
+  it("throws when provider is not in the allowed set", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
 });
