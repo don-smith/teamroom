@@ -330,6 +330,17 @@ export class LocalModelProxy implements ModelProxy {
     const isOk = upstreamResp.status >= 200 && upstreamResp.status < 300;
     const status = isOk ? "ok" : "upstream_error";
 
+    // Diagnostic: if we got a 2xx but no usage AND no recognizable response
+    // shape, include a 200-char body preview so the operator can see what
+    // upstream actually returned (e.g., LM Studio returning an `error` body
+    // with status 200, or a model id mismatch). Cheaper than re-running with
+    // tcpdump.
+    const looksLikeError =
+      isOk && usage.inputTokens === undefined && usage.outputTokens === undefined;
+    const bodyPreview = looksLikeError
+      ? upstreamResp.body.toString("utf8").slice(0, 200)
+      : undefined;
+
     emit(this.opts.logger, isOk ? "info" : "error", buildSpan({
       event: "model.call.completed",
       traceId: entry.traceId,
@@ -346,6 +357,7 @@ export class LocalModelProxy implements ModelProxy {
         ...(retried ? { retried: true } : {}),
         ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
         ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+        ...(bodyPreview !== undefined ? { bodyPreview } : {}),
       },
     }));
 
