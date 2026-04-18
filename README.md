@@ -1,22 +1,42 @@
 # Team Room
 
-A multi-agent harness modeled after a software delivery team. See `docs/specs/2026-04-18-teamroom-m1-design.md` for the M1 design and `docs/ways-of-working.md` for how we build this.
+A multi-agent harness modeled after a software delivery team.
 
-## Quick start (M1)
+## Current state
+
+Milestone 1 — "One agent that works." A single hand-configured agent (`assistant`) runs in a fresh Docker container per turn. Terminal-only channel. No memory, no inter-agent messaging, no scheduling — those arrive in later milestones.
+
+- Design: `docs/specs/2026-04-18-teamroom-m1-design.md`
+- Plan: `docs/plans/2026-04-18-teamroom-m1-plan.md`
+- Practices: `docs/ways-of-working.md`
+
+## Quick start
 
 ```bash
 npm install
 npm run build
-npm test
+npm test                                      # unit + integration tests (fast)
+./scripts/smoke-test.sh                       # end-to-end; requires Docker + ANTHROPIC_API_KEY
 ```
 
-## Structure
+## Day-to-day use
 
-- `src/` — daemon, CLI, agent-runtime
-- `agents/<name>/` — per-agent folder (M1: just `assistant/`)
-- `data/` — runtime state (gitignored): SQLite DB, logs, bus
-- `docs/` — specs, plans, retros, runbooks, ways-of-working
+```bash
+export ANTHROPIC_API_KEY=...
+npm run build
+docker build -t teamroom-agent-assistant:latest -f agents/assistant/Dockerfile .
 
-## Milestone 1
+node dist/cli/main.js serve   &       # daemon in background
+node dist/cli/main.js tail            # stream replies
+node dist/cli/main.js send "hello"    # send a message (from another terminal)
+node dist/cli/main.js status          # daemon + turn stats
+```
 
-Ship the smallest end-to-end slice: terminal message in → one hand-configured agent processes it in a Docker container → reply out via `teamroom tail`. See the spec for details.
+## Layout
+
+- `src/` — daemon, CLI, agent-runtime shim.
+- `agents/<name>/` — per-agent folder (AGENTS.md, agent.yaml, Dockerfile, store/).
+- `data/` — runtime state (gitignored).
+- `docs/` — specs, plans, retros, runbooks, ways-of-working, tabled.
+
+Module orientation: start at `src/README.md`.
