@@ -44,7 +44,15 @@ export class AnthropicAdapter implements ProviderAdapter {
     const tempKey = await auth.cache.get(auth.oauthToken, () =>
       auth.exchange(auth.oauthToken),
     );
-    headers["x-api-key"] = tempKey;
+    // Anthropic accepts OAuth tokens via Authorization: Bearer (NOT x-api-key,
+    // which is for raw API keys only). The `anthropic-beta: oauth-2025-04-20`
+    // header is required to opt this account into OAuth-token use against
+    // /v1/messages — without it, the token is rejected even though the
+    // Bearer auth itself is correct. (Verified against NanoClaw, vibekit,
+    // gptel-anthropic-oauth, and zero-limit reference implementations.)
+    delete headers["x-api-key"];
+    headers.authorization = `Bearer ${tempKey}`;
+    headers["anthropic-beta"] = mergeBeta(headers["anthropic-beta"], "oauth-2025-04-20");
   }
 
   onUpstreamUnauthorized(): void {
@@ -61,4 +69,25 @@ export class AnthropicAdapter implements ProviderAdapter {
     const outT = typeof usage.output_tokens === "number" ? usage.output_tokens : undefined;
     return { inputTokens: inT, outputTokens: outT };
   }
+}
+
+/**
+ * Merge a new beta flag into an existing `anthropic-beta` header value.
+ * The header is comma-separated; we preserve any caller-provided flags and
+ * deduplicate. Accepts the SDK's array form too (collapsed to comma-string).
+ */
+function mergeBeta(
+  existing: string | string[] | number | undefined,
+  add: string,
+): string {
+  if (existing === undefined) return add;
+  const existingStr = Array.isArray(existing) ? existing.join(",") : String(existing);
+  const flags = new Set(
+    existingStr
+      .split(",")
+      .map((f) => f.trim())
+      .filter(Boolean),
+  );
+  flags.add(add);
+  return Array.from(flags).join(",");
 }

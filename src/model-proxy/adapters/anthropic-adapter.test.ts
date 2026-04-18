@@ -39,7 +39,7 @@ describe("AnthropicAdapter — API-key mode", () => {
 });
 
 describe("AnthropicAdapter — OAuth mode", () => {
-  it("first call fetches via exchange and stores the temp key in headers", async () => {
+  it("first call fetches via exchange and stores the temp key as Authorization: Bearer", async () => {
     const cache = new AnthropicOAuthCache({ safetyMarginMs: 0 });
     const exchange = async (tok: string) => ({ tempKey: "tk-" + tok, expiresAt: Date.now() + 60_000 });
     const a = new AnthropicAdapter({
@@ -47,7 +47,33 @@ describe("AnthropicAdapter — OAuth mode", () => {
     });
     const headers: Record<string, string | string[] | undefined> = { "x-api-key": "routing" };
     await a.resolveAuth(headers);
-    expect(headers["x-api-key"]).toBe("tk-oauth-1");
+    // OAuth tokens go in Authorization: Bearer (NOT x-api-key — Anthropic
+    // accepts those only for raw API keys). The original x-api-key
+    // (routing token) is removed.
+    expect(headers.authorization).toBe("Bearer tk-oauth-1");
+    expect(headers["x-api-key"]).toBeUndefined();
+  });
+
+  it("adds the anthropic-beta: oauth-2025-04-20 header in OAuth mode", async () => {
+    // Required by Anthropic to opt the request into OAuth-token use against
+    // /v1/messages. Without this header, the bearer auth is rejected.
+    const cache = new AnthropicOAuthCache({ safetyMarginMs: 0 });
+    const exchange = async () => ({ tempKey: "tk", expiresAt: Date.now() + 60_000 });
+    const a = new AnthropicAdapter({ auth: { mode: "oauth", oauthToken: "o", cache, exchange } });
+    const headers: Record<string, string | string[] | undefined> = {};
+    await a.resolveAuth(headers);
+    expect(headers["anthropic-beta"]).toBe("oauth-2025-04-20");
+  });
+
+  it("merges oauth-2025-04-20 into a pre-existing anthropic-beta header (deduplicated)", async () => {
+    const cache = new AnthropicOAuthCache({ safetyMarginMs: 0 });
+    const exchange = async () => ({ tempKey: "tk", expiresAt: Date.now() + 60_000 });
+    const a = new AnthropicAdapter({ auth: { mode: "oauth", oauthToken: "o", cache, exchange } });
+    const headers: Record<string, string | string[] | undefined> = {
+      "anthropic-beta": "files-api-2025-04-14,oauth-2025-04-20",
+    };
+    await a.resolveAuth(headers);
+    expect(headers["anthropic-beta"]).toBe("files-api-2025-04-14,oauth-2025-04-20");
   });
 
   it("second call within TTL reuses cached temp key (no second exchange)", async () => {

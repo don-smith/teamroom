@@ -1,7 +1,6 @@
 import { mkdirSync, appendFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { request as httpsRequest } from "node:https";
 import { createDatabase, type Db } from "../db/database.js";
 import { runMigrations } from "../db/migrator.js";
 import { AgentRepo } from "../db/agent-repo.js";
@@ -162,81 +161,34 @@ function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
       mode: "oauth",
       oauthToken: creds.oauthToken,
       cache,
-      exchange: exchangeOAuthForTempKey,
+      exchange: directOAuthPassthrough,
     },
   });
 }
 
 /**
- * Trade a long-lived OAuth token for a short-lived temp key via Anthropic's
- * token exchange endpoint. The exact response shape for `expires_at` isn't
- * 100% confirmed (see M2 spec §11 risk #2) — we defensively parse number,
- * numeric-string, ISO-date, and fall back to `now + 1h` if nothing matches.
+ * "Exchange" function that returns the OAuth token directly as the temp key.
+ *
+ * Background: the M2 spec (§6.2) originally described a server-to-server
+ * exchange against `POST api.anthropic.com/api/oauth/claude_cli/create_api_key`
+ * to trade a long-lived OAuth token for a short-lived temp API key. Reality
+ * (verified via real smoke run, 2026-04): Anthropic gates that endpoint with
+ * 403 for tokens issued via `claude setup-token` — see spec §6.4 and
+ * docs/tabled.md "Anthropic OAuth-gating risk." However, those `sk-ant-oat01-`
+ * tokens are themselves long-lived API tokens that Anthropic accepts directly
+ * via `x-api-key` on `/v1/messages`. So the pragmatic resolution is: skip the
+ * exchange, use the OAuth token directly. The cache then holds a single entry
+ * with effectively infinite TTL (no real expiry information available; we use
+ * 1 year, which is the documented validity of `claude setup-token` outputs).
+ *
+ * The exchange-with-cache infrastructure is preserved as-is — it remains the
+ * right shape if Anthropic ever opens up a working programmatic exchange, and
+ * the unit/integration tests still cover that path against fake upstreams.
  */
-function exchangeOAuthForTempKey(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(
-      {
-        protocol: "https:",
-        host: "api.anthropic.com",
-        path: "/api/oauth/claude_cli/create_api_key",
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${oauthToken}`,
-          "content-length": "0",
-        },
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (c: Buffer) => chunks.push(c));
-        res.on("end", () => {
-          if ((res.statusCode ?? 0) < 200 || (res.statusCode ?? 0) >= 300) {
-            reject(new Error(`oauth exchange failed: status=${res.statusCode}`));
-            return;
-          }
-          try {
-            const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
-            const tempKey =
-              (typeof parsed.api_key === "string" && parsed.api_key) ||
-              (typeof parsed.temp_key === "string" && parsed.temp_key) ||
-              (typeof parsed.access_token === "string" && parsed.access_token);
-            if (!tempKey) {
-              reject(new Error("oauth_exchange_no_key"));
-              return;
-            }
-            const expiresAt = parseExpiresAt(parsed);
-            resolve({ tempKey, expiresAt });
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error(String(err)));
-          }
-        });
-        res.on("error", reject);
-      },
-    );
-    req.on("error", reject);
-    req.end();
+function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
+  return Promise.resolve({
+    tempKey: oauthToken,
+    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
   });
 }
 
-function parseExpiresAt(parsed: Record<string, unknown>): number {
-  const raw = parsed.expires_at ?? parsed.expiresAt ?? parsed.expires_in;
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    // Heuristic: if it's a small number (<= ~10 years in seconds), treat as
-    // "seconds from now" (expires_in semantics). Otherwise, epoch ms or
-    // epoch s — assume seconds if it looks like seconds.
-    if (raw < 10 * 365 * 24 * 60 * 60) return Date.now() + raw * 1000;
-    if (raw < 1e12) return raw * 1000; // epoch seconds
-    return raw; // epoch ms
-  }
-  if (typeof raw === "string") {
-    const asNum = Number(raw);
-    if (Number.isFinite(asNum)) {
-      if (asNum < 10 * 365 * 24 * 60 * 60) return Date.now() + asNum * 1000;
-      if (asNum < 1e12) return asNum * 1000;
-      return asNum;
-    }
-    const asDate = Date.parse(raw);
-    if (Number.isFinite(asDate)) return asDate;
-  }
-  return Date.now() + 60 * 60 * 1000; // fallback: 1h
-}
