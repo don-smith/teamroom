@@ -26,3 +26,18 @@ Read in this order when joining a session:
 - TypeScript strict mode. `any` is a smell.
 - Small files, one responsibility each. Interfaces at the boundary.
 - Every module under `src/` has an entry file matching its folder name (or `index.ts` only if that reads better in context).
+
+## Navigating the codebase
+
+Start at [`src/README.md`](src/README.md) for a module index, then follow the `## Related` links in each module README to reach peers, spec sections, and memory entries.
+
+Every multi-file module under `src/` has a README following this shape:
+
+1. **One paragraph** stating what the module is (its contract).
+2. **One paragraph** stating *where* and *when* it runs — the boundary (host process? inside the container? both?). This is load-bearing: the most important architectural seam in Team Room is the host/container split.
+3. **`## Files`** — files in the module with a one-line role description for each.
+4. **`## Related`** — structured links: `Parent` (enclosing module), `Uses` (modules this one depends on), `Used by` (consumers), `Spec` (relevant design-doc section), `Memory` (relevant cross-conversation memory entries, when applicable).
+
+Follow `## Related` links to navigate the knowledge graph of the codebase without having to search or guess at filenames.
+
+Single-file modules (e.g., `clock/`, `logger/`, `env/`, `types.ts`) intentionally do not have READMEs — the TypeScript source documents the contract directly. A README gets added when a module grows to multiple files or when its boundary is non-obvious from the code.

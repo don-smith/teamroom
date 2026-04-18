@@ -1,10 +1,22 @@
 # `daemon/` — the orchestrator
 
-- `daemon.ts` — composition root (`startDaemon(opts)`).
-- `orchestrator.ts` — polling loop that picks up pending inbound messages.
-- `turn-processor.ts` — processes one inbound → 0..N outbound via `ContainerRunner`.
-- `reconcile.ts` — on boot, marks orphan running turns as errored.
-- `safety-nets.ts` — global `uncaughtException` / `unhandledRejection` handlers that log fatal and do not exit.
-- `main.ts` — process entry (`teamroom serve` dispatches here).
+The long-running process that owns the DB connection, polls for pending inbound messages, dispatches them to the turn processor, and reconciles on startup. Procedural — **no LLM in the hot path**. All intelligence lives in agent containers; the daemon is the boring conveyor belt that keeps them moving.
 
-Invariants: nothing silent, nothing inconsistent, nothing crashes. See `docs/specs/2026-04-18-teamroom-m1-design.md` §3 and §12.
+**Runs on the host as the main long-running process.** Every other module that isn't `agent-runtime/` is either called from here or supports it. Invariants: *nothing silent, nothing inconsistent, nothing crashes*. Once the daemon has started it does not die from an unhandled exception — see `safety-nets.ts`.
+
+## Files
+
+- `daemon.ts` — the composition root. `startDaemon(opts)` wires every dependency (clock, logger, DB, bus, container runner, agent configs) and returns a `StartedDaemon` with a `stop()` function.
+- `main.ts` — process entry. Loads `.env`, calls `startDaemon()`, wires SIGINT/SIGTERM.
+- `orchestrator.ts` — `tickOnce()` drains pending inbound messages; `runLoop()` alternates tick + sleep. Serialises per-agent (no parallel turns for the same agent at M1).
+- `turn-processor.ts` — `processTurn(deps)`: the heart of M1. Takes one pending inbound, creates a turn row, spawns the container via `ContainerRunner`, parses stdout events into outbound messages + bus events, moves the turn to its terminal state.
+- `reconcile.ts` — on startup, marks any `status='running'` turn as errored with `'daemon_restart'`. Provides deterministic recovery after a crash.
+- `safety-nets.ts` — `installSafetyNets(logger)`: global `uncaughtException` / `unhandledRejection` handlers that log fatal and do NOT exit. Boot-time errors still exit so the OS supervisor can restart.
+- `orchestrator.test.ts`, `turn-processor.test.ts`, `reconcile.test.ts` — co-located unit tests. `daemon.ts`, `main.ts`, `safety-nets.ts` are covered by the integration test at [tests/integration/end-to-end.test.ts](../../tests/integration/end-to-end.test.ts) and the smoke script at [scripts/smoke-test.sh](../../scripts/smoke-test.sh).
+
+## Related
+
+- **Parent:** [src/README.md](../README.md)
+- **Uses:** [db/README.md](../db/README.md), [bus/README.md](../bus/README.md), [container/README.md](../container/README.md), [agent-config/README.md](../agent-config/README.md), [env/env-file.ts](../env/env-file.ts), [clock/clock.ts](../clock/clock.ts), [logger/logger.ts](../logger/logger.ts).
+- **Used by:** [cli/serve.ts](../cli/README.md) (entry point for users).
+- **Spec:** [M1 design](../../docs/specs/2026-04-18-teamroom-m1-design.md) — §3 principles (invariants), §4 architecture, §7 turn lifecycle, §12 error handling.
