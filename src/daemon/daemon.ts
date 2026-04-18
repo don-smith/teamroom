@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, appendFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createDatabase, type Db } from "../db/database.js";
@@ -46,7 +46,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   installSafetyNets(rootLogger);
 
   // PID file
-  writeFileSync(join(opts.dataDir, "teamroom.pid"), String(process.pid));
+  const pidFile = join(opts.dataDir, "teamroom.pid");
+  writeFileSync(pidFile, String(process.pid));
 
   const db = createDatabase(join(opts.dataDir, "teamroom.db"));
   runMigrations(db);
@@ -59,7 +60,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // Discover and register each agent folder under agentsDir.
   const agentConfigs = new Map<string, AgentConfig>();
   if (existsSync(opts.agentsDir)) {
-    const { readdirSync, statSync } = await import("node:fs");
     for (const entry of readdirSync(opts.agentsDir)) {
       const full = join(opts.agentsDir, entry);
       if (!statSync(full).isDirectory()) continue;
@@ -92,11 +92,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
   });
 
+  let stopped = false;
   const stop = async () => {
+    if (stopped) return;
+    stopped = true;
     orchestrator.stop();
     await loopPromise;
     await bus.close();
     db.close();
+    try { unlinkSync(pidFile); } catch { /* PID file already gone */ }
   };
 
   return { db, stop, orchestrator };
