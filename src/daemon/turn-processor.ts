@@ -203,7 +203,12 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
         traceId: inbound.traceId,
         error: errorText,
       });
-      turnLogger.warn("turn errored", { exitCode: result.exitCode });
+      // Surface the actual stderr in the daemon log so failures are debuggable
+      // without having to query the DB. Capped to 2KB by `snippet`.
+      turnLogger.warn("turn errored", {
+        exitCode: result.exitCode,
+        stderrTail: snippet.length > 0 ? snippet : "(empty)",
+      });
       return;
     }
 
