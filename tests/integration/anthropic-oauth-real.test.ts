@@ -1,19 +1,18 @@
 /**
- * Real-Anthropic OAuth integration test — costs a few cents per run (uses real
- * Anthropic API with max_tokens=10) and is OPT-IN. The intent: verify that
+ * Real-Anthropic OAuth integration test. Hits real api.anthropic.com with
+ * max_tokens=10 — uses subscription quota, ~1 token of "real" cost per run
+ * (negligible vs. a Claude Code conversation). The intent: verify that
  * AnthropicAdapter's outgoing header shape (Authorization: Bearer +
  * anthropic-beta: oauth-2025-04-20) is what real Anthropic accepts for
  * `sk-ant-oat01-...` tokens, without needing a full smoke-test cycle (Docker +
  * agent image + daemon + container) just to exercise auth.
  *
- * Gated by RUN_REAL_INTEGRATION_TESTS=1 — `npm test` does NOT run this by
- * default (would burn API quota on every test invocation). To run:
- *
- *   RUN_REAL_INTEGRATION_TESTS=1 npx vitest run tests/integration/anthropic-oauth-real.test.ts
- *
- * Also requires credentials to resolve via the same discoverAnthropic() path
- * the daemon uses (env CLAUDE_CODE_OAUTH_TOKEN, macOS Keychain entry "Claude
- * Code-credentials", or ~/.claude/.credentials.json on Linux/Windows).
+ * Runs as part of `npm test`. Credentials are discovered via the same
+ * discoverAnthropic() path the daemon uses (env CLAUDE_CODE_OAUTH_TOKEN, macOS
+ * Keychain entry "Claude Code-credentials", or ~/.claude/.credentials.json on
+ * Linux/Windows). If no creds are discoverable, the test reports a visible
+ * "skipped" line so the operator knows to set them up — there's no silent
+ * skip and no opt-in env var to remember.
  */
 
 import { describe, it, expect } from "vitest";
@@ -36,16 +35,19 @@ const env = readEnvFile(resolve(process.cwd()), [
 ]);
 const creds = discoverAnthropic(env);
 
-// Skip unless explicitly opted-in AND OAuth creds are available. The test
-// still loads (so vitest reports a clear "skipped" line); we just don't make
-// a real API call by default.
-const optedIn = process.env.RUN_REAL_INTEGRATION_TESTS === "1";
-const haveOAuth = creds !== null && creds.mode === "oauth";
-const shouldRun = optedIn && haveOAuth;
-
-describe.runIf(shouldRun)("AnthropicAdapter — real Anthropic OAuth", () => {
-  it("Authorization: Bearer + anthropic-beta:oauth-2025-04-20 → 200 from /v1/messages", async () => {
-    if (!creds || creds.mode !== "oauth") throw new Error("guard above should have skipped");
+describe("AnthropicAdapter — real Anthropic OAuth", () => {
+  it("Authorization: Bearer + anthropic-beta:oauth-2025-04-20 → not rejected by Anthropic", async () => {
+    // Fail loudly if creds aren't set up — a skipped test is too easy to miss.
+    // The operator should see "no OAuth credential" in vitest output and act on it.
+    expect(
+      creds,
+      "no Anthropic credential discoverable — set CLAUDE_CODE_OAUTH_TOKEN in .env, log into Claude Code (macOS Keychain entry 'Claude Code-credentials' will be picked up automatically), or place ~/.claude/.credentials.json. See docs/runbooks/anthropic-auth.md.",
+    ).not.toBeNull();
+    expect(
+      creds?.mode,
+      `Anthropic credential resolved to mode=${creds?.mode}; this test only validates OAuth-mode auth. To run an API-key test, switch your .env to ANTHROPIC_API_KEY=... and rerun.`,
+    ).toBe("oauth");
+    if (!creds || creds.mode !== "oauth") throw new Error("unreachable after guards");
 
     // Build headers exactly the way our adapter would for a real request.
     const cache = new AnthropicOAuthCache();
@@ -133,9 +135,3 @@ describe.runIf(shouldRun)("AnthropicAdapter — real Anthropic OAuth", () => {
   }, 30_000); // 30s timeout — real API call, can take a few seconds
 });
 
-describe.runIf(!shouldRun)("AnthropicAdapter — real Anthropic OAuth (skipped)", () => {
-  it(
-    `skipped: ${!optedIn ? "RUN_REAL_INTEGRATION_TESTS=1 not set" : "no OAuth credential found via discoverAnthropic()"}`,
-    () => { expect(true).toBe(true); },
-  );
-});
