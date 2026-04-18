@@ -18,3 +18,4 @@ For Team Room, testability is treated as an architectural concern and dependency
 - Real external calls (Anthropic API, real Docker, real files on disk) live only in a small set of explicitly-marked smoke tests that do not run in CI.
 - End-to-end tests with a real agent are deferred; user expects they may become a component of the eval system in a later milestone.
 - Coverage is not the goal. Good architecture that produces well-tested seams is the goal.
+- **Test layout:** co-locate unit tests with their source as `src/<module>/<file>.test.ts`. Reserve `tests/integration/` for cross-module end-to-end tests. Vitest's default glob picks up both; `tsc` excludes `**/*.test.ts` from the production build. Adopted late in M1 after `tests/unit/...` proved noisy during module moves — co-location keeps refactors local.
