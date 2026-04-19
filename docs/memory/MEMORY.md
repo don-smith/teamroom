@@ -25,6 +25,7 @@
 - [Team Room — deliberate coupling and extensibility](feedback_teamroom_coupling_and_extensibility.md) — what's shared vs. isolated is a first-class architectural concern at every decision point
 - [Team Room — build it with the team practices we want Team Room to produce](feedback_teamroom_meta_consistency.md) — read docs/ways-of-working.md; apply reflection, retros, and deliberate docs to our own development
 - [Team Room — no skipped tests; pass means full E2E success](feedback_teamroom_no_skipped_tests.md) — integration tests run on every npm test, no opt-in gates; "passing" requires the full success criterion, never an intermediate signal like "auth accepted but rate-limited"
+- [Team Room — no failing tests before moving on, ever](feedback_teamroom_no_failing_tests.md) — any test failure is a hard stop on all downstream work (milestone close, brainstorms, planning); never categorise as "environmental" before investigating
 
 ## Project
 - [Team Room — LangGraph is the intended per-agent runtime](project_teamroom_langgraph_direction.md) — agents will run LangGraph workflows eventually; M1 keeps the runtime simple but the container contract is language-agnostic to accommodate it
