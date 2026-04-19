@@ -29,6 +29,8 @@ const agentConfig: AgentConfig = {
   configPath: "/abs/agents/studio-assistant",
   agentsMdPath: "/abs/agents/studio-assistant/AGENTS.md",
   storePath: "/abs/agents/studio-assistant/store",
+  subscriptions: [],
+  allowedTools: [],
 };
 
 describe("Orchestrator", () => {

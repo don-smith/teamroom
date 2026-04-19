@@ -11,6 +11,8 @@ export interface AgentConfig {
   configPath: string;     // absolute path to the agent folder
   agentsMdPath: string;   // absolute path to AGENTS.md inside the folder
   storePath: string;      // absolute path to store/
+  subscriptions: string[];
+  allowedTools: string[];
 }
 
 export function loadAgentConfig(agentDir: string): AgentConfig {
@@ -39,7 +41,10 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
     );
   }
 
-  return { name, model, imageTag, provider, configPath, agentsMdPath, storePath };
+  const subscriptions = parseStringArray(parsed, "subscriptions");
+  const allowedTools = parseStringArray(parsed, "allowed_tools");
+
+  return { name, model, imageTag, provider, configPath, agentsMdPath, storePath, subscriptions, allowedTools };
 }
 
 function requireString(parsed: Record<string, unknown>, field: string): string {
@@ -51,4 +56,20 @@ function requireString(parsed: Record<string, unknown>, field: string): string {
     throw new Error(`agent.yaml '${field}' must be a string (got ${typeof value}: '${String(value)}')`);
   }
   return value;
+}
+
+function parseStringArray(parsed: Record<string, unknown>, field: string): string[] {
+  const value = parsed[field];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`agent.yaml '${field}' must be an array (got ${typeof value})`);
+  }
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      throw new Error(
+        `agent.yaml '${field}' entries must be a string (got ${typeof entry}: '${String(entry)}')`,
+      );
+    }
+  }
+  return value as string[];
 }

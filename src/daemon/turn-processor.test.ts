@@ -73,6 +73,8 @@ function setup(): {
     configPath: "/abs/agents/studio-assistant",
     agentsMdPath: "/abs/agents/studio-assistant/AGENTS.md",
     storePath: "/abs/agents/studio-assistant/store",
+    subscriptions: [],
+    allowedTools: [],
   };
 
   return { db, agentRepo, messageRepo, turnRepo, clock, bus, logger, inbound, agentConfig };

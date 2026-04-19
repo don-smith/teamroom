@@ -56,6 +56,63 @@ describe("loadAgentConfig", () => {
   });
 });
 
+describe("loadAgentConfig — subscriptions and allowed_tools", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "studio-assistant");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("parses subscriptions as string[] (defaults to empty)", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - a\n  - team-wide\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.subscriptions).toEqual(["a", "team-wide"]);
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    const cfg2 = loadAgentConfig(agentDir);
+    expect(cfg2.subscriptions).toEqual([]);
+  });
+
+  it("rejects non-string subscription entries", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - ok\n  - 42\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/subscriptions.*must be a string/);
+  });
+
+  it("parses allowed_tools as string[] (defaults to empty)", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nallowed_tools:\n  - Read\n  - Write\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.allowedTools).toEqual(["Read", "Write"]);
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    const cfg2 = loadAgentConfig(agentDir);
+    expect(cfg2.allowedTools).toEqual([]);
+  });
+});
+
 describe("loadAgentConfig — provider field", () => {
   let base: string;
   let agentDir: string;
