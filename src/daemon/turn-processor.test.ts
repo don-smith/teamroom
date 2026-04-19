@@ -755,4 +755,179 @@ describe("processTurn", () => {
     const turn = s.turnRepo.findById(reread!.turnId!);
     expect(turn?.conversationId).toBe("c-test-uuid");
   });
+
+  it("refuses dispatch when turns-per-conversation >= cap; writes an errored turn row", async () => {
+    const s = setup();
+
+    const baseTurn = {
+      agentId: "studio-assistant",
+      inboundMessageId: "m-1",
+      status: "done" as const,
+      containerId: null,
+      error: null,
+      traceId: "t",
+      startedAt: null,
+      finishedAt: null,
+      createdAt: s.clock.nowIso(),
+      conversationId: "c-runaway",
+    };
+    for (let i = 0; i < 10; i++) {
+      s.turnRepo.create({ ...baseTurn, id: `pre-turn-${i}` });
+    }
+
+    const capInbound: Message = {
+      ...s.inbound,
+      id: "m-cap",
+      conversationId: "c-runaway",
+    };
+    s.messageRepo.create(capInbound);
+
+    let runnerCalled = false;
+    const runner = new FakeRunner(() => {
+      runnerCalled = true;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    const proxy = new StubModelProxy();
+
+    const received: BusEvent[] = [];
+    (async () => {
+      for await (const e of s.bus.subscribe()) received.push(e);
+    })();
+
+    await processTurn({
+      inbound: capInbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: proxy,
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    expect(runnerCalled).toBe(false);
+    expect(proxy.mintCalls).toHaveLength(0);
+
+    const reread = s.messageRepo.findById("m-cap");
+    const turn = s.turnRepo.findById(reread!.turnId!);
+    expect(turn?.status).toBe("error");
+    expect(turn?.error).toBe("conversation_cap");
+
+    await new Promise((r) => setTimeout(r, 10));
+    const turnStarted = received.filter((e) => e.type === "turn.started");
+    expect(turnStarted.length).toBe(0);
+
+    const warnEntries = s.logger.entries.filter(
+      (e) => e.level === "warn" && e.msg === "conversation.limit_reached",
+    );
+    expect(warnEntries.length).toBeGreaterThan(0);
+    expect(warnEntries[0]).toMatchObject({ conversationId: "c-runaway", limit: 10 });
+  });
+
+  it("allows dispatch when turns-per-conversation < cap", async () => {
+    const s = setup();
+
+    const baseTurn = {
+      agentId: "studio-assistant",
+      inboundMessageId: "m-1",
+      status: "done" as const,
+      containerId: null,
+      error: null,
+      traceId: "t",
+      startedAt: null,
+      finishedAt: null,
+      createdAt: s.clock.nowIso(),
+      conversationId: "c-ok",
+    };
+    for (let i = 0; i < 4; i++) {
+      s.turnRepo.create({ ...baseTurn, id: `pre-turn-ok-${i}` });
+    }
+
+    const okInbound: Message = {
+      ...s.inbound,
+      id: "m-ok",
+      conversationId: "c-ok",
+    };
+    s.messageRepo.create(okInbound);
+
+    let runnerCalled = false;
+    const runner = new FakeRunner(() => {
+      runnerCalled = true;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    await processTurn({
+      inbound: okInbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    expect(runnerCalled).toBe(true);
+  });
+
+  it("skips the cap check when inbound.conversationId is null (pre-M3 row)", async () => {
+    const s = setup();
+
+    const baseTurn = {
+      agentId: "studio-assistant",
+      inboundMessageId: "m-1",
+      status: "done" as const,
+      containerId: null,
+      error: null,
+      traceId: "t",
+      startedAt: null,
+      finishedAt: null,
+      createdAt: s.clock.nowIso(),
+      conversationId: null,
+    };
+    for (let i = 0; i < 20; i++) {
+      s.turnRepo.create({ ...baseTurn, id: `pre-turn-null-${i}` });
+    }
+
+    let runnerCalled = false;
+    const runner = new FakeRunner(() => {
+      runnerCalled = true;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    expect(runnerCalled).toBe(true);
+  });
 });

@@ -66,6 +66,7 @@ describe("Orchestrator", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
     });
@@ -115,6 +116,7 @@ describe("Orchestrator", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
     });
@@ -143,6 +145,7 @@ describe("Orchestrator", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => "x",
     });

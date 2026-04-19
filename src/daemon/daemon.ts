@@ -123,6 +123,18 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
 
   const genId = () => randomUUID();
 
+  const maxTurnsPerConversation = (() => {
+    const raw = process.env.TEAMROOM_MAX_TURNS_PER_CONVERSATION;
+    if (raw == null || raw.trim() === "") return 10;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(
+        `TEAMROOM_MAX_TURNS_PER_CONVERSATION must be a non-negative integer (got '${raw}')`,
+      );
+    }
+    return n;
+  })();
+
   await reconcile({ turnRepo, bus, logger: rootLogger, clock, genId });
 
   const runner = new DockerRunner();
@@ -134,6 +146,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     anthropicAdapterPresent,
     subscriptionIndex,
     turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
+    maxTurnsPerConversation,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
   });

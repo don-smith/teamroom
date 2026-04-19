@@ -24,6 +24,7 @@ export interface OrchestratorDeps {
   anthropicAdapterPresent: boolean;
   subscriptionIndex: SubscriptionIndex;
   turnTimeoutMs: number;
+  maxTurnsPerConversation: number;
   pollIntervalMs: number;
   genId: () => string;
 }
@@ -58,7 +59,7 @@ export class Orchestrator {
           anthropicAdapterPresent: this.deps.anthropicAdapterPresent,
           subscriptionIndex: this.deps.subscriptionIndex,
           timeoutMs: this.deps.turnTimeoutMs,
-          maxTurnsPerConversation: 0,
+          maxTurnsPerConversation: this.deps.maxTurnsPerConversation,
           genId: this.deps.genId,
         });
       } catch (err) {

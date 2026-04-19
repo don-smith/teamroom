@@ -33,7 +33,8 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs, genId,
+    modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs,
+    maxTurnsPerConversation, genId,
   } = deps;
   const turnId = genId();
   const now = clock.nowIso();
@@ -43,6 +44,32 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     traceId: inbound.traceId,
     agentName: agentConfig.name,
   });
+
+  if (
+    inbound.conversationId != null &&
+    maxTurnsPerConversation > 0 &&
+    turnRepo.countByConversationId(inbound.conversationId) >= maxTurnsPerConversation
+  ) {
+    turnLogger.warn("conversation.limit_reached", {
+      conversationId: inbound.conversationId,
+      limit: maxTurnsPerConversation,
+    });
+    turnRepo.create({
+      id: turnId,
+      agentId: inbound.agentId,
+      inboundMessageId: inbound.id,
+      status: "error",
+      containerId: null,
+      error: "conversation_cap",
+      traceId: inbound.traceId,
+      startedAt: null,
+      finishedAt: clock.nowIso(),
+      createdAt: now,
+      conversationId: inbound.conversationId,
+    });
+    messageRepo.attachTurn(inbound.id, turnId);
+    return;
+  }
 
   // 1. Create the turn row, attach it to the inbound message, then mark
   //    running with a placeholder container_id so the reconciler can see
