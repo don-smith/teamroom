@@ -10,4 +10,16 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ## Open entries
 
-*(none — last cleared at M2 close, 2026-04-19. Forward-looking deferred items moved to [`docs/m3-followups.md`](m3-followups.md).)*
+- **Runtime subscription changes take effect without daemon restart.** During M3
+  brainstorm (2026-04-19) we locked in option (A): static subscriptions in
+  `agent.yaml`, daemon reads at boot / on config reload. User explicitly tabled
+  the richer future: an agent being able to change its own subscriptions and
+  notification settings (either by editing its `agent.yaml` or via a future
+  tool) and have the change take effect **immediately**, not on the next daemon
+  restart. Implies a file-watcher on `agents/*/agent.yaml` (and/or a
+  `subscribe()` tool writing to `store/subscriptions.json` or a DB table), plus
+  a hot-reload path in the daemon that re-computes the subscription index and
+  any pending wake-up routing tables without dropping in-flight work. Probable
+  destination: graduate to `docs/m3-followups.md` once M3 spec lands, to be
+  picked up when a concrete agent has a real reason to self-modify its
+  attention at runtime.
