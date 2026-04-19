@@ -51,7 +51,11 @@ function buildLlmClient(): LlmClient {
     // container-spawn time. No constructor wiring needed here.
     if (!process.env.ANTHROPIC_BASE_URL) throw new Error("ANTHROPIC_BASE_URL is required");
     if (!process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_AUTH_TOKEN is required");
-    return new AnthropicLlmClient();
+    const toolsRaw = process.env.TEAMROOM_ALLOWED_TOOLS ?? "";
+    const allowedTools = toolsRaw.trim() === ""
+      ? []
+      : toolsRaw.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    return new AnthropicLlmClient({ allowedTools });
   }
   if (provider === "lm-studio") {
     return makeOpenAiCompatibleClient();

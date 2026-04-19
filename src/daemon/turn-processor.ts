@@ -165,6 +165,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
         // Claude Code CLI / claude-agent-sdk slot.
         ANTHROPIC_BASE_URL: modelBaseUrl,
         ANTHROPIC_AUTH_TOKEN: token,
+        TEAMROOM_ALLOWED_TOOLS: agentConfig.allowedTools.join(","),
       },
     };
 

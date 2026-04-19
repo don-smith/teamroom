@@ -49,6 +49,8 @@ export interface AnthropicLlmClientOpts {
    * to `/store/work` (created on demand). Tests inject a temp path.
    */
   cwd?: string;
+  /** Tools the agent may invoke. Defaults to [] (no tools). */
+  allowedTools?: string[];
 }
 
 const DEFAULT_SESSION_FILE = "/store/anthropic-session.txt";
@@ -60,12 +62,14 @@ export class AnthropicLlmClient implements LlmClient {
   private readonly sessionIdFile: string;
   private readonly configDir: string;
   private readonly cwd: string;
+  readonly allowedTools: string[];
 
   constructor(opts: AnthropicLlmClientOpts = {}) {
     this.executable = opts.executable ?? "node";
     this.sessionIdFile = opts.sessionIdFile ?? DEFAULT_SESSION_FILE;
     this.configDir = opts.configDir ?? DEFAULT_CONFIG_DIR;
     this.cwd = opts.cwd ?? DEFAULT_CWD;
+    this.allowedTools = opts.allowedTools ?? [];
   }
 
   async createMessage(args: LlmCreateArgs): Promise<LlmCreateResult> {
@@ -80,9 +84,7 @@ export class AnthropicLlmClient implements LlmClient {
       executable: this.executable,
       model: args.model,
       cwd: this.cwd,
-      // Disable all tools — M2 is non-tool-using chat. Keeps the subprocess
-      // simple and avoids Claude Code asking for tool permissions.
-      allowedTools: [],
+      allowedTools: this.allowedTools,
       systemPrompt: args.system
         ? { type: "preset", preset: "claude_code", append: args.system }
         : undefined,

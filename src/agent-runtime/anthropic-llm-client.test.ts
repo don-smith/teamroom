@@ -6,7 +6,7 @@ import type { LlmClient } from "./runtime.js";
 // tests/integration/anthropic-oauth-real.test.ts, which runs the actual
 // claude-agent-sdk subprocess against the real proxy + real Anthropic. There's
 // nothing meaningful to test in isolation here without mocking the SDK, which
-// we don't do (real-impl-tests-only convention). These two tests cover the
+// we don't do (real-impl-tests-only convention). These tests cover the
 // shape contract.
 
 describe("AnthropicLlmClient", () => {
@@ -20,5 +20,16 @@ describe("AnthropicLlmClient", () => {
     // if the createMessage signature drifts, this won't typecheck.
     const client: LlmClient = new AnthropicLlmClient();
     expect(typeof client.createMessage).toBe("function");
+  });
+
+  it("passes allowedTools through to the claude-agent-sdk Options", () => {
+    const client = new AnthropicLlmClient({ allowedTools: ["Read", "Write"] });
+    // Verify the stored allowedTools are accessible via the inspectable property.
+    expect((client as unknown as { allowedTools: string[] }).allowedTools).toEqual(["Read", "Write"]);
+  });
+
+  it("defaults allowedTools to [] when not provided", () => {
+    const client = new AnthropicLlmClient();
+    expect((client as unknown as { allowedTools: string[] }).allowedTools).toEqual([]);
   });
 });

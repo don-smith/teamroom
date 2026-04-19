@@ -4,3 +4,10 @@ model: claude-opus-4-7
 image_tag: teamroom-agent-claude-assistant:latest
 subscriptions:
   - claude-assistant
+allowed_tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Glob
+  - Grep
