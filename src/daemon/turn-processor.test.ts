@@ -112,6 +112,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -159,6 +160,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: () => "generated-id",
     });
 
@@ -191,6 +193,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 100,
+      maxTurnsPerConversation: 10,
       genId: () => "generated-id",
     });
     const reread = s.messageRepo.findById("m-1");
@@ -223,6 +226,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: () => "generated-id",
     });
     const outbound = s.messageRepo.findOutboundAfter(null);
@@ -258,6 +262,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -297,6 +302,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -339,6 +345,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
     expect(proxy.mintCalls).toHaveLength(1);
@@ -372,6 +379,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -449,6 +457,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -519,6 +528,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -586,6 +596,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -596,6 +607,118 @@ describe("processTurn", () => {
     );
     expect(warnEntries.length).toBeGreaterThan(0);
     expect(warnEntries[0]).toMatchObject({ channel: "dm", topic: "nobody" });
+  });
+
+  it("reply from a dm-triggered turn bounces back as an inbound DM to the sender", async () => {
+    const s = setup();
+
+    s.agentRepo.create({ id: "claude-assistant", configPath: "/abs", createdAt: s.clock.nowIso() });
+
+    const dmInbound: Message = {
+      id: "m-dm-1",
+      agentId: "studio-assistant",
+      channel: "dm",
+      direction: "in",
+      body: "ping",
+      turnId: null,
+      traceId: "trace-dm-1",
+      createdAt: s.clock.nowIso(),
+      topic: "studio-assistant",
+      fromAgentId: "claude-assistant",
+      conversationId: "c-abc",
+    };
+    s.messageRepo.create(dmInbound);
+
+    const received: BusEvent[] = [];
+    (async () => {
+      for await (const e of s.bus.subscribe()) received.push(e);
+    })();
+
+    const runner = new FakeRunner(() => ({
+      events: [{ type: "reply", body: "pong" }],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: dmInbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    // A new inbound row targeting claude-assistant should exist
+    const allMessages = s.messageRepo.findPendingInbound();
+    const bounced = allMessages.find((m) => m.agentId === "claude-assistant" && m.channel === "dm");
+    expect(bounced).toBeDefined();
+    expect(bounced!.fromAgentId).toBe("studio-assistant");
+    expect(bounced!.topic).toBe("claude-assistant");
+    expect(bounced!.direction).toBe("in");
+    expect(bounced!.turnId).toBeNull();
+    expect(bounced!.conversationId).toBe("c-abc");
+    expect(bounced!.body).toBe("pong");
+
+    // No outbound row on CLI channel
+    const outbound = s.messageRepo.findOutboundAfter(null);
+    expect(outbound.length).toBe(0);
+
+    // No message.outbound bus event
+    await new Promise((r) => setTimeout(r, 10));
+    const outboundEvents = received.filter((e) => e.type === "message.outbound");
+    expect(outboundEvents.length).toBe(0);
+  });
+
+  it("reply from a cli-triggered turn continues to create an outbound CLI row + message.outbound event (m2 behaviour unchanged)", async () => {
+    const s = setup();
+
+    const received: BusEvent[] = [];
+    (async () => {
+      for await (const e of s.bus.subscribe()) received.push(e);
+    })();
+
+    const runner = new FakeRunner(() => ({
+      events: [{ type: "reply", body: "hi" }],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    const outbound = s.messageRepo.findOutboundAfter(null);
+    expect(outbound.length).toBe(1);
+    expect(outbound[0]!.channel).toBe("cli");
+    expect(outbound[0]!.body).toBe("hi");
+
+    await new Promise((r) => setTimeout(r, 10));
+    const outboundEvents = received.filter((e) => e.type === "message.outbound");
+    expect(outboundEvents.length).toBe(1);
   });
 
   it("copies inbound.conversationId to the turn row", async () => {
@@ -624,6 +747,7 @@ describe("processTurn", () => {
       anthropicAdapterPresent: false,
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 

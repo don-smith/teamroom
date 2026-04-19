@@ -58,6 +58,7 @@ export class Orchestrator {
           anthropicAdapterPresent: this.deps.anthropicAdapterPresent,
           subscriptionIndex: this.deps.subscriptionIndex,
           timeoutMs: this.deps.turnTimeoutMs,
+          maxTurnsPerConversation: 0,
           genId: this.deps.genId,
         });
       } catch (err) {

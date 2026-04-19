@@ -26,6 +26,7 @@ export interface ProcessTurnDeps {
   anthropicAdapterPresent: boolean;
   subscriptionIndex: SubscriptionIndex;
   timeoutMs: number;
+  maxTurnsPerConversation: number;
   genId: () => string;
 }
 
@@ -154,30 +155,51 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       onEvent: (evt) => {
         try {
           if (evt.type === "reply") {
-            const outId = genId();
-            messageRepo.create({
-              id: outId,
-              agentId: inbound.agentId,
-              channel: inbound.channel,
-              direction: "out",
-              body: evt.body,
-              turnId,
-              traceId: inbound.traceId,
-              createdAt: clock.nowIso(),
-              topic: "",
-              fromAgentId: null,
-              conversationId: null,
-            });
-            replyCount += 1;
-            void bus.publish({
-              id: genId(),
-              type: "message.outbound",
-              ts: clock.nowIso(),
-              agentId: inbound.agentId,
-              messageId: outId,
-              turnId,
-              traceId: inbound.traceId,
-            });
+            if (inbound.channel === "dm") {
+              const target = inbound.fromAgentId;
+              if (target == null) {
+                turnLogger.warn("dm-reply.no-sender", { inboundId: inbound.id });
+              } else {
+                messageRepo.create({
+                  id: genId(),
+                  agentId: target,
+                  channel: "dm",
+                  direction: "in",
+                  body: evt.body,
+                  turnId: null,
+                  traceId: genId(),
+                  createdAt: clock.nowIso(),
+                  topic: target,
+                  fromAgentId: agentConfig.name,
+                  conversationId: inbound.conversationId,
+                });
+              }
+            } else {
+              const outId = genId();
+              messageRepo.create({
+                id: outId,
+                agentId: inbound.agentId,
+                channel: inbound.channel,
+                direction: "out",
+                body: evt.body,
+                turnId,
+                traceId: inbound.traceId,
+                createdAt: clock.nowIso(),
+                topic: "",
+                fromAgentId: null,
+                conversationId: inbound.conversationId,
+              });
+              replyCount += 1;
+              void bus.publish({
+                id: genId(),
+                type: "message.outbound",
+                ts: clock.nowIso(),
+                agentId: inbound.agentId,
+                messageId: outId,
+                turnId,
+                traceId: inbound.traceId,
+              });
+            }
           } else if (evt.type === "dm") {
             const sender = agentConfig.name;
             const to = evt.to;
