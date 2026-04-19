@@ -34,8 +34,6 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
     modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs, genId,
   } = deps;
-  void subscriptionIndex;
-
   const turnId = genId();
   const now = clock.nowIso();
   const turnLogger = logger.child({
@@ -178,6 +176,36 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
               turnId,
               traceId: inbound.traceId,
             });
+          } else if (evt.type === "dm") {
+            const sender = agentConfig.name;
+            const to = evt.to;
+
+            if (to === sender) {
+              turnLogger.warn("self-dm.rejected", { from: sender, to });
+              return;
+            }
+
+            const subscribers = subscriptionIndex.lookup("dm", to);
+            if (subscribers.length === 0) {
+              turnLogger.warn("message.undelivered", { channel: "dm", topic: to });
+              return;
+            }
+
+            for (const subscriberId of subscribers) {
+              messageRepo.create({
+                id: genId(),
+                agentId: subscriberId,
+                channel: "dm",
+                direction: "in",
+                body: evt.body,
+                turnId: null,
+                traceId: genId(),
+                createdAt: clock.nowIso(),
+                topic: to,
+                fromAgentId: sender,
+                conversationId: inbound.conversationId,
+              });
+            }
           } else if (evt.type === "status") {
             turnLogger.info("status", { phase: evt.phase });
           } else if (evt.type === "log") {

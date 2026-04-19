@@ -387,6 +387,217 @@ describe("processTurn", () => {
     expect(turn?.error).toBe("missing_credential");
   });
 
+  it("on {type:dm}: inserts inbound rows for each subscriber with inherited conversationId", async () => {
+    const s = setup();
+
+    const claudeConfig: AgentConfig = {
+      name: "claude-assistant",
+      model: "claude-opus-4-7",
+      imageTag: "teamroom-agent-claude-assistant:latest",
+      provider: "lm-studio",
+      configPath: "/abs/agents/claude-assistant",
+      agentsMdPath: "/abs/agents/claude-assistant/AGENTS.md",
+      storePath: "/abs/agents/claude-assistant/store",
+      subscriptions: [],
+      allowedTools: [],
+    };
+    const studioConfig: AgentConfig = {
+      ...s.agentConfig,
+      subscriptions: ["studio-assistant"],
+    };
+    const subIndex = new AgentSubscriptionIndex(
+      new Map([
+        ["claude-assistant", claudeConfig],
+        ["studio-assistant", studioConfig],
+      ]),
+    );
+
+    s.agentRepo.create({ id: "claude-assistant", configPath: "/abs", createdAt: s.clock.nowIso() });
+
+    const senderInbound: Message = {
+      id: "m-sender",
+      agentId: "claude-assistant",
+      channel: "cli",
+      direction: "in",
+      body: "start",
+      turnId: null,
+      traceId: "trace-sender",
+      createdAt: s.clock.nowIso(),
+      topic: "",
+      fromAgentId: null,
+      conversationId: "c-1",
+    };
+    s.messageRepo.create(senderInbound);
+
+    const runner = new FakeRunner(() => ({
+      events: [{ type: "dm", to: "studio-assistant", body: "ping" }],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: senderInbound,
+      agentConfig: claudeConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: subIndex,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    const allMessages = s.messageRepo.findPendingInbound().filter((m) => m.channel === "dm");
+    expect(allMessages.length).toBe(1);
+    const dmRow = allMessages[0]!;
+    expect(dmRow.agentId).toBe("studio-assistant");
+    expect(dmRow.channel).toBe("dm");
+    expect(dmRow.topic).toBe("studio-assistant");
+    expect(dmRow.fromAgentId).toBe("claude-assistant");
+    expect(dmRow.conversationId).toBe("c-1");
+    expect(dmRow.direction).toBe("in");
+    expect(dmRow.turnId).toBeNull();
+  });
+
+  it("on {type:dm} to self: emits self-dm.rejected warn; writes no row", async () => {
+    const s = setup();
+
+    const claudeConfig: AgentConfig = {
+      name: "claude-assistant",
+      model: "claude-opus-4-7",
+      imageTag: "teamroom-agent-claude-assistant:latest",
+      provider: "lm-studio",
+      configPath: "/abs/agents/claude-assistant",
+      agentsMdPath: "/abs/agents/claude-assistant/AGENTS.md",
+      storePath: "/abs/agents/claude-assistant/store",
+      subscriptions: ["claude-assistant"],
+      allowedTools: [],
+    };
+    const subIndex = new AgentSubscriptionIndex(
+      new Map([["claude-assistant", claudeConfig]]),
+    );
+
+    s.agentRepo.create({ id: "claude-assistant", configPath: "/abs", createdAt: s.clock.nowIso() });
+
+    const senderInbound: Message = {
+      id: "m-self",
+      agentId: "claude-assistant",
+      channel: "cli",
+      direction: "in",
+      body: "start",
+      turnId: null,
+      traceId: "trace-self",
+      createdAt: s.clock.nowIso(),
+      topic: "",
+      fromAgentId: null,
+      conversationId: null,
+    };
+    s.messageRepo.create(senderInbound);
+
+    const runner = new FakeRunner(() => ({
+      events: [{ type: "dm", to: "claude-assistant", body: "x" }],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: senderInbound,
+      agentConfig: claudeConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: subIndex,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    const dmRows = s.messageRepo.findPendingInbound().filter((m) => m.channel === "dm");
+    expect(dmRows.length).toBe(0);
+    const warnEntries = s.logger.entries.filter(
+      (e) => e.level === "warn" && e.msg === "self-dm.rejected",
+    );
+    expect(warnEntries.length).toBeGreaterThan(0);
+    expect(warnEntries[0]).toMatchObject({ from: "claude-assistant", to: "claude-assistant" });
+  });
+
+  it("on {type:dm} with no matching subscriber: emits message.undelivered warn; writes no row", async () => {
+    const s = setup();
+
+    const claudeConfig: AgentConfig = {
+      name: "claude-assistant",
+      model: "claude-opus-4-7",
+      imageTag: "teamroom-agent-claude-assistant:latest",
+      provider: "lm-studio",
+      configPath: "/abs/agents/claude-assistant",
+      agentsMdPath: "/abs/agents/claude-assistant/AGENTS.md",
+      storePath: "/abs/agents/claude-assistant/store",
+      subscriptions: ["claude-assistant"],
+      allowedTools: [],
+    };
+    const subIndex = new AgentSubscriptionIndex(
+      new Map([["claude-assistant", claudeConfig]]),
+    );
+
+    s.agentRepo.create({ id: "claude-assistant", configPath: "/abs", createdAt: s.clock.nowIso() });
+
+    const senderInbound: Message = {
+      id: "m-undelivered",
+      agentId: "claude-assistant",
+      channel: "cli",
+      direction: "in",
+      body: "start",
+      turnId: null,
+      traceId: "trace-undelivered",
+      createdAt: s.clock.nowIso(),
+      topic: "",
+      fromAgentId: null,
+      conversationId: null,
+    };
+    s.messageRepo.create(senderInbound);
+
+    const runner = new FakeRunner(() => ({
+      events: [{ type: "dm", to: "nobody", body: "x" }],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: senderInbound,
+      agentConfig: claudeConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: subIndex,
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    const dmRows = s.messageRepo.findPendingInbound().filter((m) => m.channel === "dm");
+    expect(dmRows.length).toBe(0);
+    const warnEntries = s.logger.entries.filter(
+      (e) => e.level === "warn" && e.msg === "message.undelivered",
+    );
+    expect(warnEntries.length).toBeGreaterThan(0);
+    expect(warnEntries[0]).toMatchObject({ channel: "dm", topic: "nobody" });
+  });
+
   it("copies inbound.conversationId to the turn row", async () => {
     const s = setup();
     const inboundWithConversation: Message = {
