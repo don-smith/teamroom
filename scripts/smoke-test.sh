@@ -182,10 +182,104 @@ run_multiturn_check() {
   return 1
 }
 
+run_dm_primitive_check() {
+  local unique="dm-$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 8)"
+  local prompt="Send a DM to studio-assistant with body '${unique}'. To do this, emit a JSON line to stdout: {\"type\":\"dm\",\"to\":\"studio-assistant\",\"body\":\"${unique}\"}. Then stop — do not reply."
+
+  echo "==> [dm-primitive] Sending DM trigger to claude-assistant (unique: $unique)"
+  : > /tmp/teamroom-smoke-output.txt
+  node dist/cli/main.js send --agent claude-assistant "$prompt"
+
+  echo "==> [dm-primitive] Waiting up to 90s for DM chain to complete"
+  local elapsed=0
+  local all_settled=0
+  while [[ "$elapsed" -lt 90 ]]; do
+    sleep 3
+    elapsed=$((elapsed + 3))
+
+    local pending_or_running
+    pending_or_running=$(node -e "
+      const db = require('better-sqlite3')('data/teamroom.db', { readonly: true });
+      const rows = db.prepare(\"SELECT COUNT(*) AS c FROM turns WHERE status IN ('pending','running')\").get();
+      db.close();
+      process.stdout.write(String(rows.c));
+    " 2>/dev/null || echo "1")
+
+    if [[ "$pending_or_running" == "0" ]]; then
+      all_settled=1
+      break
+    fi
+  done
+
+  local fail=0
+
+  if [[ "$all_settled" != "1" ]]; then
+    echo "==> [dm-primitive] FAIL: turns did not all settle within 90s" >&2
+    fail=1
+  fi
+
+  local claude_to_studio
+  claude_to_studio=$(node -e "
+    const db = require('better-sqlite3')('data/teamroom.db', { readonly: true });
+    const row = db.prepare(\"SELECT COUNT(*) AS c FROM messages WHERE channel='dm' AND topic='studio-assistant' AND from_agent_id='claude-assistant'\").get();
+    db.close();
+    process.stdout.write(String(row.c));
+  " 2>/dev/null || echo "0")
+
+  if [[ "$claude_to_studio" -lt 1 ]]; then
+    echo "==> [dm-primitive] FAIL: no DM row from claude-assistant to studio-assistant (channel=dm, topic=studio-assistant)" >&2
+    fail=1
+  else
+    echo "==> [dm-primitive] claude->studio DM row found ($claude_to_studio)"
+  fi
+
+  local studio_to_claude
+  studio_to_claude=$(node -e "
+    const db = require('better-sqlite3')('data/teamroom.db', { readonly: true });
+    const row = db.prepare(\"SELECT COUNT(*) AS c FROM messages WHERE channel='dm' AND topic='claude-assistant' AND from_agent_id='studio-assistant'\").get();
+    db.close();
+    process.stdout.write(String(row.c));
+  " 2>/dev/null || echo "0")
+
+  if [[ "$studio_to_claude" -lt 1 ]]; then
+    echo "==> [dm-primitive] FAIL: no return DM row from studio-assistant to claude-assistant (channel=dm, topic=claude-assistant)" >&2
+    fail=1
+  else
+    echo "==> [dm-primitive] studio->claude return DM row found ($studio_to_claude)"
+  fi
+
+  local bad_errors
+  bad_errors=$(node -e "
+    const db = require('better-sqlite3')('data/teamroom.db', { readonly: true });
+    const rows = db.prepare(\"SELECT id, error FROM turns WHERE status='error' AND error IS NOT 'conversation_cap'\").all();
+    db.close();
+    process.stdout.write(String(rows.length));
+  " 2>/dev/null || echo "1")
+
+  if [[ "$bad_errors" -gt 0 ]]; then
+    echo "==> [dm-primitive] FAIL: $bad_errors turn(s) with unexpected error value (not conversation_cap)" >&2
+    node -e "
+      const db = require('better-sqlite3')('data/teamroom.db', { readonly: true });
+      const rows = db.prepare(\"SELECT id, agent_id, status, error FROM turns WHERE status='error' AND error IS NOT 'conversation_cap'\").all();
+      db.close();
+      console.error(JSON.stringify(rows, null, 2));
+    " 2>&1 >&2 || true
+    fail=1
+  fi
+
+  if [[ "$fail" == "1" ]]; then
+    dump_failure_diagnostics "dm-primitive"
+    return 1
+  fi
+
+  echo "==> [dm-primitive] PASS — DM chain round-tripped and all turns settled"
+}
+
 run_agent studio-assistant "studio-ok"
 run_multiturn_check studio-assistant
 run_agent claude-assistant "claude-ok"
 run_multiturn_check claude-assistant
+run_dm_primitive_check
 
 echo "==> Verifying both providers' spans in the daemon log"
 LOG_FILE=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
