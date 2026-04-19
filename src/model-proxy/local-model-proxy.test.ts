@@ -123,7 +123,9 @@ describe("LocalModelProxy", () => {
 
     const resp = await postToProxy(port, "/v1/messages", { "x-api-key": tok }, "{}");
     expect(resp.status).toBe(200);
-    expect(upstream.recorded[0].headers["x-api-key"]).toBe("sk-real");
+    const firstReq = upstream.recorded[0];
+    if (!firstReq) throw new Error("expected recorded upstream request");
+    expect(firstReq.headers["x-api-key"]).toBe("sk-real");
 
     const span = logger.entries.find((r) => r.event === "model.call.completed");
     expect(span).toMatchObject({
@@ -273,8 +275,10 @@ describe("LocalModelProxy", () => {
     );
 
     expect(resp.status).toBe(200);
-    expect(upstream.recorded[0].headers.authorization).toBe("Bearer lm-real");
-    expect(upstream.recorded[0].headers["x-api-key"]).toBeUndefined();
+    const firstReq = upstream.recorded[0];
+    if (!firstReq) throw new Error("expected recorded upstream request");
+    expect(firstReq.headers.authorization).toBe("Bearer lm-real");
+    expect(firstReq.headers["x-api-key"]).toBeUndefined();
     await proxy.stop();
     await upstream.close();
   });

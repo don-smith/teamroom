@@ -82,7 +82,9 @@ describe("proxy end-to-end", () => {
 
     await postToProxy(port, "/v1/messages", { "x-api-key": tok }, "{}");
 
-    expect(upstream.recorded[0].headers["x-api-key"]).toBe("sk-real");
+    const firstReq = upstream.recorded[0];
+    if (!firstReq) throw new Error("expected recorded upstream request");
+    expect(firstReq.headers["x-api-key"]).toBe("sk-real");
 
     await proxy.stop();
     await upstream.close();
@@ -183,8 +185,11 @@ describe("proxy end-to-end", () => {
     await postToProxy(port, "/v1/messages", { "x-api-key": aTok }, "{}");
     await postToProxy(port, "/v1/chat/completions", { "x-api-key": lTok }, "{}");
 
-    expect(anthropicUpstream.recorded[0].headers["x-api-key"]).toBe("sk-a");
-    expect(lmStudioUpstream.recorded[0].headers.authorization).toBe("Bearer lm-real");
+    const anthReq = anthropicUpstream.recorded[0];
+    const lmReq = lmStudioUpstream.recorded[0];
+    if (!anthReq || !lmReq) throw new Error("expected recorded upstream requests");
+    expect(anthReq.headers["x-api-key"]).toBe("sk-a");
+    expect(lmReq.headers.authorization).toBe("Bearer lm-real");
 
     await proxy.stop();
     await anthropicUpstream.close();
