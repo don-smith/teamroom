@@ -114,9 +114,21 @@ When M3 ships (the scope-cut version) and the next milestone starts. This is alm
 ### What we're doing with M3 right now
 
 Taking the full CLI-user-final-reply exit scenario off the table for M3. M3's exit narrows to:
-- Two agents DM each other (inter-agent mechanism proven).
-- They share a `/codebase` folder.
-- Claude-assistant has fs tools.
+- DM primitive at the **daemon plumbing level** (stdout parsing, subscription routing, conversation_id propagation, cap) — proven by unit + integration tests with `FakeRunner`.
+- Shared `/codebase` mount — wired.
+- Claude-assistant fs tools — enabled.
 - Conversation cap prevents runaway loops.
 
-The "CLI user sees a final answer through the DM chain" piece is a casualty of the wrong primitive; it gets fixed for real when the email/event-bus direction lands in M4+.
+### Sharper gap exposed by the smoke test run
+
+When the smoke test against real backends ran, Claude Opus *correctly* formatted the requested `{"type":"dm","to":"studio-assistant","body":"dm-…"}` JSON line in its response. But the line landed on **CLI tail output**, not as a routed DM. Why: `src/agent-runtime/runtime.ts` wraps the LLM's entire text response in a single `{type:"reply", body: "<all the text>"}` stdout event. The daemon's stdout parser sees a `reply`, not a `dm`. The JSON line exists only as text *inside the reply body*.
+
+**The M3 DM primitive works at the daemon plumbing layer but real LLM agents cannot use it** — there's no path for an LLM agent's text output to become a typed `dm` stdout event. That means the end-to-end smoke test for the DM primitive is withdrawn from M3 (the `run_dm_primitive_check` addition was reverted; only the plumbing-layer tests stay).
+
+This gap is exactly what the email/event-bus direction fixes. Concretely: agents get a **`send-email` tool** (or equivalent) that they *call* rather than *format as stdout*. The tool's side effect is to enqueue a typed email event on the bus. The agent's natural-language text stays plain text; structured sends are a distinct channel. That's the cleanest way to close this gap and it's the M4+ thesis.
+
+### Why the smoke test finding is a useful signal
+
+This was discovered by attempting a real end-to-end flow — exactly the kind of feasibility issue M2's retro said we'd try to catch earlier. The existing FakeRunner-based unit/integration tests covered the daemon plumbing correctly; only the live smoke test could expose that real LLM agents can't produce a typed DM event. That validates the **"always do a real-backend smoke check at milestone exit"** discipline we'll carry forward.
+
+The "CLI user sees a final answer through the DM chain" piece, and "real LLM agents can emit DMs at all," are both casualties of the wrong primitive. Both get fixed when email/event-bus lands.

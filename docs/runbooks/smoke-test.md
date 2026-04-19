@@ -27,7 +27,6 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
    - Start `teamroom tail` redirected to `/tmp/teamroom-smoke-output.txt`.
    - For each agent in turn: send a message asking for an exact marker reply, poll the tail for up to 60 s.
    - Grep the daemon's JSONL log for `model.call.completed` spans from both providers (`anthropic` and `lm-studio`).
-   - **DM-primitive check:** sends a CLI message to `claude-assistant` instructing it to emit a `{"type":"dm","to":"studio-assistant","body":"dm-<unique>"}` line. Waits up to 90 s for all turns to reach a terminal state, then queries the DB to verify: (a) at least one `messages` row with `channel='dm'`, `topic='studio-assistant'`, `from_agent_id='claude-assistant'`; (b) at least one return-DM row with `topic='claude-assistant'`, `from_agent_id='studio-assistant'`; (c) no turns with `status='error'` except those whose `error` value is `conversation_cap`.
    - Report `SMOKE PASS` and shut down the daemon.
 
 ## Verifying success
@@ -37,7 +36,6 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 - In OAuth mode, you should also see one `"event":"oauth.exchange.completed"` per temp-key TTL window (typically once per smoke-test run).
 - The daemon exits cleanly (no zombie process in `ps | grep dist/cli/main.js`).
 - `data/teamroom.db` has both agents, two inbound messages, two outbound messages, two `done` turns.
-- **DM-primitive:** `data/teamroom.db` contains a `messages` row with `channel='dm'`, `topic='studio-assistant'`, `from_agent_id='claude-assistant'` (the outbound DM) and a row with `channel='dm'`, `topic='claude-assistant'`, `from_agent_id='studio-assistant'` (studio's return DM). No turns hold an unexpected error value (only `conversation_cap` is acceptable).
 
 ## Interpreting the log
 
