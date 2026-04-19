@@ -67,9 +67,22 @@ The turn → reply primitive we inherited from M1/M2 presumes request-response s
 ### What "email" encompasses
 
 - **Direct agent-to-agent messages** — "Alice emails Bob."
-- **Group messages** — "Alice emails the #qa list" (multiple agents receive it).
-- **System-event-triggered emails** — the event bus dispatches emails to subscribers when events fire. Subscribing to `test.failed` means receiving email when a test fails. The bus → email dispatcher is a first-class subsystem.
-- **Harness endpoints with automated responses** — some email addresses are harness-managed and trigger behaviours (e.g., emailing a "deploy" address triggers a deployment; reply comes from the deploy subsystem).
+- **Group messages / mailing lists** — "Alice emails the #qa list" (multiple agents receive it).
+- **System-event mailing lists** (bridge from events to agents) — when an event fires that agents might want to subscribe to, the harness has a mailing list for it (e.g., `test.failed`, `deploy.broken`, `merge.landed`). The event bus routes a firing to the list → every subscriber gets email. This **collapses the "alerts" concept into mail**. Agents don't subscribe to events directly; they subscribe to the mailing lists that represent those events. One primitive, one mental model.
+- **Harness endpoints with automated responses** — some email addresses are harness-managed and trigger behaviours (e.g., emailing a "deploy" address triggers a deployment; the reply comes from the deploy subsystem).
+
+### Unified mail: channels as gateways
+
+From the agent's perspective, **every inbound interaction is email, regardless of source**. The CLI isn't a separate concept — it's a channel that translates human input into email addressed to an agent, and translates the agent's outbound email back to the human's terminal. A future Telegram channel is the same shape: it translates Telegram messages into email and email back into Telegram.
+
+Envelope structure (shape-only, specifics come in M4 brainstorm):
+
+- **From.** Who sent it (agent id, or a channel-prefixed identity like `cli:don` for the human-via-CLI case).
+- **To.** One or more recipients (agent ids, mailing-list ids, or channel-prefixed humans).
+- **Cc / Reply-to.** Familiar email semantics — threads survive multi-party exchanges; replies go to the sender by default but `reply-to` can redirect.
+- **Subject / body / references / thread-id.** Threading uses references like real email.
+
+This framing closes the exit-scenario gap from M3. A CLI user sending a message via `teamroom send` creates an email addressed to the agent; the agent replies and the CLI channel delivers the reply to the human. If the agent needs a peer's help mid-task, it sends email to a peer (or a mailing list); the peer replies; the agent's reply to the original human is a separate outbound email. Every hop is explicit, durable, and the thread-id stitches them together.
 
 ### What this replaces
 
