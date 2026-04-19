@@ -40,11 +40,17 @@ const LM_STUDIO_MODEL = "qwen/qwen3.5-9b";
 
 async function isLmStudioReachable(url: string): Promise<boolean> {
   try {
-    const resp = await fetch(`${url}/v1/models`, {
+    // Any HTTP response counts as reachable — we only care whether the
+    // server is listening and speaking HTTP. Auth failures (401 when the
+    // server is configured to require a key on /v1/models) should NOT
+    // fail this probe; the real test below hits /v1/chat/completions
+    // with the configured token and surfaces real auth errors there.
+    // Matches the smoke-test script's `curl` (no -f) behaviour.
+    await fetch(`${url}/v1/models`, {
       method: "GET",
       signal: AbortSignal.timeout(3000),
     });
-    return resp.ok;
+    return true;
   } catch {
     return false;
   }
@@ -99,9 +105,13 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
         apiKey: routingToken,
       });
 
+      // max_tokens is high enough to let reasoning models (e.g. qwen3)
+      // complete their thinking phase AND emit visible content. 1024
+      // mirrors agent-runtime/main.ts (production path). Non-reasoning
+      // models are unaffected — they stop on `stop`, not on length.
       const resp = await sdk.chat.completions.create({
         model: LM_STUDIO_MODEL,
-        max_tokens: 30,
+        max_tokens: 1024,
         messages: [{ role: "user", content: "Reply with exactly: studio-int-ok" }],
       });
 
@@ -159,7 +169,7 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
       ];
       const resp1 = await sdk.chat.completions.create({
         model: LM_STUDIO_MODEL,
-        max_tokens: 30,
+        max_tokens: 1024,
         messages,
       });
       const turn1Text = resp1.choices[0]?.message?.content ?? "";
@@ -174,7 +184,7 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
       });
       const resp2 = await sdk.chat.completions.create({
         model: LM_STUDIO_MODEL,
-        max_tokens: 30,
+        max_tokens: 1024,
         messages,
       });
       const turn2Text = resp2.choices[0]?.message?.content ?? "";
