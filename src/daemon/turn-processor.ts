@@ -60,7 +60,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     startedAt: null,
     finishedAt: null,
     createdAt: now,
-    conversationId: null,
+    conversationId: inbound.conversationId,
   });
   messageRepo.attachTurn(inbound.id, turnId);
   turnRepo.markRunning(turnId, "pending-spawn", clock.nowIso());

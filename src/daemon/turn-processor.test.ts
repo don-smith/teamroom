@@ -386,4 +386,38 @@ describe("processTurn", () => {
     expect(turn?.status).toBe("error");
     expect(turn?.error).toBe("missing_credential");
   });
+
+  it("copies inbound.conversationId to the turn row", async () => {
+    const s = setup();
+    const inboundWithConversation: Message = {
+      ...s.inbound,
+      conversationId: "c-test-uuid",
+    };
+    const runner = new FakeRunner(() => ({
+      events: [],
+      exitCode: 0,
+      stderr: "",
+    }));
+
+    await processTurn({
+      inbound: inboundWithConversation,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+    });
+
+    const reread = s.messageRepo.findById(inboundWithConversation.id);
+    const turn = s.turnRepo.findById(reread!.turnId!);
+    expect(turn?.conversationId).toBe("c-test-uuid");
+  });
 });
