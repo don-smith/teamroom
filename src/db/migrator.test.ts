@@ -25,4 +25,21 @@ describe("migrator", () => {
     expect(second).toEqual(first);
     expect(first.length).toBeGreaterThan(0);
   });
+
+  it("applies 002_m3_team_substrate.sql and exposes new columns", () => {
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+
+    const msgCols = (db.prepare("PRAGMA table_info(messages)").all() as { name: string }[]).map((r) => r.name);
+    expect(msgCols).toEqual(
+      expect.arrayContaining(["topic", "from_agent_id", "conversation_id"]),
+    );
+
+    const turnCols = (db.prepare("PRAGMA table_info(turns)").all() as { name: string }[]).map((r) => r.name);
+    expect(turnCols).toEqual(expect.arrayContaining(["conversation_id"]));
+
+    const applied = (db.prepare("SELECT name FROM _migrations ORDER BY name").all() as { name: string }[])
+      .map((r) => r.name);
+    expect(applied).toContain("002_m3_team_substrate.sql");
+  });
 });
