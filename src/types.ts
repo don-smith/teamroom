@@ -17,6 +17,10 @@ export interface Message {
   turnId: string | null;
   traceId: string;
   createdAt: string;
+  // M3 additions:
+  topic: string;                  // routing key within channel; '' for CLI, target-agent for DM
+  fromAgentId: string | null;     // null for CLI-originated or outbound
+  conversationId: string | null;  // null for pre-M3 rows
 }
 
 export interface Turn {
@@ -30,6 +34,7 @@ export interface Turn {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  conversationId: string | null;  // M3 addition; null for pre-M3 rows
 }
 
 export interface BusEvent {
