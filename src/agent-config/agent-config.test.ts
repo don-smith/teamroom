@@ -96,4 +96,12 @@ describe("loadAgentConfig — provider field", () => {
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
+
+  it("echoes the offending provider value in the error message", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'openai'/);
+  });
 });

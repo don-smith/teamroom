@@ -26,16 +26,29 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   }
 
   const parsed = YAML.parse(readFileSync(yamlPath, "utf8")) as Record<string, unknown>;
-  const name = parsed.name;
-  const model = parsed.model;
-  const imageTag = parsed.image_tag;
+  const name = requireString(parsed, "name");
+  const model = requireString(parsed, "model");
+  const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
-  if (typeof name !== "string") throw new Error(`agent.yaml missing 'name'`);
-  if (typeof model !== "string") throw new Error(`agent.yaml missing 'model'`);
-  if (typeof imageTag !== "string") throw new Error(`agent.yaml missing 'image_tag'`);
-  if (typeof provider !== "string" || (provider !== "anthropic" && provider !== "lm-studio")) {
-    throw new Error(`agent.yaml 'provider' must be 'anthropic' or 'lm-studio'`);
+  if (provider === undefined || provider === null) {
+    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic' or 'lm-studio')`);
+  }
+  if (provider !== "anthropic" && provider !== "lm-studio") {
+    throw new Error(
+      `agent.yaml 'provider' must be 'anthropic' or 'lm-studio' (got '${String(provider)}')`,
+    );
   }
 
   return { name, model, imageTag, provider, configPath, agentsMdPath, storePath };
+}
+
+function requireString(parsed: Record<string, unknown>, field: string): string {
+  const value = parsed[field];
+  if (value === undefined || value === null) {
+    throw new Error(`agent.yaml missing '${field}'`);
+  }
+  if (typeof value !== "string") {
+    throw new Error(`agent.yaml '${field}' must be a string (got ${typeof value}: '${String(value)}')`);
+  }
+  return value;
 }
