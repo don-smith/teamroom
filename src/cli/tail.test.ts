@@ -28,6 +28,7 @@ describe("tailRun", () => {
       id: "o-1", agentId: "studio-assistant", channel: "cli", direction: "out",
       body: "hello world", turnId: "t-1", traceId: "tr-1",
       createdAt: new Date().toISOString(),
+      topic: "", fromAgentId: null, conversationId: null,
     });
     db.close();
 

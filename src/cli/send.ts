@@ -58,6 +58,9 @@ export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
     turnId: null,
     traceId,
     createdAt: new Date().toISOString(),
+    topic: "",
+    fromAgentId: null,
+    conversationId: null,
   });
   db.close();
 

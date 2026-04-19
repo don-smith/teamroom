@@ -65,6 +65,9 @@ describe("end-to-end (stack assembled with test implementations)", () => {
       turnId: null,
       traceId: randomUUID(),
       createdAt: clock.nowIso(),
+      topic: "",
+      fromAgentId: null,
+      conversationId: null,
     });
 
     const runner = new FakeRunner((req) => {

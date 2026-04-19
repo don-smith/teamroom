@@ -21,12 +21,13 @@ function seedOrphan(
   messageRepo.create({
     id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
     body: "a", turnId: "t-1", traceId: "tr-1", createdAt: now,
+    topic: "", fromAgentId: null, conversationId: null,
   });
   const turnRepo = new TurnRepo(db);
   turnRepo.create({
     id: "t-1", agentId: "studio-assistant", inboundMessageId: "m-1", status: "running",
     containerId: "c-x", error: null, traceId: "tr-1",
-    startedAt: now, finishedAt: null, createdAt: now,
+    startedAt: now, finishedAt: null, createdAt: now, conversationId: null,
   });
   return { db, turnRepo, messageRepo, bus: new InMemoryBus(), logger: new CapturingLogger(clock) };
 }
@@ -77,13 +78,14 @@ describe("reconcile", () => {
       id: "m-aged", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "a", turnId: "t-aged", traceId: "tr-aged",
       createdAt: "2026-04-18T00:00:00.000Z",
+      topic: "", fromAgentId: null, conversationId: null,
     });
     const turnRepo = new TurnRepo(db);
     turnRepo.create({
       id: "t-aged", agentId: "studio-assistant", inboundMessageId: "m-aged",
       status: "pending", containerId: null, error: null, traceId: "tr-aged",
       startedAt: null, finishedAt: null,
-      createdAt: "2026-04-18T00:00:00.000Z",
+      createdAt: "2026-04-18T00:00:00.000Z", conversationId: null,
     });
     const bus = new InMemoryBus();
     const logger = new CapturingLogger(clock);
@@ -117,6 +119,7 @@ describe("reconcile", () => {
       id: "m-fresh", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "a", turnId: "t-fresh", traceId: "tr-fresh",
       createdAt: "2026-04-18T00:00:20.000Z",
+      topic: "", fromAgentId: null, conversationId: null,
     });
     const turnRepo = new TurnRepo(db);
     turnRepo.create({
@@ -124,6 +127,7 @@ describe("reconcile", () => {
       status: "pending", containerId: null, error: null, traceId: "tr-fresh",
       startedAt: null, finishedAt: null,
       createdAt: "2026-04-18T00:00:20.000Z", // only 10s old — under 60s threshold
+      conversationId: null,
     });
     const bus = new InMemoryBus();
     const logger = new CapturingLogger(clock);

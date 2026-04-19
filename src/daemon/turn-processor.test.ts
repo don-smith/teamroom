@@ -59,6 +59,9 @@ function setup(): {
     turnId: null,
     traceId: "trace-1",
     createdAt: clock.nowIso(),
+    topic: "",
+    fromAgentId: null,
+    conversationId: null,
   };
   messageRepo.create(inbound);
 

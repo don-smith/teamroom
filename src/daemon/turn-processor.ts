@@ -57,6 +57,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     startedAt: null,
     finishedAt: null,
     createdAt: now,
+    conversationId: null,
   });
   messageRepo.attachTurn(inbound.id, turnId);
   turnRepo.markRunning(turnId, "pending-spawn", clock.nowIso());
@@ -160,6 +161,9 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
               turnId,
               traceId: inbound.traceId,
               createdAt: clock.nowIso(),
+              topic: "",
+              fromAgentId: null,
+              conversationId: null,
             });
             replyCount += 1;
             void bus.publish({

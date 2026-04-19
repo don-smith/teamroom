@@ -51,6 +51,7 @@ describe("Orchestrator", () => {
     messageRepo.create({
       id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "ping", turnId: null, traceId: "tr-1", createdAt: clock.nowIso(),
+      topic: "", fromAgentId: null, conversationId: null,
     });
 
     let idCounter = 0;
@@ -93,10 +94,12 @@ describe("Orchestrator", () => {
     messageRepo.create({
       id: "m-1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "first", turnId: null, traceId: "tr-1", createdAt: "2026-04-18T00:00:00.000Z",
+      topic: "", fromAgentId: null, conversationId: null,
     });
     messageRepo.create({
       id: "m-2", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "second", turnId: null, traceId: "tr-2", createdAt: "2026-04-18T00:00:01.000Z",
+      topic: "", fromAgentId: null, conversationId: null,
     });
 
     let idCounter = 0;

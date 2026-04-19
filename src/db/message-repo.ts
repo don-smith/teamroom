@@ -10,6 +10,9 @@ interface MessageRow {
   turn_id: string | null;
   trace_id: string;
   created_at: string;
+  topic: string;
+  from_agent_id: string | null;
+  conversation_id: string | null;
 }
 
 function rowToMessage(row: MessageRow): Message {
@@ -22,6 +25,9 @@ function rowToMessage(row: MessageRow): Message {
     turnId: row.turn_id,
     traceId: row.trace_id,
     createdAt: row.created_at,
+    topic: row.topic,
+    fromAgentId: row.from_agent_id,
+    conversationId: row.conversation_id,
   };
 }
 
@@ -32,10 +38,14 @@ export class MessageRepo {
     this.db
       .prepare(
         `INSERT INTO messages
-           (id, agent_id, channel, direction, body, turn_id, trace_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, agent_id, channel, direction, body, turn_id, trace_id, created_at,
+            topic, from_agent_id, conversation_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(m.id, m.agentId, m.channel, m.direction, m.body, m.turnId, m.traceId, m.createdAt);
+      .run(
+        m.id, m.agentId, m.channel, m.direction, m.body, m.turnId, m.traceId, m.createdAt,
+        m.topic, m.fromAgentId, m.conversationId,
+      );
   }
 
   findById(id: string): Message | null {
