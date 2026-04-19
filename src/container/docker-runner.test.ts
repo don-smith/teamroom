@@ -48,4 +48,21 @@ describe("parseEvent", () => {
     const evt = parseEvent("not json");
     expect(evt).toEqual({ type: "unknown", raw: "not json" });
   });
+
+  it("parses a {type:'dm'} stdout line into a ContainerStdoutEvent", () => {
+    const line = JSON.stringify({ type: "dm", to: "studio-assistant", body: "hello" });
+    const evt = parseEvent(line);
+    expect(evt).toEqual({ type: "dm", to: "studio-assistant", body: "hello" });
+  });
+
+  it("rejects malformed dm lines (missing to or body) as unknown", () => {
+    const missingTo = JSON.stringify({ type: "dm", body: "no target" });
+    expect(parseEvent(missingTo).type).toBe("unknown");
+
+    const missingBody = JSON.stringify({ type: "dm", to: "x" });
+    expect(parseEvent(missingBody).type).toBe("unknown");
+
+    const wrongType = JSON.stringify({ type: "dm", to: 42, body: "x" });
+    expect(parseEvent(wrongType).type).toBe("unknown");
+  });
 });
