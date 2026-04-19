@@ -9,6 +9,7 @@ import { FakeRunner } from "../container/fake-runner.js";
 import { ControllableClock } from "../clock/clock.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { Orchestrator } from "./orchestrator.js";
+import { AgentSubscriptionIndex } from "./subscriptions.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 import type { ModelProxy, MintTokenInput } from "../model-proxy/model-proxy.js";
 
@@ -63,6 +64,7 @@ describe("Orchestrator", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -111,6 +113,7 @@ describe("Orchestrator", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
@@ -138,6 +141,7 @@ describe("Orchestrator", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => "x",

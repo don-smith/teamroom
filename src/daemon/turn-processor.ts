@@ -7,6 +7,7 @@ import type { Logger } from "../logger/logger.js";
 import type { MessageRepo } from "../db/message-repo.js";
 import type { TurnRepo } from "../db/turn-repo.js";
 import type { ModelProxy } from "../model-proxy/model-proxy.js";
+import type { SubscriptionIndex } from "./subscriptions.js";
 import type { Message } from "../types.js";
 
 export interface ProcessTurnDeps {
@@ -23,6 +24,7 @@ export interface ProcessTurnDeps {
   /** True when an Anthropic adapter is configured. Turns whose agent declares
    *  `provider: anthropic` are refused with `missing_credential` when false. */
   anthropicAdapterPresent: boolean;
+  subscriptionIndex: SubscriptionIndex;
   timeoutMs: number;
   genId: () => string;
 }
@@ -30,8 +32,9 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    modelProxy, modelBaseUrl, anthropicAdapterPresent, timeoutMs, genId,
+    modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs, genId,
   } = deps;
+  void subscriptionIndex;
 
   const turnId = genId();
   const now = clock.nowIso();

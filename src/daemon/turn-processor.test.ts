@@ -9,6 +9,7 @@ import { FakeRunner } from "../container/fake-runner.js";
 import { ControllableClock } from "../clock/clock.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { processTurn } from "./turn-processor.js";
+import { AgentSubscriptionIndex } from "./subscriptions.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 import type { BusEvent, Message } from "../types.js";
 import type { ModelProxy, MintTokenInput } from "../model-proxy/model-proxy.js";
@@ -109,6 +110,7 @@ describe("processTurn", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -155,6 +157,7 @@ describe("processTurn", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: () => "generated-id",
     });
@@ -186,6 +189,7 @@ describe("processTurn", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 100,
       genId: () => "generated-id",
     });
@@ -217,6 +221,7 @@ describe("processTurn", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: () => "generated-id",
     });
@@ -251,6 +256,7 @@ describe("processTurn", () => {
       modelProxy: new StubModelProxy(),
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -289,6 +295,7 @@ describe("processTurn", () => {
       modelProxy: proxy,
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -330,6 +337,7 @@ describe("processTurn", () => {
       modelProxy: proxy,
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
@@ -362,6 +370,7 @@ describe("processTurn", () => {
       modelProxy: proxy,
       modelBaseUrl: "http://localhost:1234/v1",
       anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });

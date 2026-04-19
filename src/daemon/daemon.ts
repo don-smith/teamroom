@@ -14,6 +14,7 @@ import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.
 import { installSafetyNets } from "./safety-nets.js";
 import { reconcile } from "./reconcile.js";
 import { Orchestrator } from "./orchestrator.js";
+import { AgentSubscriptionIndex, type SubscriptionIndex } from "./subscriptions.js";
 import { LocalModelProxy } from "../model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../model-proxy/token-registry.js";
 import type { ProviderAdapter } from "../model-proxy/adapters/adapter.js";
@@ -47,6 +48,7 @@ export interface StartedDaemon {
   db: Db;
   stop: () => Promise<void>;
   orchestrator: Orchestrator;
+  subscriptionIndex: SubscriptionIndex;
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
@@ -91,6 +93,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     }
   }
 
+  const subscriptionIndex: SubscriptionIndex = new AgentSubscriptionIndex(agentConfigs);
+  const totalSubs = [...agentConfigs.values()].reduce((n, c) => n + c.subscriptions.length, 0);
+  rootLogger.info("subscription index built", { agents: agentConfigs.size, entries: totalSubs });
+
   // --- Build the model proxy ---
   const registry = new TokenRegistry();
   const adapters: Partial<Record<Provider, ProviderAdapter>> = {
@@ -126,6 +132,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     modelProxy,
     modelBaseUrl,
     anthropicAdapterPresent,
+    subscriptionIndex,
     turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
@@ -148,7 +155,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
   };
 
-  return { db, stop, orchestrator };
+  return { db, stop, orchestrator, subscriptionIndex };
 }
 
 function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
