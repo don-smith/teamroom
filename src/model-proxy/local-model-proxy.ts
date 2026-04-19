@@ -1,5 +1,6 @@
 import {
   createServer,
+  type ClientRequest,
   type Server,
   type IncomingMessage,
   type ServerResponse,
@@ -45,6 +46,31 @@ function emit(
   span: SpanLog,
 ): void {
   logger[level](span.event, span);
+}
+
+/**
+ * Per-request mutable state shared between `handle()` and `forward()`. Lets the
+ * `req.on("close")` listener signal client-disconnect into the forward path
+ * (which may still be mid-upstream-call), and lets `forward()` register the
+ * in-flight upstream ClientRequest so the listener can destroy it cleanly.
+ */
+interface RequestState {
+  clientGone: boolean;
+  upstreamReq: ClientRequest | null;
+}
+
+/**
+ * Write a response if and only if we haven't already finalised one for this
+ * request. Double-respond protection: after a client-disconnect mid-flight or
+ * after any earlier writeHead/end, further writes would throw or be silently
+ * dropped. Making the check explicit keeps error paths safe.
+ */
+function safeRespond(res: ServerResponse, status: number, body: string): void {
+  if (res.writableEnded) return;
+  if (!res.headersSent) {
+    res.writeHead(status, { "content-type": "application/json" });
+  }
+  res.end(body);
 }
 
 export class LocalModelProxy implements ModelProxy {
@@ -115,6 +141,25 @@ export class LocalModelProxy implements ModelProxy {
     const spanId = newSpanId();
     const startedAt = Date.now();
 
+    // Track client-disconnect so `forward()` can branch to a
+    // `client_disconnected` span instead of trying to write a response to a
+    // socket that's already gone. We listen on `res.on("close")` rather than
+    // `req.on("close")` because the request's close event fires on *normal*
+    // body-end too (once the request stream is fully consumed), which would
+    // misfire on every happy path. The response's close event only fires
+    // when the connection terminates; `writableFinished` distinguishes
+    // "fully flushed to socket" (normal) from "client gave up" (abort).
+    const state: RequestState = { clientGone: false, upstreamReq: null };
+    res.on("close", () => {
+      if (res.writableFinished) return;
+      state.clientGone = true;
+      // Abort the in-flight upstream call, if any — no point finishing a
+      // request whose response will be discarded.
+      if (state.upstreamReq) {
+        state.upstreamReq.destroy(new Error("client_disconnected"));
+      }
+    });
+
     // The Anthropic SDK sends the routing token as `x-api-key`; the OpenAI SDK
     // sends it as `Authorization: Bearer <token>`. Accept either so both
     // container-side SDKs work without per-SDK proxy plumbing.
@@ -136,8 +181,7 @@ export class LocalModelProxy implements ModelProxy {
         spanId,
         extra: { errorClass: "missing_token", status: "rejected" },
       }));
-      res.writeHead(401, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "missing routing token" }));
+      safeRespond(res, 401, JSON.stringify({ error: "missing routing token" }));
       return;
     }
 
@@ -153,8 +197,7 @@ export class LocalModelProxy implements ModelProxy {
           tokenPrefix: token.slice(0, 8),
         },
       }));
-      res.writeHead(401, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "unknown routing token" }));
+      safeRespond(res, 401, JSON.stringify({ error: "unknown routing token" }));
       return;
     }
 
@@ -168,8 +211,7 @@ export class LocalModelProxy implements ModelProxy {
         turnId: entry.turnId,
         extra: { errorClass: "no_adapter", provider: entry.provider, status: "rejected" },
       }));
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "no adapter for provider" }));
+      safeRespond(res, 500, JSON.stringify({ error: "no adapter for provider" }));
       return;
     }
 
@@ -185,6 +227,7 @@ export class LocalModelProxy implements ModelProxy {
       spanId,
       startedAt,
       retried: false,
+      state,
     });
   }
 
@@ -197,8 +240,9 @@ export class LocalModelProxy implements ModelProxy {
     spanId: string;
     startedAt: number;
     retried: boolean;
+    state: RequestState;
   }): Promise<void> {
-    const { req, res, requestBody, entry, adapter, spanId, startedAt, retried } = args;
+    const { req, res, requestBody, entry, adapter, spanId, startedAt, retried, state } = args;
 
     const upstreamUrl = new URL(adapter.upstreamUrl());
     // Build outgoing headers: copy through except hop-by-hop and host.
@@ -232,8 +276,7 @@ export class LocalModelProxy implements ModelProxy {
       // 502 Bad Gateway: resolveAuth() failure means we couldn't reach (or
       // couldn't satisfy) an upstream auth dependency (e.g., the OAuth
       // exchange endpoint). 500 misattributed the fault to the proxy itself.
-      res.writeHead(502, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "auth resolution failed" }));
+      safeRespond(res, 502, JSON.stringify({ error: "auth resolution failed" }));
       return;
     }
 
@@ -270,6 +313,9 @@ export class LocalModelProxy implements ModelProxy {
           upstreamRes.on("error", reject);
         },
       );
+      // Share the upstream request so the `req.on("close")` listener can
+      // destroy it if the client disconnects mid-flight.
+      state.upstreamReq = upstreamReq;
       upstreamReq.setTimeout(this.opts.upstreamTimeoutMs, () => {
         upstreamReq.destroy(new Error("upstream_timeout"));
       });
@@ -282,6 +328,25 @@ export class LocalModelProxy implements ModelProxy {
     try {
       upstreamResp = await upstreamPromise;
     } catch (err) {
+      // If the error is a result of the client disconnecting, that's its own
+      // terminal status — not an upstream error. The response is already
+      // un-sendable, so just emit the span and return.
+      if (state.clientGone) {
+        emit(this.opts.logger, "warn", buildSpan({
+          event: "model.call.completed",
+          traceId: entry.traceId,
+          spanId,
+          agentId: entry.agentId,
+          turnId: entry.turnId,
+          extra: {
+            provider: entry.provider,
+            model: entry.model,
+            status: "client_disconnected",
+            latencyMs: Date.now() - startedAt,
+          },
+        }));
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       const isTimeout = message === "upstream_timeout";
       const errCode =
@@ -305,10 +370,28 @@ export class LocalModelProxy implements ModelProxy {
         },
       }));
       const status = isTimeout ? 504 : 502;
-      if (!res.headersSent) {
-        res.writeHead(status, { "content-type": "application/json" });
-      }
-      res.end(JSON.stringify({ error: isTimeout ? "upstream_timeout" : "upstream_error" }));
+      safeRespond(res, status, JSON.stringify({ error: isTimeout ? "upstream_timeout" : "upstream_error" }));
+      return;
+    }
+
+    // Upstream completed successfully but the client went away before we got
+    // here (race: upstream resolved between req-close and now). Discard the
+    // response, emit a client_disconnected span, do not write to the socket.
+    if (state.clientGone) {
+      emit(this.opts.logger, "warn", buildSpan({
+        event: "model.call.completed",
+        traceId: entry.traceId,
+        spanId,
+        agentId: entry.agentId,
+        turnId: entry.turnId,
+        extra: {
+          provider: entry.provider,
+          model: entry.model,
+          status: "client_disconnected",
+          httpStatus: upstreamResp.status,
+          latencyMs: Date.now() - startedAt,
+        },
+      }));
       return;
     }
 
@@ -368,7 +451,10 @@ export class LocalModelProxy implements ModelProxy {
       },
     }));
 
-    // Pass response headers through, stripping hop-by-hop.
+    // Pass response headers through, stripping hop-by-hop. `writableEnded` is
+    // the double-respond guard — if the client's socket was finalised already
+    // (e.g., by a concurrent error path or a late disconnect), do nothing.
+    if (res.writableEnded) return;
     const responseHeaders: OutgoingHttpHeaders = {};
     for (const [name, value] of Object.entries(upstreamResp.headers)) {
       const lower = name.toLowerCase();

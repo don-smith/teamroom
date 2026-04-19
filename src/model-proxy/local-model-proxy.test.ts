@@ -282,4 +282,62 @@ describe("LocalModelProxy", () => {
     await proxy.stop();
     await upstream.close();
   });
+
+  it("client disconnect mid-upstream → client_disconnected span, no client response", async () => {
+    // Upstream hangs for 2s to give us a window to abort the client request.
+    const upstream = await startFakeUpstream(async () => {
+      await new Promise((r) => setTimeout(r, 2000));
+      return { status: 200, body: "{}" };
+    });
+    const registry = new TokenRegistry();
+    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const proxy = new LocalModelProxy({
+      registry,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      logger,
+    });
+    const { port } = await proxy.start();
+    const tok = registry.mint({
+      agentId: "a",
+      turnId: "t",
+      traceId: "tr",
+      provider: "lm-studio",
+      model: "x",
+    });
+
+    // Fire a request, then destroy it before the upstream returns.
+    const body = "{}";
+    await new Promise<void>((resolve) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/v1/chat/completions",
+          method: "POST",
+          headers: { "content-length": Buffer.byteLength(body), authorization: `Bearer ${tok}` },
+        },
+        () => {
+          // If we get here the proxy responded before we aborted — unexpected.
+          resolve();
+        },
+      );
+      req.on("error", () => resolve()); // expected: ECONNRESET / aborted
+      req.write(body);
+      req.end();
+      // Give the proxy a moment to start forwarding, then abort.
+      setTimeout(() => req.destroy(new Error("test_abort")), 100);
+    });
+
+    // Let the server's close listener + span emission settle.
+    await new Promise((r) => setTimeout(r, 50));
+    const disconnectSpan = logger.entries.find(
+      (e) => e.event === "model.call.completed" && e.status === "client_disconnected",
+    );
+    expect(disconnectSpan).toBeDefined();
+    expect(disconnectSpan).toMatchObject({ provider: "lm-studio", status: "client_disconnected" });
+
+    await proxy.stop();
+    await upstream.close();
+  });
 });
