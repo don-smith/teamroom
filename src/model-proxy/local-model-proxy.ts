@@ -12,7 +12,7 @@ import type { Logger } from "../logger/logger.js";
 import type { Provider } from "../types.js";
 import type { ProviderAdapter } from "./adapters/adapter.js";
 import { TokenRegistry, type TokenEntry } from "./token-registry.js";
-import { newSpanId, buildSpan } from "./span.js";
+import { newSpanId, buildSpan, type SpanLog } from "./span.js";
 import type { MintTokenInput, ModelProxy } from "./model-proxy.js";
 
 const HOP_BY_HOP = new Set([
@@ -36,15 +36,15 @@ interface Opts {
 
 /**
  * Emit a span-shaped log entry. The event name is also passed as the log msg
- * so consumers can locate spans by either `entry.msg` or `entry.event`.
+ * so consumers can locate spans by either `entry.msg` or `entry.event` — both
+ * carry the same canonical value (e.g. "model.call.completed").
  */
 function emit(
   logger: Logger,
   level: "info" | "warn" | "error",
-  span: Record<string, unknown>,
+  span: SpanLog,
 ): void {
-  const msg = String(span.event ?? "");
-  logger[level](msg, span);
+  logger[level](span.event, span);
 }
 
 export class LocalModelProxy implements ModelProxy {
@@ -76,12 +76,16 @@ export class LocalModelProxy implements ModelProxy {
         } catch {
           // ignore
         }
-        emit(this.opts.logger, "error", {
+        emit(this.opts.logger, "error", buildSpan({
           event: "model.call.completed",
-          status: "upstream_error",
-          errorClass: "internal_error",
-          message: err instanceof Error ? err.message : String(err),
-        });
+          traceId: newSpanId(),
+          spanId: newSpanId(),
+          extra: {
+            status: "upstream_error",
+            errorClass: "internal_error",
+            message: err instanceof Error ? err.message : String(err),
+          },
+        }));
       });
     });
     await new Promise<void>((resolve) => server.listen(0, this.opts.host, () => resolve()));
