@@ -283,6 +283,44 @@ describe("LocalModelProxy", () => {
     await upstream.close();
   });
 
+  it("rejects oversized request bodies with 413 + payload_too_large span", async () => {
+    const upstream = await startFakeUpstream(() => ({ status: 200, body: "{}" }));
+    const registry = new TokenRegistry();
+    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const proxy = new LocalModelProxy({
+      registry,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      logger,
+      maxBodyBytes: 128, // tiny cap so we don't have to allocate megabytes
+    });
+    const { port } = await proxy.start();
+    const tok = registry.mint({
+      agentId: "a",
+      turnId: "t",
+      traceId: "tr",
+      provider: "lm-studio",
+      model: "x",
+    });
+
+    const oversized = "x".repeat(1024); // 1 KiB body, cap is 128 B
+    const resp = await postToProxy(
+      port,
+      "/v1/chat/completions",
+      { authorization: `Bearer ${tok}` },
+      oversized,
+    );
+
+    expect(resp.status).toBe(413);
+    const span = logger.entries.find(
+      (e) => e.event === "model.call.rejected" && e.errorClass === "payload_too_large",
+    );
+    expect(span).toBeDefined();
+    expect(upstream.recorded.length).toBe(0); // never forwarded
+    await proxy.stop();
+    await upstream.close();
+  });
+
   it("client disconnect mid-upstream → client_disconnected span, no client response", async () => {
     // Upstream hangs for 2s to give us a window to abort the client request.
     const upstream = await startFakeUpstream(async () => {

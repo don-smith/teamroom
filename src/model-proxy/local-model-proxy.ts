@@ -33,6 +33,23 @@ interface Opts {
   logger: Logger;
   upstreamTimeoutMs?: number; // default 60_000
   host?: string; // default "127.0.0.1"
+  /**
+   * Reject incoming request bodies larger than this many bytes. Default 10 MB
+   * — leaves plenty of room for Anthropic calls with large system prompts,
+   * tool schemas, and conversation history, while bounding the memory one
+   * misbehaving client can consume. Rejected calls return 413 and emit a
+   * `model.call.rejected` span with `errorClass:"payload_too_large"`.
+   */
+  maxBodyBytes?: number;
+}
+
+const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("payload_too_large");
+    this.name = "PayloadTooLargeError";
+  }
 }
 
 /**
@@ -74,8 +91,8 @@ function safeRespond(res: ServerResponse, status: number, body: string): void {
 }
 
 export class LocalModelProxy implements ModelProxy {
-  private readonly opts: Required<Pick<Opts, "upstreamTimeoutMs" | "host">> &
-    Omit<Opts, "upstreamTimeoutMs" | "host">;
+  private readonly opts: Required<Pick<Opts, "upstreamTimeoutMs" | "host" | "maxBodyBytes">> &
+    Omit<Opts, "upstreamTimeoutMs" | "host" | "maxBodyBytes">;
   private server: Server | null = null;
   private port: number | null = null;
 
@@ -84,6 +101,7 @@ export class LocalModelProxy implements ModelProxy {
       ...opts,
       upstreamTimeoutMs: opts.upstreamTimeoutMs ?? 60_000,
       host: opts.host ?? "127.0.0.1",
+      maxBodyBytes: opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
     };
   }
 
@@ -215,8 +233,31 @@ export class LocalModelProxy implements ModelProxy {
       return;
     }
 
-    // Buffer the request body so we can replay on retry.
-    const requestBody = await readBody(req);
+    // Buffer the request body so we can replay on retry. Capped at
+    // `maxBodyBytes` to bound per-request memory.
+    let requestBody: Buffer;
+    try {
+      requestBody = await readBody(req, this.opts.maxBodyBytes);
+    } catch (err) {
+      if (err instanceof PayloadTooLargeError) {
+        emit(this.opts.logger, "warn", buildSpan({
+          event: "model.call.rejected",
+          traceId: entry.traceId,
+          spanId,
+          agentId: entry.agentId,
+          turnId: entry.turnId,
+          extra: {
+            provider: entry.provider,
+            status: "rejected",
+            errorClass: "payload_too_large",
+            maxBodyBytes: this.opts.maxBodyBytes,
+          },
+        }));
+        safeRespond(res, 413, JSON.stringify({ error: "payload too large" }));
+        return;
+      }
+      throw err;
+    }
 
     await this.forward({
       req,
@@ -467,10 +508,26 @@ export class LocalModelProxy implements ModelProxy {
   }
 }
 
-function readBody(req: IncomingMessage): Promise<Buffer> {
+function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let total = 0;
+    const onData = (c: Buffer) => {
+      total += c.length;
+      if (total > maxBytes) {
+        // Stop buffering, but drain any remaining bytes so the client can
+        // finish sending (and we can still return a 413 response on the
+        // same connection). Calling req.destroy() here would sever the
+        // socket before the response goes out — the client would see a
+        // hang-up instead of the error.
+        req.removeListener("data", onData);
+        req.resume();
+        reject(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(c);
+    };
+    req.on("data", onData);
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
