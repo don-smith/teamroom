@@ -141,6 +141,8 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       messageId: inbound.id,
       turnId,
       traceId: inbound.traceId,
+      channel: inbound.channel,
+      from: inbound.fromAgentId ?? "cli",
     });
 
     let replyCount = 0;

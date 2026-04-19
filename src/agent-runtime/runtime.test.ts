@@ -78,6 +78,86 @@ describe("runTurn", () => {
     ]);
   });
 
+  it("prepends '[dm from X]\\n\\n' to the user prompt when envelope.channel === 'dm'", async () => {
+    let capturedMessages: unknown[] = [];
+    const client: LlmClient = {
+      async createMessage({ messages }) {
+        capturedMessages = messages;
+        return { text: "response" };
+      },
+    };
+    await runTurn({
+      envelope: {
+        prompt: "what day is it?",
+        messageId: "m-dm",
+        turnId: "t-dm",
+        traceId: "tr-dm",
+        channel: "dm",
+        from: "studio-assistant",
+      },
+      client,
+      model: "m",
+      agentsMdPath: agentsMd,
+      conversationPath: convFile,
+      emit: () => {},
+    });
+    const userMsg = (capturedMessages as Array<{ role: string; content: string }>).find(
+      (m) => m.role === "user",
+    );
+    expect(userMsg?.content).toBe("[dm from studio-assistant]\n\nwhat day is it?");
+  });
+
+  it("does NOT prepend anything when envelope.channel === 'cli'", async () => {
+    let capturedMessages: unknown[] = [];
+    const client: LlmClient = {
+      async createMessage({ messages }) {
+        capturedMessages = messages;
+        return { text: "response" };
+      },
+    };
+    await runTurn({
+      envelope: {
+        prompt: "hello cli",
+        messageId: "m-cli",
+        turnId: "t-cli",
+        traceId: "tr-cli",
+        channel: "cli",
+        from: "cli",
+      },
+      client,
+      model: "m",
+      agentsMdPath: agentsMd,
+      conversationPath: convFile,
+      emit: () => {},
+    });
+    const userMsg = (capturedMessages as Array<{ role: string; content: string }>).find(
+      (m) => m.role === "user",
+    );
+    expect(userMsg?.content).toBe("hello cli");
+  });
+
+  it("does NOT prepend anything when envelope.channel is undefined (backwards-compat)", async () => {
+    let capturedMessages: unknown[] = [];
+    const client: LlmClient = {
+      async createMessage({ messages }) {
+        capturedMessages = messages;
+        return { text: "response" };
+      },
+    };
+    await runTurn({
+      envelope: { prompt: "no channel", messageId: "m-nc", turnId: "t-nc", traceId: "tr-nc" },
+      client,
+      model: "m",
+      agentsMdPath: agentsMd,
+      conversationPath: convFile,
+      emit: () => {},
+    });
+    const userMsg = (capturedMessages as Array<{ role: string; content: string }>).find(
+      (m) => m.role === "user",
+    );
+    expect(userMsg?.content).toBe("no channel");
+  });
+
   it("uses a default system prompt if AGENTS.md is missing", async () => {
     rmSync(agentsMd);
     let captured = "";

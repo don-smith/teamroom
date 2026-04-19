@@ -6,6 +6,8 @@ export interface Envelope {
   messageId: string;
   turnId: string;
   traceId: string;
+  channel?: string;
+  from?: string | null;
 }
 
 export interface LlmCreateArgs {
@@ -40,7 +42,10 @@ export async function runTurn(deps: RunTurnDeps): Promise<void> {
     : DEFAULT_SYSTEM_PROMPT;
 
   const prior = loadConversation(deps.conversationPath);
-  const userMessage: ConversationMessage = { role: "user", content: deps.envelope.prompt };
+  const userBody = deps.envelope.channel === "dm" && deps.envelope.from
+    ? `[dm from ${deps.envelope.from}]\n\n${deps.envelope.prompt}`
+    : deps.envelope.prompt;
+  const userMessage: ConversationMessage = { role: "user", content: userBody };
   const messages = [...prior, userMessage];
 
   appendMessage(deps.conversationPath, userMessage);
