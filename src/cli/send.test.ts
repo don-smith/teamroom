@@ -48,4 +48,15 @@ describe("sendToDb", () => {
     rmSync(join(dir, "agents"), { recursive: true });
     await expect(sendToDb({ repoRoot: dir, body: "x" })).rejects.toThrow(/no agent/);
   });
+
+  it("generates a non-null conversationId per CLI send", async () => {
+    const result = await sendToDb({ repoRoot: dir, body: "hi" });
+    expect(result.conversationId).toBeTruthy();
+    expect(result.conversationId).toMatch(/^[0-9a-f-]{36}$/);
+
+    const db = createDatabase(join(dir, "data", "teamroom.db"));
+    runMigrations(db);
+    const msg = new MessageRepo(db).findById(result.messageId);
+    expect(msg?.conversationId).toBe(result.conversationId);
+  });
 });

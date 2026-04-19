@@ -12,6 +12,7 @@ export interface SendToDbResult {
   messageId: string;
   agentName: string;
   daemonRunning: boolean;
+  conversationId: string;
 }
 
 export interface SendToDbOpts {
@@ -49,6 +50,7 @@ export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
   }
   const messageId = randomUUID();
   const traceId = randomUUID();
+  const conversationId = randomUUID();
   new MessageRepo(db).create({
     id: messageId,
     agentId: cfg.name,
@@ -60,13 +62,13 @@ export async function sendToDb(opts: SendToDbOpts): Promise<SendToDbResult> {
     createdAt: new Date().toISOString(),
     topic: "",
     fromAgentId: null,
-    conversationId: null,
+    conversationId,
   });
   db.close();
 
   const daemonRunning = existsSync(join(dataDir, "teamroom.pid"));
 
-  return { traceId, messageId, agentName: cfg.name, daemonRunning };
+  return { traceId, messageId, agentName: cfg.name, daemonRunning, conversationId };
 }
 
 export async function send(body: string, agentName?: string): Promise<void> {
