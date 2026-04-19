@@ -2,3 +2,5 @@ name: claude-assistant
 provider: anthropic
 model: claude-opus-4-7
 image_tag: teamroom-agent-claude-assistant:latest
+subscriptions:
+  - claude-assistant
