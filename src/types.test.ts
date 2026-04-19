@@ -18,6 +18,9 @@ describe("shared types", () => {
       turnId: null,
       traceId: "trace-1",
       createdAt: "2026-04-18T00:00:00.000Z",
+      topic: "",
+      fromAgentId: null,
+      conversationId: null,
     };
 
     const turn: Turn = {
@@ -31,6 +34,7 @@ describe("shared types", () => {
       startedAt: null,
       finishedAt: null,
       createdAt: "2026-04-18T00:00:00.000Z",
+      conversationId: null,
     };
 
     const event: BusEvent = {

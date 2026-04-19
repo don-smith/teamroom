@@ -113,6 +113,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -161,6 +162,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: () => "generated-id",
     });
 
@@ -194,6 +196,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 100,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: () => "generated-id",
     });
     const reread = s.messageRepo.findById("m-1");
@@ -227,6 +230,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: () => "generated-id",
     });
     const outbound = s.messageRepo.findOutboundAfter(null);
@@ -263,6 +267,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -303,6 +308,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -346,6 +352,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
     expect(proxy.mintCalls).toHaveLength(1);
@@ -380,6 +387,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -458,6 +466,7 @@ describe("processTurn", () => {
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -529,6 +538,7 @@ describe("processTurn", () => {
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -597,6 +607,7 @@ describe("processTurn", () => {
       subscriptionIndex: subIndex,
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -655,6 +666,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -708,6 +720,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -748,6 +761,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -810,6 +824,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -879,6 +894,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 
@@ -991,6 +1007,7 @@ describe("processTurn", () => {
       subscriptionIndex: new AgentSubscriptionIndex(new Map()),
       timeoutMs: 5000,
       maxTurnsPerConversation: 10,
+      codebasePath: null,
       genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
     });
 

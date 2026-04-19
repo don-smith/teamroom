@@ -160,7 +160,7 @@ describe("codebase-mount (DockerRunSpec includes /codebase when configured)", ()
     await orch.tickOnce();
 
     expect(capturedSpecs).toHaveLength(1);
-    const spec = capturedSpecs[0];
+    const spec = capturedSpecs[0]!;
     const codebaseMount = spec.mounts.find((m) => m.containerPath === "/codebase");
     expect(codebaseMount).toBeDefined();
     expect(codebaseMount!.hostPath).toBe(codebasePath);
@@ -226,7 +226,7 @@ describe("codebase-mount (DockerRunSpec includes /codebase when configured)", ()
     await orch.tickOnce();
 
     expect(capturedSpecs).toHaveLength(1);
-    const spec = capturedSpecs[0];
+    const spec = capturedSpecs[0]!;
     const codebaseMount = spec.mounts.find((m) => m.containerPath === "/codebase");
     expect(codebaseMount).toBeUndefined();
 

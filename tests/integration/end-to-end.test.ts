@@ -8,6 +8,7 @@ import { AgentRepo } from "../../src/db/agent-repo.js";
 import { MessageRepo } from "../../src/db/message-repo.js";
 import { TurnRepo } from "../../src/db/turn-repo.js";
 import { InMemoryBus } from "../../src/bus/in-memory-bus.js";
+import { AgentSubscriptionIndex } from "../../src/daemon/subscriptions.js";
 import { FakeRunner } from "../../src/container/fake-runner.js";
 import { SystemClock } from "../../src/clock/clock.js";
 import { CapturingLogger } from "../../src/logger/logger.js";
@@ -88,6 +89,9 @@ describe("end-to-end (stack assembled with test implementations)", () => {
       turnTimeoutMs: 5000,
       pollIntervalMs: 50,
       genId: () => randomUUID(),
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      maxTurnsPerConversation: 0,
+      codebasePath: null,
     });
 
     await orch.tickOnce();

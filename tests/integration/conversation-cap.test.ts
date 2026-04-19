@@ -129,7 +129,8 @@ describe("conversation-cap (ping-pong loop halted at limit)", () => {
     );
     expect(limitReachedEntries.length).toBeGreaterThanOrEqual(1);
     const entry = limitReachedEntries[0];
-    expect(entry.conversationId).toBe("c-main");
-    expect(entry.limit).toBe(5);
+    expect(entry).toBeDefined();
+    expect(entry?.conversationId).toBe("c-main");
+    expect(entry?.limit).toBe(5);
   });
 });
