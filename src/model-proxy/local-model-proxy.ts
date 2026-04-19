@@ -229,7 +229,10 @@ export class LocalModelProxy implements ModelProxy {
           message: err instanceof Error ? err.message : String(err),
         },
       }));
-      res.writeHead(500, { "content-type": "application/json" });
+      // 502 Bad Gateway: resolveAuth() failure means we couldn't reach (or
+      // couldn't satisfy) an upstream auth dependency (e.g., the OAuth
+      // exchange endpoint). 500 misattributed the fault to the proxy itself.
+      res.writeHead(502, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "auth resolution failed" }));
       return;
     }
