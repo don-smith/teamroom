@@ -31,7 +31,18 @@ interface Opts {
   registry: TokenRegistry;
   adapters: Record<Provider, ProviderAdapter>;
   logger: Logger;
-  upstreamTimeoutMs?: number; // default 60_000
+  /**
+   * Idle timeout for the outbound upstream socket, in milliseconds. Default
+   * 60_000. Semantics: this is Node's `ClientRequest.setTimeout`, which resets
+   * every time bytes flow — it is NOT a wall-clock deadline. For M2's
+   * non-streaming workload (Anthropic and LM Studio both return the whole
+   * response in one chunk at the end) the effect is "time from request-sent
+   * to response-received," which is what we want. If/when streaming upstream
+   * transports arrive (M3+), a slow-drip server could keep the socket alive
+   * indefinitely under this setting — at that point we'll want a separate
+   * wall-clock deadline (tracked in docs/m3-followups.md).
+   */
+  upstreamTimeoutMs?: number;
   host?: string; // default "127.0.0.1"
   /**
    * Reject incoming request bodies larger than this many bytes. Default 10 MB

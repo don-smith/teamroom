@@ -19,6 +19,7 @@ M2 keeps the agent-runtime non-streaming (matches M1). Three coupled refactors h
 - **SSE pipe + usage parsing.** Anthropic's native streaming is SSE; the proxy will need a true SSE pipe and to parse usage from the terminal `message_stop` event.
 - **`LocalModelProxy` refactor seam.** The proxy currently buffers `upstreamChunks: Buffer[]` fully before responding (required for `extractUsage`). Streaming requires a different shape — this is the refactor seam when it lands.
 - **Container ↔ proxy transport.** Currently plain HTTP/1.1 keep-alive. May need re-evaluation when streaming arrives: SSE (matches Anthropic upstream), HTTP/2 (multiplexing), WebSockets (probably overkill for this shape), tRPC (different abstraction layer). Defer the comparison until streaming forces the question.
+- **Wall-clock deadline alongside idle timeout.** `upstreamTimeoutMs` is Node's `ClientRequest.setTimeout` — idle/inactivity-based, not wall-clock. Non-streaming M2 workloads return the whole body in one chunk so the effective behaviour matches a wall-clock. Once streaming lands, a slow-drip upstream can keep the socket alive indefinitely — at that point add a separate `deadlineMs` option enforced with `setTimeout(() => upstreamReq.destroy(...), deadlineMs)` on start. Don't add it now: it would prematurely kill legitimate long non-streaming completions and has no defensive value until streaming exists.
 
 **Trigger:** an agent surface needs realtime streaming (long completions, voice, etc.).
 
