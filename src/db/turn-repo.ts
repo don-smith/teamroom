@@ -12,6 +12,7 @@ interface TurnRow {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  conversation_id: string | null;
 }
 
 function rowToTurn(row: TurnRow): Turn {
@@ -26,6 +27,7 @@ function rowToTurn(row: TurnRow): Turn {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     createdAt: row.created_at,
+    conversationId: row.conversation_id,
   };
 }
 
@@ -37,12 +39,12 @@ export class TurnRepo {
       .prepare(
         `INSERT INTO turns
            (id, agent_id, inbound_message_id, status, container_id, error, trace_id,
-            started_at, finished_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            started_at, finished_at, created_at, conversation_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         t.id, t.agentId, t.inboundMessageId, t.status, t.containerId, t.error, t.traceId,
-        t.startedAt, t.finishedAt, t.createdAt,
+        t.startedAt, t.finishedAt, t.createdAt, t.conversationId,
       );
   }
 
@@ -101,5 +103,12 @@ export class TurnRepo {
       .prepare(`SELECT * FROM turns WHERE status='done' ORDER BY finished_at DESC LIMIT 1`)
       .get() as TurnRow | undefined;
     return row ? rowToTurn(row) : null;
+  }
+
+  countByConversationId(conversationId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS c FROM turns WHERE conversation_id = ?`)
+      .get(conversationId) as { c: number };
+    return row.c;
   }
 }
