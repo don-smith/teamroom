@@ -885,6 +885,72 @@ describe("processTurn", () => {
     expect(runnerCalled).toBe(true);
   });
 
+  it("adds a /codebase mount (rw) to the DockerRunSpec when codebasePath is set", async () => {
+    const s = setup();
+    let capturedSpec: import("../container/docker-command.js").DockerRunSpec | undefined;
+    const runner = new FakeRunner((req) => {
+      capturedSpec = req.spec;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+      codebasePath: "/host/codebase",
+    });
+
+    expect(capturedSpec).toBeDefined();
+    expect(capturedSpec!.mounts).toContainEqual(
+      { hostPath: "/host/codebase", containerPath: "/codebase", readOnly: false },
+    );
+  });
+
+  it("omits the /codebase mount when codebasePath is null", async () => {
+    const s = setup();
+    let capturedSpec: import("../container/docker-command.js").DockerRunSpec | undefined;
+    const runner = new FakeRunner((req) => {
+      capturedSpec = req.spec;
+      return { events: [], exitCode: 0, stderr: "" };
+    });
+
+    await processTurn({
+      inbound: s.inbound,
+      agentConfig: s.agentConfig,
+      messageRepo: s.messageRepo,
+      turnRepo: s.turnRepo,
+      runner,
+      bus: s.bus,
+      logger: s.logger,
+      clock: s.clock,
+      modelProxy: new StubModelProxy(),
+      modelBaseUrl: "http://localhost:1234/v1",
+      anthropicAdapterPresent: false,
+      subscriptionIndex: new AgentSubscriptionIndex(new Map()),
+      timeoutMs: 5000,
+      maxTurnsPerConversation: 10,
+      genId: (() => { let n = 0; return () => `gen-${++n}`; })(),
+      codebasePath: null,
+    });
+
+    expect(capturedSpec).toBeDefined();
+    expect(capturedSpec!.mounts.some((m) => m.containerPath === "/codebase")).toBe(false);
+    expect(capturedSpec!.mounts.some((m) => m.containerPath === "/AGENTS.md")).toBe(true);
+    expect(capturedSpec!.mounts.some((m) => m.containerPath === "/store")).toBe(true);
+  });
+
   it("skips the cap check when inbound.conversationId is null (pre-M3 row)", async () => {
     const s = setup();
 

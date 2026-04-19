@@ -135,6 +135,19 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     return n;
   })();
 
+  const codebasePath = (() => {
+    const raw = process.env.TEAMROOM_CODEBASE_PATH;
+    if (raw == null || raw.trim() === "") {
+      const defaultPath = join(opts.dataDir, "..", "codebase");
+      return existsSync(defaultPath) ? defaultPath : null;
+    }
+    if (!existsSync(raw)) {
+      throw new Error(`TEAMROOM_CODEBASE_PATH does not exist: ${raw}`);
+    }
+    return raw;
+  })();
+  rootLogger.info("codebase mount", { path: codebasePath ?? "(none)" });
+
   await reconcile({ turnRepo, bus, logger: rootLogger, clock, genId });
 
   const runner = new DockerRunner();
@@ -149,6 +162,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     maxTurnsPerConversation,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
+    codebasePath,
   });
 
   // Fire-and-forget loop. Errors inside the loop are logged; the loop itself never throws.

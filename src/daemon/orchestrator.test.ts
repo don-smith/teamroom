@@ -69,6 +69,7 @@ describe("Orchestrator", () => {
       maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
+      codebasePath: null,
     });
 
     await orch.tickOnce();
@@ -119,6 +120,7 @@ describe("Orchestrator", () => {
       maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => `gen-${++idCounter}`,
+      codebasePath: null,
     });
     await orch.tickOnce();
 
@@ -148,6 +150,7 @@ describe("Orchestrator", () => {
       maxTurnsPerConversation: 10,
       pollIntervalMs: 50,
       genId: () => "x",
+      codebasePath: null,
     });
     await orch.tickOnce(); // should be a no-op
   });

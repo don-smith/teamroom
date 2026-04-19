@@ -27,6 +27,7 @@ export interface OrchestratorDeps {
   maxTurnsPerConversation: number;
   pollIntervalMs: number;
   genId: () => string;
+  codebasePath: string | null;
 }
 
 export class Orchestrator {
@@ -61,6 +62,7 @@ export class Orchestrator {
           timeoutMs: this.deps.turnTimeoutMs,
           maxTurnsPerConversation: this.deps.maxTurnsPerConversation,
           genId: this.deps.genId,
+          codebasePath: this.deps.codebasePath,
         });
       } catch (err) {
         // Safety net — processTurn should not throw, but if it does, don't crash the loop.

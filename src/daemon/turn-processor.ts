@@ -28,13 +28,14 @@ export interface ProcessTurnDeps {
   timeoutMs: number;
   maxTurnsPerConversation: number;
   genId: () => string;
+  codebasePath: string | null;
 }
 
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
     modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs,
-    maxTurnsPerConversation, genId,
+    maxTurnsPerConversation, genId, codebasePath,
   } = deps;
   const turnId = genId();
   const now = clock.nowIso();
@@ -133,6 +134,9 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       { hostPath: agentConfig.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
       { hostPath: agentConfig.storePath, containerPath: "/store", readOnly: false },
     ];
+    if (codebasePath) {
+      mounts.push({ hostPath: codebasePath, containerPath: "/codebase", readOnly: false });
+    }
     // Container name encodes agent + turn so `docker ps` / `docker logs` are
     // meaningful while a turn is in flight. The 8-char turnId suffix keeps
     // names unique across concurrent turns of the same agent.
