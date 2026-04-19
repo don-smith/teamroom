@@ -57,7 +57,15 @@ This is duplicate-by-design, not an oversight.
 
 Both agents currently have **no tool access**. For claude-assistant this is `allowedTools: []` in `AnthropicLlmClient`; the equivalent for studio-assistant is implicit (the OpenAI client doesn't run tool loops). Files placed in `store/` are persisted but the agent can't see or modify them.
 
-M3 will enable tools (`Read`, `Edit`, `Write`, `Bash`, etc.) for both agents — the change for claude-assistant is one line; the equivalent for studio-assistant requires a tool-loop runtime (potentially LangGraph per the project memory). At that point `store/` becomes the agent's actual workspace.
+M3 enables tools for claude-assistant only: it now has `Read`, `Edit`, `Write`, `Bash`, `Glob`, and `Grep` to explore and modify `/codebase`. Studio-assistant remains toolless; the tools mount infrastructure is ready for future work.
+
+### M3 capability additions
+
+**Inter-agent messaging:** agents can now DM each other via `{"type":"dm","to":"<name>","body":"..."}` on stdout. Subscriptions in `agent.yaml` define what topics wake an agent; replies to a DM-triggered turn route back as return DMs (not to the original CLI user — this is a known M3 limitation deferred to M4+; see `docs/m3-followups.md §6`).
+
+**Shared codebase:** `/codebase` is mounted read-write into every agent, representing the team's shared work area. The operator can redirect it to any codebase via `TEAMROOM_CODEBASE_PATH` env var. Agents with filesystem tools can modify it; agents without tools still see it passively.
+
+**Tool control:** `agent.yaml` now has an `allowed_tools` field. Claude-assistant lists filesystem tools; studio-assistant has none (yet).
 
 ## Onboarding a new agent
 
