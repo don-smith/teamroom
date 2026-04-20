@@ -10,6 +10,7 @@ import { FileNotifyBus } from "../bus/file-notify-bus.js";
 import { EventBus } from "../bus/event-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
 import { killStaleTeamroomContainers } from "../container/kill-stale.js";
+import type { DockerRunSpec, Mount } from "../container/docker-command.js";
 import { SystemClock } from "../clock/clock.js";
 import { JsonLinesLogger } from "../logger/logger.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
@@ -29,6 +30,10 @@ import { loadListsYaml } from "../mailing-lists/loader.js";
 import { CliChannelAdapter } from "../channels/cli.js";
 import { MailMcpTools } from "../mail-mcp/tools.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
+import {
+  SessionTimerManager,
+  realTimerFactory,
+} from "../session-manager/session-manager.js";
 import type { Provider } from "../types.js";
 
 /**
@@ -43,7 +48,7 @@ export type AnthropicCreds =
 export interface DaemonOptions {
   dataDir: string;   // e.g. <repo>/data
   agentsDir: string; // e.g. <repo>/agents
-  /** Path to `lists.yaml`. Defaults to <repoRoot>/lists.yaml (siblinging agentsDir). */
+  /** Path to `lists.yaml`. Defaults to <agentsDir>/../lists.yaml. */
   listsYamlPath?: string;
   lmStudio: {
     upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:1234
@@ -54,6 +59,12 @@ export interface DaemonOptions {
   pollIntervalMs?: number;
   /** Port to bind the mail MCP + /cli/send HTTP server. 0 = ephemeral. */
   mailPort?: number;
+  /**
+   * Minutes of inactivity before the session manager closes an agent
+   * container's stdin (prompting clean exit). 0 disables the timer.
+   * Also reads TEAMROOM_SESSION_IDLE_MINUTES if unset.
+   */
+  sessionIdleMinutes?: number;
 }
 
 export interface StartedDaemon {
@@ -64,6 +75,7 @@ export interface StartedDaemon {
   eventBus: EventBus;
   mailMcpServer: MailMcpServer;
   mailingListRegistry: MailingListRegistry;
+  sessionManager: SessionTimerManager;
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
@@ -150,30 +162,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
 
   const cliAdapter = new CliChannelAdapter({ dispatcher });
 
-  // The MCP server's tokenResolver will be wired up when the session
-  // manager is in place (future work); for now resolve to null, which
-  // makes MCP auth reject every request. /cli/send still works since it
-  // has its own localhost-only trust boundary.
   const mailMcpTools = new MailMcpTools({
     messageRepo,
     dispatcher,
     bus: eventBus,
     clock,
   });
-  const mailMcpServer = new MailMcpServer({
-    tools: mailMcpTools,
-    tokenResolver: () => null,
-    cliAdapter,
-    port: opts.mailPort ?? 0,
-    logger: rootLogger,
-  });
-  await mailMcpServer.start();
-  const { port: mailPort } = mailMcpServer.address();
-  writeFileSync(join(opts.dataDir, "teamroom-mail.port"), String(mailPort));
-  rootLogger.info("mail mcp server started", { port: mailPort });
 
   // --- Model proxy (M2 carryover for live LLM calls) ---
-  const registry = new TokenRegistry();
+  const tokenRegistry = new TokenRegistry();
   const adapters: Partial<Record<Provider, ProviderAdapter>> = {
     "lm-studio": new LmStudioAdapter({
       upstreamUrl: opts.lmStudio.upstreamUrl,
@@ -185,7 +182,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     adapters.anthropic = buildAnthropicAdapter(opts.anthropic);
   }
   const modelProxy = new LocalModelProxy({
-    registry,
+    registry: tokenRegistry,
     adapters: adapters as Record<Provider, ProviderAdapter>,
     logger: rootLogger,
   });
@@ -206,9 +203,95 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   })();
   rootLogger.info("codebase mount", { path: codebasePath ?? "(none)" });
 
+  // --- MCP server + session manager ---
+  // tokenResolver is wired to the session manager after construction so
+  // the server/manager pair can hold references to each other without a
+  // circular constructor arg.
+  let resolveMcpToken: (token: string) => string | null = () => null;
+  const mailMcpServer = new MailMcpServer({
+    tools: mailMcpTools,
+    tokenResolver: (t) => resolveMcpToken(t),
+    cliAdapter,
+    port: opts.mailPort ?? 0,
+    logger: rootLogger,
+  });
+  await mailMcpServer.start();
+  const { port: mailPort } = mailMcpServer.address();
+  writeFileSync(join(opts.dataDir, "teamroom-mail.port"), String(mailPort));
+  rootLogger.info("mail mcp server started", { port: mailPort });
+
+  const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
+  const runner = new DockerRunner();
+
+  const buildSpec = (agentId: string, mcpToken: string): DockerRunSpec => {
+    const cfg = agentConfigs.get(agentId);
+    if (!cfg) throw new Error(`no agent config for '${agentId}'`);
+    const proxyToken = tokenRegistry.mint({
+      agentId,
+      turnId: `session-${mcpToken.slice(0, 8)}`,
+      traceId: genId(),
+      provider: cfg.provider,
+      model: cfg.model,
+    });
+    const mounts: Mount[] = [
+      { hostPath: cfg.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
+      { hostPath: cfg.storePath, containerPath: "/store", readOnly: false },
+    ];
+    if (codebasePath) {
+      mounts.push({ hostPath: codebasePath, containerPath: "/codebase", readOnly: false });
+    }
+    return {
+      imageTag: cfg.imageTag,
+      name: `teamroom-${agentId}-${mcpToken.slice(0, 8)}`,
+      mounts,
+      env: {
+        TEAMROOM_TRACE_ID: genId(),
+        TEAMROOM_AGENT_NAME: agentId,
+        TEAMROOM_PROVIDER: cfg.provider,
+        TEAMROOM_MODEL: cfg.model,
+        TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
+        TEAMROOM_MODEL_API_TOKEN: proxyToken,
+        ANTHROPIC_BASE_URL: modelBaseUrl,
+        ANTHROPIC_AUTH_TOKEN: proxyToken,
+        TEAMROOM_ALLOWED_TOOLS: cfg.allowedTools.join(","),
+        TEAMROOM_MCP_URL: `http://host.docker.internal:${mailPort}/mcp`,
+        TEAMROOM_MCP_TOKEN: mcpToken,
+      },
+      labels: {
+        "teamroom-agent": "true",
+        "teamroom-agent-id": agentId,
+      },
+    };
+  };
+
+  const sessionManager = new SessionTimerManager({
+    runner,
+    idleMinutes,
+    timerFactory: realTimerFactory,
+    spec: buildSpec,
+    genToken: () => randomUUID(),
+    logger: rootLogger,
+  });
+
+  // Wire up the token resolver for the MCP server now that the session
+  // manager exists.
+  resolveMcpToken = (t) => sessionManager.resolveToken(t);
+
+  // The bus → session-manager subscriptions are what make M4 actually flow.
+  // Without these, `mail.delivered` events fire into the void and no agent
+  // container is ever spawned.
+  eventBus.subscribe<{ to: string }>("mail.delivered", (payload) => {
+    sessionManager.onMailDelivered(payload.to);
+  });
+  eventBus.subscribe<{ from: string }>("mail.sent", (payload) => {
+    sessionManager.onAgentActivity(payload.from);
+  });
+  eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (payload) => {
+    sessionManager.onAgentActivity(payload.agentId);
+  });
+
   await reconcile({ turnRepo, bus: notifyBus, logger: rootLogger, clock, genId });
 
-  const runner = new DockerRunner();
   // The orchestrator poll loop still runs for legacy CLI `channel='cli'
   // direction='in'` turns. M4 mail rows (channel='mail') are handled out
   // of band by the dispatcher/bus/session-manager chain — findPendingInbound
@@ -234,6 +317,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     if (stopped) return;
     stopped = true;
     orchestrator.stop();
+    await sessionManager.killAll();
     await loopPromise;
     await mailMcpServer.stop();
     await modelProxy.stop();
@@ -247,7 +331,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
   };
 
-  return { db, stop, orchestrator, dispatcher, eventBus, mailMcpServer, mailingListRegistry };
+  return {
+    db,
+    stop,
+    orchestrator,
+    dispatcher,
+    eventBus,
+    mailMcpServer,
+    mailingListRegistry,
+    sessionManager,
+  };
 }
 
 function readNonNegativeIntEnv(name: string, fallback: number): number {
