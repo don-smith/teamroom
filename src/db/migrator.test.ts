@@ -42,4 +42,24 @@ describe("migrator", () => {
       .map((r) => r.name);
     expect(applied).toContain("002_m3_team_substrate.sql");
   });
+
+  it("applies 003_m4_agent_mail.sql and exposes mail columns + indexes", () => {
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+
+    const msgCols = (db.prepare("PRAGMA table_info(messages)").all() as { name: string }[]).map((r) => r.name);
+    expect(msgCols).toEqual(
+      expect.arrayContaining(["to", "from", "cc", "subject", "thread_id", "read_at", "archived_at", "deleted_at"]),
+    );
+
+    const indexes = (db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")
+      .all() as { name: string }[]).map((r) => r.name);
+    expect(indexes).toContain("idx_messages_inbox");
+    expect(indexes).toContain("idx_messages_thread");
+
+    const applied = (db.prepare("SELECT name FROM _migrations ORDER BY name").all() as { name: string }[])
+      .map((r) => r.name);
+    expect(applied).toContain("003_m4_agent_mail.sql");
+  });
 });

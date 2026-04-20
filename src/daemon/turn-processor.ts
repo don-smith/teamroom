@@ -87,7 +87,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     startedAt: null,
     finishedAt: null,
     createdAt: now,
-    conversationId: inbound.conversationId,
+    conversationId: inbound.conversationId ?? null,
   });
   messageRepo.attachTurn(inbound.id, turnId);
   turnRepo.markRunning(turnId, "pending-spawn", clock.nowIso());

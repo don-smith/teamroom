@@ -17,10 +17,24 @@ export interface Message {
   turnId: string | null;
   traceId: string;
   createdAt: string;
-  // M3 additions:
-  topic: string;                  // routing key within channel; '' for CLI, target-agent for DM
-  fromAgentId: string | null;     // null for CLI-originated or outbound
-  conversationId: string | null;  // null for pre-M3 rows
+  // M3 additions — deprecated in M4; retained in the schema until a later
+  // cleanup migration. Optional here so new M4 call sites don't have to
+  // set them; the repo's `create` fills defaults ('', null, null).
+  topic?: string;                 // routing key within channel; '' for CLI, target-agent for DM
+  fromAgentId?: string | null;    // null for CLI-originated or outbound
+  conversationId?: string | null; // null for pre-M3 rows
+  // M4 additions — email-shaped. Optional at the type level so pre-M4
+  // fixtures that construct a Message literal continue to compile; the
+  // repo's `create` fills defaults ([] for `to`, null for the rest). Reads
+  // from the DB always populate every field (null when the column is null).
+  to?: string[];                  // JSON array in DB; parsed here; [] for legacy CLI rows
+  from?: string | null;           // prefixed sender address (agent:*, cli:*, or 'system')
+  cc?: string[] | null;           // JSON array in DB; null when unset (distinct from [])
+  subject?: string | null;
+  threadId?: string | null;       // minted on fresh send; inherited on reply
+  readAt?: string | null;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
 }
 
 export interface Turn {

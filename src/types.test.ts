@@ -21,6 +21,14 @@ describe("shared types", () => {
       topic: "",
       fromAgentId: null,
       conversationId: null,
+      to: [],
+      from: null,
+      cc: null,
+      subject: null,
+      threadId: null,
+      readAt: null,
+      archivedAt: null,
+      deletedAt: null,
     };
 
     const turn: Turn = {
