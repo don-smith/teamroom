@@ -6,7 +6,6 @@ import type { Logger } from "../logger/logger.js";
 import type { MessageRepo } from "../db/message-repo.js";
 import type { TurnRepo } from "../db/turn-repo.js";
 import type { ModelProxy } from "../model-proxy/model-proxy.js";
-import type { SubscriptionIndex } from "./subscriptions.js";
 import { processTurn } from "./turn-processor.js";
 
 export interface OrchestratorDeps {
@@ -22,9 +21,7 @@ export interface OrchestratorDeps {
   modelBaseUrl: string;
   /** Whether an Anthropic adapter was registered. Task 18 uses this to refuse `provider:anthropic` turns when false. */
   anthropicAdapterPresent: boolean;
-  subscriptionIndex: SubscriptionIndex;
   turnTimeoutMs: number;
-  maxTurnsPerConversation: number;
   pollIntervalMs: number;
   genId: () => string;
   codebasePath: string | null;
@@ -58,9 +55,7 @@ export class Orchestrator {
           modelProxy: this.deps.modelProxy,
           modelBaseUrl: this.deps.modelBaseUrl,
           anthropicAdapterPresent: this.deps.anthropicAdapterPresent,
-          subscriptionIndex: this.deps.subscriptionIndex,
           timeoutMs: this.deps.turnTimeoutMs,
-          maxTurnsPerConversation: this.deps.maxTurnsPerConversation,
           genId: this.deps.genId,
           codebasePath: this.deps.codebasePath,
         });

@@ -42,6 +42,17 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   }
 
   const subscriptions = parseStringArray(parsed, "subscriptions");
+  // M4: subscriptions are strictly list:<name>. The MailingListRegistry
+  // validates membership at daemon boot; this check catches shape errors
+  // (missing prefix, wrong prefix kind) during the individual agent load
+  // so the error points at the specific file.
+  for (const sub of subscriptions) {
+    if (!sub.startsWith("list:") || sub.length <= "list:".length) {
+      throw new Error(
+        `agent.yaml '${name}': subscriptions must be 'list:<name>' (got '${sub}')`,
+      );
+    }
+  }
   const allowedTools = parseStringArray(parsed, "allowed_tools");
 
   return { name, model, imageTag, provider, configPath, agentsMdPath, storePath, subscriptions, allowedTools };

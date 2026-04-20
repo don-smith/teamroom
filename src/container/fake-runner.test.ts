@@ -6,8 +6,8 @@ describe("FakeRunner", () => {
   it("replays scripted events in order and returns the scripted exit", async () => {
     const script: Script = {
       events: [
-        { type: "reply", body: "hello" },
-        { type: "reply", body: "world" },
+        { type: "log", level: "info", msg: "hello" },
+        { type: "log", level: "info", msg: "world" },
       ],
       exitCode: 0,
       stderr: "",
@@ -20,7 +20,7 @@ describe("FakeRunner", () => {
       timeoutMs: 5000,
       onEvent: (e) => events.push(e),
     });
-    expect(events.map((e) => (e.type === "reply" ? e.body : "?"))).toEqual(["hello", "world"]);
+    expect(events.map((e) => (e.type === "log" ? e.msg : "?"))).toEqual(["hello", "world"]);
     expect(result.exitCode).toBe(0);
     expect(result.timedOut).toBe(false);
     expect(result.containerId).toMatch(/^fake-/);

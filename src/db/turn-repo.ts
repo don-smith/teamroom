@@ -104,11 +104,4 @@ export class TurnRepo {
       .get() as TurnRow | undefined;
     return row ? rowToTurn(row) : null;
   }
-
-  countByConversationId(conversationId: string): number {
-    const row = this.db
-      .prepare(`SELECT COUNT(*) AS c FROM turns WHERE conversation_id = ?`)
-      .get(conversationId) as { c: number };
-    return row.c;
-  }
 }

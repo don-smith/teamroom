@@ -179,32 +179,4 @@ describe("TurnRepo", () => {
     expect(repo.findById("turn1")).toEqual(turn);
   });
 
-  it("counts turns by conversationId", () => {
-    const db = createDatabase(":memory:");
-    runMigrations(db);
-    new AgentRepo(db).create({ id: "a1", configPath: "/x", createdAt: "2026-04-19T00:00:00Z" });
-    new MessageRepo(db).create({
-      id: "m1", agentId: "a1", channel: "cli", direction: "in", body: "b",
-      turnId: null, traceId: "t", createdAt: "2026-04-19T00:00:01Z",
-      topic: "", fromAgentId: null, conversationId: "c1",
-    });
-    const repo = new TurnRepo(db);
-    for (let i = 0; i < 3; i += 1) {
-      repo.create({
-        id: `turn${i}`, agentId: "a1", inboundMessageId: "m1", status: "done",
-        containerId: null, error: null, traceId: "t",
-        startedAt: null, finishedAt: null, createdAt: "2026-04-19T00:00:02Z",
-        conversationId: "c1",
-      });
-    }
-    repo.create({
-      id: "other", agentId: "a1", inboundMessageId: "m1", status: "done",
-      containerId: null, error: null, traceId: "t",
-      startedAt: null, finishedAt: null, createdAt: "2026-04-19T00:00:02Z",
-      conversationId: "c-other",
-    });
-    expect(repo.countByConversationId("c1")).toBe(3);
-    expect(repo.countByConversationId("c-other")).toBe(1);
-    expect(repo.countByConversationId("nonexistent")).toBe(0);
-  });
 });

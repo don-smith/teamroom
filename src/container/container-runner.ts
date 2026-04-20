@@ -1,8 +1,6 @@
 import type { DockerRunSpec } from "./docker-command.js";
 
 export type ContainerStdoutEvent =
-  | { type: "reply"; body: string; messageId?: string }
-  | { type: "dm"; to: string; body: string }
   | { type: "status"; phase: string; [k: string]: unknown }
   | { type: "log"; level: string; msg: string; [k: string]: unknown }
   | { type: "unknown"; raw: string };

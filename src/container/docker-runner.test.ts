@@ -2,18 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parseEvent } from "./docker-runner.js";
 
 describe("parseEvent", () => {
-  it("a typed event field wins over a malformed JSON's own 'type'", () => {
-    // Synthesize a payload that JSON-parses but contains 'type: "reply"' in the body
-    // mimicking a malformed agent event that we should NOT trust.
-    const raw = JSON.stringify({ type: "reply", body: "hi", spurious: { type: "evil" } });
-    const evt = parseEvent(raw);
-    expect(evt?.type).toBe("reply");
-  });
-
   it("status events: the typed 'status' classifier wins over any spread payload", () => {
-    // The status branch returns { type: "status", ...obj, type } after the fix.
-    // Even if a payload tried to slip an 'evil' type through, the literal
-    // 'status' must win because we've already classified it.
     const raw = JSON.stringify({ type: "status", phase: "running", extra: 1 });
     const evt = parseEvent(raw);
     expect(evt.type).toBe("status");
@@ -35,34 +24,22 @@ describe("parseEvent", () => {
   });
 
   it("non-object JSON returns an 'unknown' warn-classified event", () => {
-    // Contract divergence from the plan's draft: parseEvent returns
-    // { type: "unknown", raw } rather than undefined for non-object JSON
-    // values like "42". The spread-order fix does not change this contract.
     const evt = parseEvent("42");
     expect(evt).toEqual({ type: "unknown", raw: "42" });
   });
 
   it("invalid JSON returns an 'unknown' warn-classified event", () => {
-    // Same contract divergence: parseEvent returns the unknown event
-    // rather than undefined for unparsable input.
     const evt = parseEvent("not json");
     expect(evt).toEqual({ type: "unknown", raw: "not json" });
   });
 
-  it("parses a {type:'dm'} stdout line into a ContainerStdoutEvent", () => {
-    const line = JSON.stringify({ type: "dm", to: "studio-assistant", body: "hello" });
-    const evt = parseEvent(line);
-    expect(evt).toEqual({ type: "dm", to: "studio-assistant", body: "hello" });
+  it("M3 'reply' events are no longer recognized — surface as unknown", () => {
+    const evt = parseEvent(JSON.stringify({ type: "reply", body: "hi" }));
+    expect(evt.type).toBe("unknown");
   });
 
-  it("rejects malformed dm lines (missing to or body) as unknown", () => {
-    const missingTo = JSON.stringify({ type: "dm", body: "no target" });
-    expect(parseEvent(missingTo).type).toBe("unknown");
-
-    const missingBody = JSON.stringify({ type: "dm", to: "x" });
-    expect(parseEvent(missingBody).type).toBe("unknown");
-
-    const wrongType = JSON.stringify({ type: "dm", to: 42, body: "x" });
-    expect(parseEvent(wrongType).type).toBe("unknown");
+  it("M3 'dm' events are no longer recognized — surface as unknown", () => {
+    const evt = parseEvent(JSON.stringify({ type: "dm", to: "x", body: "hi" }));
+    expect(evt.type).toBe("unknown");
   });
 });

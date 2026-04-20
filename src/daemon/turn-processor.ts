@@ -7,7 +7,6 @@ import type { Logger } from "../logger/logger.js";
 import type { MessageRepo } from "../db/message-repo.js";
 import type { TurnRepo } from "../db/turn-repo.js";
 import type { ModelProxy } from "../model-proxy/model-proxy.js";
-import type { SubscriptionIndex } from "./subscriptions.js";
 import type { Message } from "../types.js";
 
 export interface ProcessTurnDeps {
@@ -24,9 +23,7 @@ export interface ProcessTurnDeps {
   /** True when an Anthropic adapter is configured. Turns whose agent declares
    *  `provider: anthropic` are refused with `missing_credential` when false. */
   anthropicAdapterPresent: boolean;
-  subscriptionIndex: SubscriptionIndex;
   timeoutMs: number;
-  maxTurnsPerConversation: number;
   genId: () => string;
   codebasePath: string | null;
 }
@@ -34,8 +31,8 @@ export interface ProcessTurnDeps {
 export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
   const {
     inbound, agentConfig, messageRepo, turnRepo, runner, bus, logger, clock,
-    modelProxy, modelBaseUrl, anthropicAdapterPresent, subscriptionIndex, timeoutMs,
-    maxTurnsPerConversation, genId, codebasePath,
+    modelProxy, modelBaseUrl, anthropicAdapterPresent, timeoutMs,
+    genId, codebasePath,
   } = deps;
   const turnId = genId();
   const now = clock.nowIso();
@@ -46,36 +43,11 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     agentName: agentConfig.name,
   });
 
-  if (
-    inbound.conversationId != null &&
-    maxTurnsPerConversation > 0 &&
-    turnRepo.countByConversationId(inbound.conversationId) >= maxTurnsPerConversation
-  ) {
-    turnLogger.warn("conversation.limit_reached", {
-      conversationId: inbound.conversationId,
-      limit: maxTurnsPerConversation,
-    });
-    turnRepo.create({
-      id: turnId,
-      agentId: inbound.agentId,
-      inboundMessageId: inbound.id,
-      status: "error",
-      containerId: null,
-      error: "conversation_cap",
-      traceId: inbound.traceId,
-      startedAt: null,
-      finishedAt: clock.nowIso(),
-      createdAt: now,
-      conversationId: inbound.conversationId,
-    });
-    messageRepo.attachTurn(inbound.id, turnId);
-    return;
-  }
-
   // 1. Create the turn row, attach it to the inbound message, then mark
   //    running with a placeholder container_id so the reconciler can see
-  //    that we got past intake even before the runner returns the real id
-  //    (closes M1 debt #1 part 1: pending → running before runner.run).
+  //    that we got past intake even before the runner returns the real id.
+  //    M4: thread-cap enforcement lives in the dispatcher now, so the
+  //    M3-era conversation-cap check is gone.
   turnRepo.create({
     id: turnId,
     agentId: inbound.agentId,
@@ -87,7 +59,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
     startedAt: null,
     finishedAt: null,
     createdAt: now,
-    conversationId: inbound.conversationId ?? null,
+    conversationId: null,
   });
   messageRepo.attachTurn(inbound.id, turnId);
   turnRepo.markRunning(turnId, "pending-spawn", clock.nowIso());
@@ -178,91 +150,13 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       from: inbound.fromAgentId ?? "cli",
     });
 
-    let replyCount = 0;
-
     const result = await runner.run({
       spec,
       stdinJson: stdinEnvelope,
       timeoutMs,
       onEvent: (evt) => {
         try {
-          if (evt.type === "reply") {
-            if (inbound.channel === "dm") {
-              const target = inbound.fromAgentId;
-              if (target == null) {
-                turnLogger.warn("dm-reply.no-sender", { inboundId: inbound.id });
-              } else {
-                messageRepo.create({
-                  id: genId(),
-                  agentId: target,
-                  channel: "dm",
-                  direction: "in",
-                  body: evt.body,
-                  turnId: null,
-                  traceId: genId(),
-                  createdAt: clock.nowIso(),
-                  topic: target,
-                  fromAgentId: agentConfig.name,
-                  conversationId: inbound.conversationId,
-                });
-              }
-            } else {
-              const outId = genId();
-              messageRepo.create({
-                id: outId,
-                agentId: inbound.agentId,
-                channel: inbound.channel,
-                direction: "out",
-                body: evt.body,
-                turnId,
-                traceId: inbound.traceId,
-                createdAt: clock.nowIso(),
-                topic: "",
-                fromAgentId: null,
-                conversationId: inbound.conversationId,
-              });
-              replyCount += 1;
-              void bus.publish({
-                id: genId(),
-                type: "message.outbound",
-                ts: clock.nowIso(),
-                agentId: inbound.agentId,
-                messageId: outId,
-                turnId,
-                traceId: inbound.traceId,
-              });
-            }
-          } else if (evt.type === "dm") {
-            const sender = agentConfig.name;
-            const to = evt.to;
-
-            if (to === sender) {
-              turnLogger.warn("self-dm.rejected", { from: sender, to });
-              return;
-            }
-
-            const subscribers = subscriptionIndex.lookup("dm", to);
-            if (subscribers.length === 0) {
-              turnLogger.warn("message.undelivered", { channel: "dm", topic: to });
-              return;
-            }
-
-            for (const subscriberId of subscribers) {
-              messageRepo.create({
-                id: genId(),
-                agentId: subscriberId,
-                channel: "dm",
-                direction: "in",
-                body: evt.body,
-                turnId: null,
-                traceId: genId(),
-                createdAt: clock.nowIso(),
-                topic: to,
-                fromAgentId: sender,
-                conversationId: inbound.conversationId,
-              });
-            }
-          } else if (evt.type === "status") {
+          if (evt.type === "status") {
             turnLogger.info("status", { phase: evt.phase });
           } else if (evt.type === "log") {
             turnLogger.info("agent-log", { level: evt.level, msg: evt.msg });
@@ -324,7 +218,7 @@ export async function processTurn(deps: ProcessTurnDeps): Promise<void> {
       turnId,
       traceId: inbound.traceId,
     });
-    turnLogger.info("turn done", { replyCount });
+    turnLogger.info("turn done");
   } finally {
     // Always evict — keeps the registry from leaking entries on any path.
     modelProxy.evict(token);

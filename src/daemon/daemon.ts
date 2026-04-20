@@ -7,6 +7,7 @@ import { AgentRepo } from "../db/agent-repo.js";
 import { MessageRepo } from "../db/message-repo.js";
 import { TurnRepo } from "../db/turn-repo.js";
 import { FileNotifyBus } from "../bus/file-notify-bus.js";
+import { EventBus } from "../bus/event-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
 import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import { SystemClock } from "../clock/clock.js";
@@ -15,19 +16,25 @@ import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.
 import { installSafetyNets } from "./safety-nets.js";
 import { reconcile } from "./reconcile.js";
 import { Orchestrator } from "./orchestrator.js";
-import { AgentSubscriptionIndex, type SubscriptionIndex } from "./subscriptions.js";
 import { LocalModelProxy } from "../model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../model-proxy/token-registry.js";
 import type { ProviderAdapter } from "../model-proxy/adapters/adapter.js";
 import { LmStudioAdapter } from "../model-proxy/adapters/lm-studio-adapter.js";
 import { AnthropicAdapter } from "../model-proxy/adapters/anthropic-adapter.js";
 import { AnthropicOAuthCache } from "../model-proxy/adapters/anthropic-oauth-cache.js";
+import { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import { MailingListRegistry } from "../mailing-lists/registry.js";
+import { MailingListTriggerListener } from "../mailing-lists/trigger-listener.js";
+import { loadListsYaml } from "../mailing-lists/loader.js";
+import { CliChannelAdapter } from "../channels/cli.js";
+import { MailMcpTools } from "../mail-mcp/tools.js";
+import { MailMcpServer } from "../mail-mcp/server.js";
 import type { Provider } from "../types.js";
 
 /**
  * Anthropic credentials. OAuth is preferred; API key is the fallback. `null` in
  * {@link DaemonOptions} means the Anthropic adapter is not configured — turns for
- * `provider: anthropic` agents will be refused (see Task 18).
+ * `provider: anthropic` agents will be refused.
  */
 export type AnthropicCreds =
   | { mode: "api-key"; apiKey: string }
@@ -36,6 +43,8 @@ export type AnthropicCreds =
 export interface DaemonOptions {
   dataDir: string;   // e.g. <repo>/data
   agentsDir: string; // e.g. <repo>/agents
+  /** Path to `lists.yaml`. Defaults to <repoRoot>/lists.yaml (siblinging agentsDir). */
+  listsYamlPath?: string;
   lmStudio: {
     upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:1234
     realKey: string;     // bearer token for the upstream LM Studio endpoint
@@ -43,13 +52,18 @@ export interface DaemonOptions {
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
+  /** Port to bind the mail MCP + /cli/send HTTP server. 0 = ephemeral. */
+  mailPort?: number;
 }
 
 export interface StartedDaemon {
   db: Db;
   stop: () => Promise<void>;
   orchestrator: Orchestrator;
-  subscriptionIndex: SubscriptionIndex;
+  dispatcher: MailDispatcher;
+  eventBus: EventBus;
+  mailMcpServer: MailMcpServer;
+  mailingListRegistry: MailingListRegistry;
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
@@ -85,7 +99,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const agentRepo = new AgentRepo(db);
   const messageRepo = new MessageRepo(db);
   const turnRepo = new TurnRepo(db);
-  const bus = new FileNotifyBus(join(opts.dataDir, "bus"));
+  const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
 
   // Discover and register each agent folder under agentsDir.
   const agentConfigs = new Map<string, AgentConfig>();
@@ -102,11 +116,63 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     }
   }
 
-  const subscriptionIndex: SubscriptionIndex = new AgentSubscriptionIndex(agentConfigs);
-  const totalSubs = [...agentConfigs.values()].reduce((n, c) => n + c.subscriptions.length, 0);
-  rootLogger.info("subscription index built", { agents: agentConfigs.size, entries: totalSubs });
+  // --- M4 mail substrate ---
+  const eventBus = new EventBus(rootLogger);
+  const listsPath = opts.listsYamlPath ?? join(opts.agentsDir, "..", "lists.yaml");
+  const listDefs = existsSync(listsPath) ? loadListsYaml(listsPath) : [];
+  const mailingListRegistry = new MailingListRegistry(listDefs, [...agentConfigs.values()]);
+  rootLogger.info("mailing-list registry built", {
+    lists: listDefs.length,
+    triggers: mailingListRegistry.allTriggers(),
+  });
 
-  // --- Build the model proxy ---
+  const maxMailsPerThread = readNonNegativeIntEnv("TEAMROOM_MAX_MAILS_PER_THREAD", 10);
+
+  const genId = () => randomUUID();
+
+  const dispatcher = new MailDispatcher({
+    messageRepo,
+    bus: eventBus,
+    clock,
+    genId,
+    knownAgents: (n) => agentConfigs.has(n),
+    knownLists: (n) => mailingListRegistry.has(n),
+    listSubscribers: (n) => mailingListRegistry.subscribers(n),
+    maxMailsPerThread,
+  });
+
+  new MailingListTriggerListener({
+    bus: eventBus,
+    registry: mailingListRegistry,
+    dispatcher,
+    formatBody: (eventType, payload) => `${eventType}: ${JSON.stringify(payload)}`,
+  });
+
+  const cliAdapter = new CliChannelAdapter({ dispatcher });
+
+  // The MCP server's tokenResolver will be wired up when the session
+  // manager is in place (future work); for now resolve to null, which
+  // makes MCP auth reject every request. /cli/send still works since it
+  // has its own localhost-only trust boundary.
+  const mailMcpTools = new MailMcpTools({
+    messageRepo,
+    dispatcher,
+    bus: eventBus,
+    clock,
+  });
+  const mailMcpServer = new MailMcpServer({
+    tools: mailMcpTools,
+    tokenResolver: () => null,
+    cliAdapter,
+    port: opts.mailPort ?? 0,
+    logger: rootLogger,
+  });
+  await mailMcpServer.start();
+  const { port: mailPort } = mailMcpServer.address();
+  writeFileSync(join(opts.dataDir, "teamroom-mail.port"), String(mailPort));
+  rootLogger.info("mail mcp server started", { port: mailPort });
+
+  // --- Model proxy (M2 carryover for live LLM calls) ---
   const registry = new TokenRegistry();
   const adapters: Partial<Record<Provider, ProviderAdapter>> = {
     "lm-studio": new LmStudioAdapter({
@@ -120,29 +186,12 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   }
   const modelProxy = new LocalModelProxy({
     registry,
-    // Cast: LocalModelProxy expects a full Record<Provider, ProviderAdapter>
-    // but handles missing adapters via a `no_adapter` rejection at request
-    // time. We only populate the providers we have credentials for.
     adapters: adapters as Record<Provider, ProviderAdapter>,
     logger: rootLogger,
   });
   const proxyInfo = await modelProxy.start();
   const modelBaseUrl = `http://host.docker.internal:${proxyInfo.port}`;
   rootLogger.info("model proxy started", { port: proxyInfo.port, anthropicAdapterPresent });
-
-  const genId = () => randomUUID();
-
-  const maxTurnsPerConversation = (() => {
-    const raw = process.env.TEAMROOM_MAX_TURNS_PER_CONVERSATION;
-    if (raw == null || raw.trim() === "") return 10;
-    const n = Number.parseInt(raw, 10);
-    if (!Number.isFinite(n) || n < 0) {
-      throw new Error(
-        `TEAMROOM_MAX_TURNS_PER_CONVERSATION must be a non-negative integer (got '${raw}')`,
-      );
-    }
-    return n;
-  })();
 
   const codebasePath = (() => {
     const raw = process.env.TEAMROOM_CODEBASE_PATH;
@@ -157,24 +206,25 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   })();
   rootLogger.info("codebase mount", { path: codebasePath ?? "(none)" });
 
-  await reconcile({ turnRepo, bus, logger: rootLogger, clock, genId });
+  await reconcile({ turnRepo, bus: notifyBus, logger: rootLogger, clock, genId });
 
   const runner = new DockerRunner();
+  // The orchestrator poll loop still runs for legacy CLI `channel='cli'
+  // direction='in'` turns. M4 mail rows (channel='mail') are handled out
+  // of band by the dispatcher/bus/session-manager chain — findPendingInbound
+  // filters to `channel='cli'` explicitly so there's no double-processing.
   const orchestrator = new Orchestrator({
-    messageRepo, turnRepo, bus, logger: rootLogger, clock, runner,
+    messageRepo, turnRepo, bus: notifyBus, logger: rootLogger, clock, runner,
     agentConfigs,
     modelProxy,
     modelBaseUrl,
     anthropicAdapterPresent,
-    subscriptionIndex,
     turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
-    maxTurnsPerConversation,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
     codebasePath,
   });
 
-  // Fire-and-forget loop. Errors inside the loop are logged; the loop itself never throws.
   const loopPromise = orchestrator.runLoop().catch((err) => {
     rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
   });
@@ -185,13 +235,29 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     stopped = true;
     orchestrator.stop();
     await loopPromise;
+    await mailMcpServer.stop();
     await modelProxy.stop();
-    await bus.close();
+    await notifyBus.close();
     db.close();
+    try {
+      unlinkSync(join(opts.dataDir, "teamroom-mail.port"));
+    } catch {
+      /* best-effort */
+    }
     try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
   };
 
-  return { db, stop, orchestrator, subscriptionIndex };
+  return { db, stop, orchestrator, dispatcher, eventBus, mailMcpServer, mailingListRegistry };
+}
+
+function readNonNegativeIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === "") return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${name} must be a non-negative integer (got '${raw}')`);
+  }
+  return n;
 }
 
 function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
@@ -212,21 +278,10 @@ function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
 /**
  * "Exchange" function that returns the OAuth token directly as the temp key.
  *
- * Background: the M2 spec (§6.2) originally described a server-to-server
- * exchange against `POST api.anthropic.com/api/oauth/claude_cli/create_api_key`
- * to trade a long-lived OAuth token for a short-lived temp API key. Reality
- * (verified via real smoke run, 2026-04): Anthropic gates that endpoint with
- * 403 for tokens issued via `claude setup-token` — see spec §6.4 and
- * docs/tabled.md "Anthropic OAuth-gating risk." However, those `sk-ant-oat01-`
- * tokens are themselves long-lived API tokens that Anthropic accepts directly
- * via `x-api-key` on `/v1/messages`. So the pragmatic resolution is: skip the
- * exchange, use the OAuth token directly. The cache then holds a single entry
- * with effectively infinite TTL (no real expiry information available; we use
- * 1 year, which is the documented validity of `claude setup-token` outputs).
- *
- * The exchange-with-cache infrastructure is preserved as-is — it remains the
- * right shape if Anthropic ever opens up a working programmatic exchange, and
- * the unit/integration tests still cover that path against fake upstreams.
+ * See the M2 as-built / M3 as-built for background on why we skip the
+ * exchange: Anthropic gates the programmatic exchange endpoint with 403
+ * for `claude setup-token` issued tokens, but those tokens are themselves
+ * long-lived API tokens accepted directly via `x-api-key` on `/v1/messages`.
  */
 function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
   return Promise.resolve({
@@ -234,4 +289,3 @@ function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; 
     expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
   });
 }
-

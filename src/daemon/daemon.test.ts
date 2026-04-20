@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, existsSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startDaemon } from "./daemon.js";
@@ -51,14 +51,19 @@ describe("daemon shutdown", () => {
     await expect(daemon.stop()).resolves.toBeUndefined();
   });
 
-  it("exposes a subscriptionIndex reflecting agent subscriptions", async () => {
+  it("exposes a mailing-list registry reflecting agent subscriptions", async () => {
+    // lists.yaml at repoRoot so the agent's subscription resolves.
+    writeFileSync(
+      join(root, "lists.yaml"),
+      "lists:\n  - name: team-wide\n    triggers: []\n",
+    );
     const agentDir = join(agentsDir, "sub-agent");
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(join(agentDir, "store"), { recursive: true });
     writeFileSync(join(agentDir, "AGENTS.md"), "# sub-agent");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: sub-agent\nmodel: m\nimage_tag: t\nprovider: lm-studio\nsubscriptions:\n  - sub-agent\n  - team-wide\n",
+      "name: sub-agent\nmodel: m\nimage_tag: t\nprovider: lm-studio\nsubscriptions:\n  - list:team-wide\n",
     );
 
     const daemon = await startDaemon({
@@ -67,10 +72,25 @@ describe("daemon shutdown", () => {
       anthropic: null,
     });
 
-    expect(daemon.subscriptionIndex.lookup("dm", "sub-agent")).toEqual(["sub-agent"]);
-    expect(daemon.subscriptionIndex.lookup("dm", "team-wide")).toEqual(["sub-agent"]);
-    expect(daemon.subscriptionIndex.lookup("dm", "nobody")).toEqual([]);
+    try {
+      expect(daemon.mailingListRegistry.subscribers("team-wide")).toEqual(["sub-agent"]);
+      expect(daemon.mailingListRegistry.subscribers("other")).toEqual([]);
+    } finally {
+      await daemon.stop();
+    }
+  });
 
+  it("writes the mail-server port to data/teamroom-mail.port and clears it on stop", async () => {
+    const daemon = await startDaemon({
+      dataDir, agentsDir,
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      anthropic: null,
+    });
+    const portFile = join(dataDir, "teamroom-mail.port");
+    expect(existsSync(portFile)).toBe(true);
+    const port = Number.parseInt(readFileSync(portFile, "utf8").trim(), 10);
+    expect(port).toBeGreaterThan(0);
     await daemon.stop();
+    expect(existsSync(portFile)).toBe(false);
   });
 });

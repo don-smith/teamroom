@@ -72,13 +72,13 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  it("parses subscriptions as string[] (defaults to empty)", () => {
+  it("parses list:* subscriptions (defaults to empty)", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - a\n  - team-wide\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - list:harness-activity\n  - list:team-wide\n",
     );
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.subscriptions).toEqual(["a", "team-wide"]);
+    expect(cfg.subscriptions).toEqual(["list:harness-activity", "list:team-wide"]);
 
     writeFileSync(
       join(agentDir, "agent.yaml"),
@@ -91,9 +91,17 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
   it("rejects non-string subscription entries", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - ok\n  - 42\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - list:ok\n  - 42\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/subscriptions.*must be a string/);
+  });
+
+  it("rejects non-list:* subscriptions (M4: only list:<name> allowed)", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - bare-name\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/list:<name>/);
   });
 
   it("parses allowed_tools as string[] (defaults to empty)", () => {

@@ -112,16 +112,6 @@ export function parseEvent(line: string): ContainerStdoutEvent {
   try {
     const obj = JSON.parse(line) as Record<string, unknown>;
     const type = obj.type;
-    if (type === "reply" && typeof obj.body === "string") {
-      return {
-        type: "reply",
-        body: obj.body,
-        messageId: typeof obj.messageId === "string" ? obj.messageId : undefined,
-      };
-    }
-    if (type === "dm" && typeof obj.to === "string" && typeof obj.body === "string") {
-      return { type: "dm", to: obj.to, body: obj.body };
-    }
     if (type === "status" && typeof obj.phase === "string") {
       return { ...obj, type: "status", phase: obj.phase };
     }

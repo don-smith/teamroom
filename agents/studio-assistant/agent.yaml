@@ -2,5 +2,6 @@ name: studio-assistant
 model: qwen/qwen3.5-9b
 image_tag: teamroom-agent-studio-assistant:latest
 provider: lm-studio
-subscriptions:
-  - studio-assistant
+# studio-assistant does not participate in M4 mail (no MCP; deferred to M5).
+# See docs/m4-followups.md §1.
+subscriptions: []

@@ -84,10 +84,14 @@ export class MessageRepo {
   }
 
   findPendingInbound(): Message[] {
+    // Orchestrator poll path — M3 CLI turns only. M4 `channel='mail'` rows
+    // are driven by the MailDispatcher → EventBus → SessionTimerManager
+    // chain and should NOT be picked up by this poll, or they'd get
+    // double-processed.
     const rows = this.db
       .prepare(
         `SELECT * FROM messages
-         WHERE direction = 'in' AND turn_id IS NULL
+         WHERE direction = 'in' AND turn_id IS NULL AND channel = 'cli'
          ORDER BY created_at`,
       )
       .all() as MessageRow[];
