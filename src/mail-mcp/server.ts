@@ -399,16 +399,20 @@ function asObject(v: JsonValue | undefined): Record<string, JsonValue> {
 }
 
 function jsonResult(value: unknown): JsonValue {
-  // MCP returns tool results as a `content` array. We wrap structured JSON
-  // in a single content block with `type:'json'` so the client-side LLM can
-  // parse it cleanly.
+  // MCP tool results use a `content` array whose entries are text/image/
+  // resource — `{type:"json"}` is not a spec content type (Claude Code
+  // rejects the response with a schema error if we try). Stringify into a
+  // text block and also populate `structuredContent` so a client that
+  // supports it can read the typed shape without re-parsing.
+  const json = value as JsonValue;
   return {
-    content: [{ type: "json", json: value as JsonValue }],
+    content: [{ type: "text", text: JSON.stringify(json) }],
+    structuredContent: json,
   };
 }
 
 function okResult(): JsonValue {
-  return { content: [] };
+  return { content: [{ type: "text", text: "ok" }] };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

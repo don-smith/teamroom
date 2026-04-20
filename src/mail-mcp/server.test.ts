@@ -151,8 +151,11 @@ describe("MailMcpServer", () => {
       "tok-claude-assistant",
     );
     const body = await r.json();
-    expect(body.result.content[0].type).toBe("json");
-    expect(body.result.content[0].json.threadId).toBeTruthy();
+    expect(body.result.content[0].type).toBe("text");
+    const parsed = JSON.parse(body.result.content[0].text);
+    expect(parsed.threadId).toBeTruthy();
+    // structuredContent mirrors the text payload for clients that support it.
+    expect(body.result.structuredContent.threadId).toBe(parsed.threadId);
   });
 
   it("unknown method returns a -32601 error", async () => {
