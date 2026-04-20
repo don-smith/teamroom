@@ -15,7 +15,8 @@ Don't add events without a real consumer. Even observability is fair game only w
 - `notify-bus.ts` — `NotifyBus` interface + `EventFilter` type.
 - `in-memory-bus.ts` — `InMemoryBus`, EventEmitter-like implementation for tests.
 - `file-notify-bus.ts` — `FileNotifyBus`, production impl using `chokidar` polling on a sentinel file plus an append-only `events.jsonl` log.
-- `in-memory-bus.test.ts`, `file-notify-bus.test.ts` — co-located unit tests.
+- `event-bus.ts` — typed, in-process `EventBus` for M4 signals (mail, session, tool-call, channel). Not durable; crashes drop events. Separate from `NotifyBus` because M4's signals stay in-process; the DB covers durability for anything that needs it.
+- `in-memory-bus.test.ts`, `file-notify-bus.test.ts`, `event-bus.test.ts` — co-located unit tests.
 
 ## Related
 
