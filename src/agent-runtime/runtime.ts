@@ -1,13 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
-import { appendMessage, loadConversation, type ConversationMessage } from "./session-store.js";
+import type { ConversationMessage } from "./session-store.js";
 
-export interface Envelope {
-  prompt: string;
-  messageId: string;
-  turnId: string;
-  traceId: string;
-  channel?: string;
-  from?: string | null;
+/**
+ * Agent runtime — M4 shape.
+ *
+ * Each wake the daemon pushes via stdin triggers one LLM invocation. The
+ * LLM (via the claude-agent-sdk's MCP client) reads its inbox and sends
+ * replies / new mails via the `mail.*` tools. The runtime itself no
+ * longer emits `{type:"reply"}` stdout — all agent communication flows
+ * through the MCP server back into the dispatcher.
+ *
+ * Natural-language text the LLM produces is not routed anywhere; it's
+ * just model output the claude-agent-sdk streams internally. Anything
+ * the runtime wants to log gets written via `process.stderr` / the
+ * logger; stdout is reserved for structured envelopes (status / log
+ * events) that the daemon parses.
+ */
+
+export interface WakeEnvelope {
+  type: "wake";
+  /** Informational tags — the agent's system prompt tells it what to check. */
+  events: string[];
 }
 
 export interface LlmCreateArgs {
@@ -24,46 +37,36 @@ export interface LlmClient {
   createMessage(args: LlmCreateArgs): Promise<LlmCreateResult>;
 }
 
-export interface RunTurnDeps {
-  envelope: Envelope;
+export interface ProcessWakeDeps {
+  wake: WakeEnvelope;
   client: LlmClient;
   model: string;
   agentsMdPath: string;
-  conversationPath: string;
-  emit: (jsonLine: string) => void;
+  /** Optional sink for LLM natural-language output (stderr by default). */
+  onText?: (text: string) => void;
 }
 
 const DEFAULT_SYSTEM_PROMPT =
-  "You are an agent running inside the Team Room harness. Respond to the user's message directly and concisely.";
+  "You are an agent running inside the Team Room harness. On wake, check your inbox via the mail.* MCP tools and respond to any unread mail. Reply in-thread with mail.reply; start fresh threads with mail.send.";
 
-export async function runTurn(deps: RunTurnDeps): Promise<void> {
+const WAKE_PROMPT =
+  "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unread_only=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+
+export async function processWake(deps: ProcessWakeDeps): Promise<void> {
   const system = existsSync(deps.agentsMdPath)
     ? readFileSync(deps.agentsMdPath, "utf8")
     : DEFAULT_SYSTEM_PROMPT;
 
-  const prior = loadConversation(deps.conversationPath);
-  const userBody = deps.envelope.channel === "dm" && deps.envelope.from
-    ? `[dm from ${deps.envelope.from}]\n\n${deps.envelope.prompt}`
-    : deps.envelope.prompt;
-  const userMessage: ConversationMessage = { role: "user", content: userBody };
-  const messages = [...prior, userMessage];
-
-  appendMessage(deps.conversationPath, userMessage);
-
   const result = await deps.client.createMessage({
     model: deps.model,
     system,
-    messages,
+    messages: [{ role: "user", content: WAKE_PROMPT }],
   });
 
-  const assistantMessage: ConversationMessage = { role: "assistant", content: result.text };
-  appendMessage(deps.conversationPath, assistantMessage);
-
-  deps.emit(
-    JSON.stringify({
-      type: "reply",
-      body: result.text,
-      messageId: deps.envelope.messageId,
-    }),
-  );
+  // LLM natural-language output isn't routed anywhere mail-visible; it's
+  // diagnostic only. Hand it to the sink (defaults to stderr) so humans
+  // debugging a turn can see what the model said between tool calls.
+  if (result.text && deps.onText) {
+    deps.onText(result.text);
+  }
 }

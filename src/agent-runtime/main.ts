@@ -1,29 +1,16 @@
+import { createInterface } from "node:readline";
 import OpenAI from "openai";
 import { AnthropicLlmClient } from "./anthropic-llm-client.js";
-import { runTurn, type LlmClient, type Envelope } from "./runtime.js";
+import { processWake, type LlmClient, type WakeEnvelope } from "./runtime.js";
 
 const AGENTS_MD = "/AGENTS.md";
-const CONVERSATION_PATH = "/store/conversation.jsonl";
-
-async function readStdinOnce(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", reject);
-  });
-}
 
 function makeOpenAiCompatibleClient(): LlmClient {
   const baseURL = process.env.TEAMROOM_MODEL_BASE_URL;
   if (!baseURL) throw new Error("TEAMROOM_MODEL_BASE_URL is required");
   const apiKey = process.env.TEAMROOM_MODEL_API_TOKEN ?? "not-required";
-  // The OpenAI SDK appends `/chat/completions` to baseURL — it does NOT add
-  // `/v1`. OpenAI-compatible servers (LM Studio, etc.) expect requests at
-  // `/v1/chat/completions`, so the `/v1` prefix has to be in baseURL itself.
-  // (This matches OpenAI's own published baseURL: `https://api.openai.com/v1`.)
-  // The Anthropic SDK has the opposite convention — it adds `/v1/messages`
-  // automatically — so we only adjust here, not in the proxy or daemon.
+  // OpenAI SDK expects /v1 in the baseURL (see M2 notes). Anthropic SDK
+  // adds /v1/messages itself, so we only adjust for OpenAI-compat here.
   const baseURLWithV1 = baseURL.replace(/\/$/, "") + "/v1";
   const sdk = new OpenAI({ baseURL: baseURLWithV1, apiKey });
   return {
@@ -45,17 +32,27 @@ function makeOpenAiCompatibleClient(): LlmClient {
 function buildLlmClient(): LlmClient {
   const provider = process.env.TEAMROOM_PROVIDER;
   if (provider === "anthropic") {
-    // AnthropicLlmClient reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN
-    // from process.env directly (so the spawned Claude Code CLI subprocess
-    // sees them). The daemon's turn-processor injects both env vars at
-    // container-spawn time. No constructor wiring needed here.
     if (!process.env.ANTHROPIC_BASE_URL) throw new Error("ANTHROPIC_BASE_URL is required");
     if (!process.env.ANTHROPIC_AUTH_TOKEN) throw new Error("ANTHROPIC_AUTH_TOKEN is required");
     const toolsRaw = process.env.TEAMROOM_ALLOWED_TOOLS ?? "";
     const allowedTools = toolsRaw.trim() === ""
       ? []
       : toolsRaw.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-    return new AnthropicLlmClient({ allowedTools });
+    // M4: if the daemon injected a mail-MCP endpoint + per-spawn token,
+    // register the mail server on the claude-agent-sdk session so tool
+    // calls inside the LLM turn can reach the dispatcher.
+    const mcpUrl = process.env.TEAMROOM_MCP_URL;
+    const mcpToken = process.env.TEAMROOM_MCP_TOKEN;
+    const mcpServers = mcpUrl && mcpToken
+      ? {
+          mail: {
+            type: "http" as const,
+            url: mcpUrl,
+            headers: { "x-teamroom-mcp-token": mcpToken },
+          },
+        }
+      : undefined;
+    return new AnthropicLlmClient({ allowedTools, mcpServers });
   }
   if (provider === "lm-studio") {
     return makeOpenAiCompatibleClient();
@@ -64,26 +61,40 @@ function buildLlmClient(): LlmClient {
 }
 
 async function main(): Promise<void> {
-  try {
-    const raw = await readStdinOnce();
-    const envelope = JSON.parse(raw.trim()) as Envelope;
-    const model = process.env.TEAMROOM_MODEL;
-    if (!model) throw new Error("TEAMROOM_MODEL is required");
-    const client = buildLlmClient();
-    await runTurn({
-      envelope,
-      client,
-      model,
-      agentsMdPath: AGENTS_MD,
-      conversationPath: CONVERSATION_PATH,
-      emit: (line) => process.stdout.write(line + "\n"),
-    });
-    process.exit(0);
-  } catch (err) {
-    process.stderr.write(`agent-runtime fatal: ${err instanceof Error ? err.message : String(err)}\n`);
-    if (err instanceof Error && err.stack) process.stderr.write(err.stack + "\n");
-    process.exit(2);
+  const model = process.env.TEAMROOM_MODEL;
+  if (!model) throw new Error("TEAMROOM_MODEL is required");
+  const client = buildLlmClient();
+
+  // Wake loop. Each stdin line is a `{type:"wake", events: [...]}` envelope.
+  // EOF (daemon closed stdin) ends the session.
+  const rl = createInterface({ input: process.stdin });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    let envelope: WakeEnvelope;
+    try {
+      envelope = JSON.parse(trimmed) as WakeEnvelope;
+    } catch (err) {
+      process.stderr.write(`agent-runtime: invalid wake envelope: ${String(err)}\n`);
+      continue;
+    }
+    try {
+      await processWake({
+        wake: envelope,
+        client,
+        model,
+        agentsMdPath: AGENTS_MD,
+        onText: (text) => process.stderr.write(`[llm] ${text}\n`),
+      });
+    } catch (err) {
+      process.stderr.write(
+        `agent-runtime: processWake failed: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`,
+      );
+    }
   }
 }
 
-void main();
+void main().catch((err) => {
+  process.stderr.write(`agent-runtime fatal: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+  process.exit(2);
+});

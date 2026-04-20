@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type McpServerConfig, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { LlmClient, LlmCreateArgs, LlmCreateResult } from "./runtime.js";
 
 /**
@@ -51,6 +51,12 @@ export interface AnthropicLlmClientOpts {
   cwd?: string;
   /** Tools the agent may invoke. Defaults to [] (no tools). */
   allowedTools?: string[];
+  /**
+   * Optional MCP servers to register on every claude-agent-sdk session.
+   * M4 populates this with `{mail: {type:'http', url, headers:{...}}}` so
+   * agents can call mail.list/send/reply via the daemon-hosted MCP server.
+   */
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 const DEFAULT_SESSION_FILE = "/store/anthropic-session.txt";
@@ -63,6 +69,7 @@ export class AnthropicLlmClient implements LlmClient {
   private readonly configDir: string;
   private readonly cwd: string;
   readonly allowedTools: string[];
+  readonly mcpServers: Record<string, McpServerConfig>;
 
   constructor(opts: AnthropicLlmClientOpts = {}) {
     this.executable = opts.executable ?? "node";
@@ -70,6 +77,7 @@ export class AnthropicLlmClient implements LlmClient {
     this.configDir = opts.configDir ?? DEFAULT_CONFIG_DIR;
     this.cwd = opts.cwd ?? DEFAULT_CWD;
     this.allowedTools = opts.allowedTools ?? [];
+    this.mcpServers = opts.mcpServers ?? {};
   }
 
   async createMessage(args: LlmCreateArgs): Promise<LlmCreateResult> {
@@ -91,6 +99,7 @@ export class AnthropicLlmClient implements LlmClient {
       // Persist sessions so the next turn can resume.
       persistSession: true,
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+      ...(Object.keys(this.mcpServers).length > 0 ? { mcpServers: this.mcpServers } : {}),
       // Pass current env PLUS our CLAUDE_CONFIG_DIR so session files land in
       // the persistent /store mount (default ~/.claude is inside the
       // ephemeral container — gone with --rm). Process.env is needed so the
