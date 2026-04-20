@@ -9,11 +9,13 @@
 | M1 | One agent that works | Shipped | 2026-04-18 | [As-built](as-built/2026-04-18-teamroom-m1.md) |
 | M2 | Model abstraction layer (multi-model credential proxy) | Shipped | 2026-04-19 | [As-built](as-built/2026-04-19-teamroom-m2.md) |
 | M3 | Team substrate (narrowed ship) | Shipped | 2026-04-20 | [As-built](as-built/) (pending write at M3 close) |
-| **M4** | **Agent mail — email on an event-bus backbone** | **Next** | — | Forward thesis: [`m3-followups.md §6`](m3-followups.md) |
-| M5 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted down when mail was promoted |
-| M6 | Scheduling | Future | — | Originally M5 |
-| M7 | Evaluations | Future | — | Originally M6 |
-| M8 | Team ceremonies + self-learning | Future | — | Originally M7 |
+| M4 | Agent mail — email on an event-bus backbone | In progress | — | Forward thesis: [`m3-followups.md §6`](m3-followups.md) |
+| **M4.5** | **AI-native harness — `chat` / `watch` / `inbox`** | **Next** | — | [`m4-followups.md §15`](m4-followups.md); acceptance scenarios: ccAll, thread cap, idle exit, restart. Also includes mailing-list fanout trigger events (§16). |
+| M5 | Multi-agent-family tooling — LangGraph studio + Codex agents | Future | — | [`m4-followups.md §17`](m4-followups.md); gives the harness non-Claude-only agent support before memory lands. |
+| M6 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4) and the tooling expansion (M5). |
+| M7 | Scheduling | Future | — | Originally M5. |
+| M8 | Evaluations | Future | — | Originally M6. |
+| M9 | Team ceremonies + self-learning | Future | — | Originally M7. |
 
 ## Why this file exists
 

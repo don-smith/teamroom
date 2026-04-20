@@ -6,9 +6,9 @@
 
 ## 1. Studio-assistant tool-calling / LangGraph refit
 
-Studio-assistant doesn't speak MCP; in M4 it stays as a passive, non-mail-participating agent. Upgrade to LangGraph (or equivalent tool-capable runtime) planned for M5 (memory) or its own milestone.
+Studio-assistant doesn't speak MCP; in M4 it stays as a passive, non-mail-participating agent. Upgrade to LangGraph (or equivalent tool-capable runtime) is now scheduled — see §17 for the post-M4 sequencing (mini-milestone §15 lands first so the new agent can be driven + observed with `chat` / `watch` / `inbox`).
 
-**Trigger:** M5 memory needs agent tool-use; or an earlier concrete need for studio to participate in mail / fs / scheduling.
+**Trigger:** §15 ships. Superseded-by: §17.
 
 ## 2. Second channel (Telegram, Slack, voice, etc.)
 
@@ -90,7 +90,45 @@ Migration `003` leaves `topic`, `from_agent_id`, `conversation_id` in place even
 
 ---
 
-## 15. Agent-container observability (logging as an MCP tool)
+## 15. AI-native harness — `chat` / `watch` / `inbox` (mini-milestone)
+
+The next milestone after M4 closes. Three thin CLI surfaces that reuse M4 plumbing to make the harness self-testable by an AI collaborator (and less friction for humans) without hacking the DB directly:
+
+- **`teamroom chat <agent> "<text>"`** — synchronous send-and-wait. Same HTTP path as `send`, but blocks until the target replies to `cli:*`, goes idle without replying, or a timeout fires. Prints the reply(ies) inline. Removes the "tail in one terminal, send in another" two-window friction.
+- **`teamroom watch`** — structured JSONL stream of the in-process bus events (`mail.delivered`, `mail.sent`, `tool.call`, `session.spawned` / `session.idle_exit`, `channel.cli.out`) as they happen. Single pane showing what each agent is actually doing mid-turn.
+- **`teamroom inbox <agent>` / `teamroom thread <id>`** — read-only DB views that replace ad-hoc SQL.
+
+Implementation shape: two new HTTP endpoints on the mail-MCP server (`/cli/chat` = long-poll/SSE for a matching CLI-outbound row; `/events` = SSE stream of bus events), three CLI commands. ~400 lines.
+
+**Acceptance scenarios for this mini-milestone** (these were the "worth testing" list from M4 manual testing; rather than do them by hand, we use them to validate the new CLI commands work end-to-end):
+
+- `ccAll` group thread: three-party thread stays coherent; `mail.reply(..., ccAll: true)` reaches all participants.
+- Thread cap (default 10): 11th send returns a clean MCP error; the agent recovers by archiving or starting a fresh thread.
+- Idle exit: `TEAMROOM_SESSION_IDLE_MINUTES=1`, send one mail, wait 2min, verify `docker ps` shows the session gone.
+- Daemon-restart kills stale containers: start daemon, send mail, Ctrl-C, restart, verify the previous agent container is killed at startup.
+- Self-mail: agent mails itself; no deadlock.
+- Concurrent spawn: two CLI sends to different agents in rapid succession; both sessions spawn without MCP-token collision.
+- Invalid recipient: dispatcher error surfaces to the LLM via MCP, LLM reports it to the user.
+
+**Trigger:** ship M4 first, close the retro/as-built, then open this as the next milestone's plan.
+
+## 16. Mailing-list fanout trigger events (`turn.started` / `turn.completed`)
+
+`MailingListTriggerListener` + `MailingListRegistry` are wired end-to-end, but M4's session-driven runtime doesn't actually publish `turn.started` / `turn.completed` on the `EventBus` — those events were responsibilities of the old M3 turn-processor and the M4 session-manager path bypasses it. Result: the `list:harness-activity` list works mechanically (verified in the integration test, which publishes the events manually) but is silent in live operation.
+
+**Fix shape:** have `SessionTimerManager` publish `turn.started` before each `writeEnvelope` and `turn.completed` after the runtime's reply completes (or after an idle-timeout-driven stdin close, if we want "session ended" visibility). Small change, maybe 30 lines + test.
+
+**Trigger:** bundled into the mini-milestone above (§15), since mailing-list observability is itself a testing primitive.
+
+## 17. Studio-assistant tool-calling via LangGraph (second-agent-family milestone)
+
+After the AI-native-harness mini-milestone (§15) lands, the next milestone lifts studio-assistant from a passive non-mail-participating agent into a LangGraph-backed tool-capable agent. Rationale: Team Room should not only host Claude-family agents. LangGraph gives a provider-neutral runtime we can point at any model, which keeps the harness honest about multi-provider support.
+
+Sequencing: §15 first (so the new agent can be driven and observed by the chat/watch/inbox tools), §17 second (lifts studio-assistant), Codex-family agent third (additional runtime), then memory (M5 as originally planned).
+
+**Trigger:** §15 ships.
+
+## 18. Agent-container observability (logging as an MCP tool)
 
 Manual testing during M4 surfaced that when a container is running but the LLM isn't making any visible progress, there's no good way to tell WHY. We capture tool calls at the daemon side via the `tool.call` bus event, but that only fires for MCP calls — the container's own runtime output (wake received, LLM starting, LLM done, errors) is currently only on stderr, which docker-runner accumulates and returns at exit time.
 
