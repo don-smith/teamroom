@@ -73,3 +73,68 @@ describe("FakeRunner", () => {
     expect(captured).toBe('{"prompt":"hi"}');
   });
 });
+
+describe("FakeRunner — streaming interface", () => {
+  it("records envelopes written before and after attaching listeners", () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    rc.writeEnvelope({ type: "wake", events: ["mail"] });
+    rc.writeEnvelope({ n: 2 });
+    expect(rc.envelopes).toEqual([
+      { type: "wake", events: ["mail"] },
+      { n: 2 },
+    ]);
+  });
+
+  it("writeEnvelope throws after closeStdin", () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    rc.closeStdin();
+    expect(() => rc.writeEnvelope({ x: 1 })).toThrow(/after closeStdin/);
+  });
+
+  it("simulateEvent fans out to all event handlers", () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    const seen: unknown[] = [];
+    rc.onEvent((e) => seen.push(e));
+    rc.onEvent((e) => seen.push({ dup: e }));
+    rc.simulateEvent({ type: "log", level: "info", msg: "hi" });
+    expect(seen).toHaveLength(2);
+  });
+
+  it("simulateExit fires onExit handlers once and is idempotent", () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    const exits: unknown[] = [];
+    rc.onExit((r) => exits.push(r));
+    rc.simulateExit({ exitCode: 0 });
+    rc.simulateExit({ exitCode: 137 });
+    expect(exits).toHaveLength(1);
+    expect((exits[0] as { exitCode: number }).exitCode).toBe(0);
+  });
+
+  it("kill simulates a 137 exit", async () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    const exits: unknown[] = [];
+    rc.onExit((r) => exits.push(r));
+    await rc.kill();
+    expect((exits[0] as { exitCode: number }).exitCode).toBe(137);
+  });
+
+  it("waitForEnvelope resolves when writeEnvelope runs", async () => {
+    const runner = new FakeRunner();
+    const rc = runner.start({ imageTag: "x", mounts: [], env: {} });
+    const wait = rc.waitForEnvelope();
+    rc.writeEnvelope({ answered: true });
+    await expect(wait).resolves.toEqual({ answered: true });
+  });
+
+  it("tracks sessions on the runner for introspection", () => {
+    const runner = new FakeRunner();
+    const rc1 = runner.start({ imageTag: "x", mounts: [], env: {} });
+    const rc2 = runner.start({ imageTag: "y", mounts: [], env: {} });
+    expect(runner.sessions).toEqual([rc1, rc2]);
+  });
+});
