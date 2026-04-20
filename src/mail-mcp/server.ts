@@ -402,13 +402,24 @@ function jsonResult(value: unknown): JsonValue {
   // MCP tool results use a `content` array whose entries are text/image/
   // resource — `{type:"json"}` is not a spec content type (Claude Code
   // rejects the response with a schema error if we try). Stringify into a
-  // text block and also populate `structuredContent` so a client that
-  // supports it can read the typed shape without re-parsing.
+  // text block.
+  //
+  // `structuredContent` is spec-optional AND its schema requires a
+  // Record<string, unknown> — an object, not an array. mail.list returns
+  // an array, so we wrap anything non-object into { result: ... } before
+  // exposing it as structuredContent, or skip the field entirely for
+  // non-object payloads. Clients that only look at `content[0].text`
+  // still get the full JSON either way.
   const json = value as JsonValue;
-  return {
+  const isPlainObject =
+    json !== null && typeof json === "object" && !Array.isArray(json);
+  const result: Record<string, JsonValue> = {
     content: [{ type: "text", text: JSON.stringify(json) }],
-    structuredContent: json,
   };
+  if (isPlainObject) {
+    result.structuredContent = json as JsonValue;
+  }
+  return result as JsonValue;
 }
 
 function okResult(): JsonValue {
