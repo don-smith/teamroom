@@ -88,11 +88,21 @@ export class AnthropicLlmClient implements LlmClient {
 
     const resumeSessionId = this.readSessionIdSidecar();
 
+    // Auto-allow every MCP server's tools so the model doesn't silently
+    // skip them. Claude Code's convention is `mcp__<server>__<tool>`;
+    // anything not in allowedTools is visible but not auto-approved, which
+    // in a non-interactive container means the model just never calls it
+    // (per the Claude Code MCP permission docs). The yaml's allowed_tools
+    // stays scoped to claude-code built-ins (Read/Bash/etc.); MCP access
+    // is a harness-level capability so it's injected here, not per-agent.
+    const mcpWildcards = Object.keys(this.mcpServers).map((name) => `mcp__${name}__*`);
+    const effectiveAllowedTools = [...this.allowedTools, ...mcpWildcards];
+
     const options: Options = {
       executable: this.executable,
       model: args.model,
       cwd: this.cwd,
-      allowedTools: this.allowedTools,
+      allowedTools: effectiveAllowedTools,
       systemPrompt: args.system
         ? { type: "preset", preset: "claude_code", append: args.system }
         : undefined,
