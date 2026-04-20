@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sendToDb } from "./send.js";
+import { readMailPort, sendToDb, sendViaHttp } from "./send.js";
 import { createDatabase } from "../db/database.js";
 import { runMigrations } from "../db/migrator.js";
 import { AgentRepo } from "../db/agent-repo.js";
 import { MessageRepo } from "../db/message-repo.js";
+import { MailMcpServer } from "../mail-mcp/server.js";
+import { MailMcpTools } from "../mail-mcp/tools.js";
+import { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import { CliChannelAdapter } from "../channels/cli.js";
+import { EventBus } from "../bus/event-bus.js";
+import { ControllableClock } from "../clock/clock.js";
 
 describe("sendToDb", () => {
   let dir: string;
@@ -58,5 +64,85 @@ describe("sendToDb", () => {
     runMigrations(db);
     const msg = new MessageRepo(db).findById(result.messageId);
     expect(msg?.conversationId).toBe(result.conversationId);
+  });
+});
+
+describe("readMailPort", () => {
+  it("returns null when the port file is absent", () => {
+    const dir = mkdtempSync(join(tmpdir(), "teamroom-port-"));
+    try {
+      expect(readMailPort(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the parsed port when present", () => {
+    const dir = mkdtempSync(join(tmpdir(), "teamroom-port-"));
+    try {
+      writeFileSync(join(dir, "teamroom-mail.port"), "43219\n");
+      expect(readMailPort(dir)).toBe(43219);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null on invalid content", () => {
+    const dir = mkdtempSync(join(tmpdir(), "teamroom-port-"));
+    try {
+      writeFileSync(join(dir, "teamroom-mail.port"), "not-a-number");
+      expect(readMailPort(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("sendViaHttp", () => {
+  it("POSTs to /cli/send and returns the dispatcher result", async () => {
+    const { createDatabase: mkDb } = await import("../db/database.js");
+    const db = mkDb(":memory:");
+    runMigrations(db);
+    new AgentRepo(db).create({ id: "claude-assistant", configPath: "/a", createdAt: "2026-04-20T00:00:00.000Z" });
+    const repo = new MessageRepo(db);
+    const bus = new EventBus();
+    const clock = new ControllableClock("2026-04-20T10:00:00.000Z");
+    let seq = 0;
+    const dispatcher = new MailDispatcher({
+      messageRepo: repo, bus, clock,
+      genId: () => `id-${++seq}`,
+      knownAgents: (n) => n === "claude-assistant",
+      knownLists: () => false, listSubscribers: () => [],
+      maxMailsPerThread: 10,
+    });
+    const tools = new MailMcpTools({ messageRepo: repo, dispatcher, bus, clock });
+    const server = new MailMcpServer({
+      tools,
+      tokenResolver: () => null,
+      cliAdapter: new CliChannelAdapter({ dispatcher }),
+      port: 0,
+    });
+    await server.start();
+    try {
+      const r = await sendViaHttp({
+        port: server.address().port,
+        user: "don",
+        target: "claude-assistant",
+        body: "hi",
+      });
+      expect(r.threadId).toBeTruthy();
+      const inbox = repo.listInbox("claude-assistant", {});
+      expect(inbox).toHaveLength(1);
+      expect(inbox[0]!.from).toBe("cli:don");
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("rejects with a descriptive error when the daemon rejects", async () => {
+    // No server running → fetch fails with a network error.
+    await expect(
+      sendViaHttp({ port: 1, user: "don", target: "x", body: "y" }),
+    ).rejects.toThrow();
   });
 });

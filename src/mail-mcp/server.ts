@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { MailMcpTools } from "./tools.js";
+import type { CliChannelAdapter } from "../channels/cli.js";
 import type { Logger } from "../logger/logger.js";
 
 /**
@@ -148,6 +149,13 @@ export interface MailMcpServerDeps {
   tools: MailMcpTools;
   /** Resolve an MCP token to an agent id. Return null if the token is invalid. */
   tokenResolver: (token: string) => string | null;
+  /**
+   * Optional CLI-channel adapter. When present, a sibling `POST /cli/send`
+   * endpoint is exposed — the `teamroom send` CLI posts to it instead of
+   * writing directly to the DB, so the dispatcher fires the mail.delivered
+   * bus event and the session manager wakes the target agent.
+   */
+  cliAdapter?: CliChannelAdapter;
   /** Port to bind; 0 for an ephemeral port (tests). */
   port: number;
   /** Bind host; defaults to 127.0.0.1 for local-only trust. */
@@ -199,6 +207,10 @@ export class MailMcpServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method === "POST" && req.url === "/cli/send" && this.deps.cliAdapter) {
+      await this.handleCliSend(req, res, this.deps.cliAdapter);
+      return;
+    }
     if (req.method !== "POST" || req.url !== "/mcp") {
       res.statusCode = 404;
       res.end();
@@ -240,6 +252,62 @@ export class MailMcpServer {
     }
     res.statusCode = 200;
     res.end(JSON.stringify(Array.isArray(parsed) ? responses : responses[0]));
+  }
+
+  private async handleCliSend(
+    req: IncomingMessage,
+    res: ServerResponse,
+    cliAdapter: CliChannelAdapter,
+  ): Promise<void> {
+    // Trust boundary: the daemon-owned local HTTP socket. We bind to
+    // 127.0.0.1 by default and also cross-check the peer address here so
+    // a misconfigured bind doesn't accidentally expose /cli/send.
+    const remote = req.socket.remoteAddress;
+    if (remote !== "127.0.0.1" && remote !== "::1" && remote !== "::ffff:127.0.0.1") {
+      res.statusCode = 403;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: "localhost only" }));
+      return;
+    }
+    const body = await readBody(req);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: "invalid json" }));
+      return;
+    }
+    const p = (parsed ?? {}) as {
+      user?: unknown;
+      target?: unknown;
+      body?: unknown;
+      threadId?: unknown;
+    };
+    if (typeof p.user !== "string" || typeof p.target !== "string" || typeof p.body !== "string") {
+      res.statusCode = 400;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: "expected {user, target, body}" }));
+      return;
+    }
+    try {
+      const result = cliAdapter.send({
+        user: p.user,
+        target: p.target,
+        body: p.body,
+        threadId: typeof p.threadId === "string" ? p.threadId : null,
+      });
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.statusCode = 400;
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+      );
+    }
   }
 
   /**
