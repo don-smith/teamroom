@@ -1,0 +1,14 @@
+# Mailing-list registry.
+#
+# Lists are addressable from `mail.send` / `mail.reply` as `list:<name>`.
+# Subscribers are declared per-agent in `agents/<name>/agent.yaml` under
+# `subscriptions: [list:<name>, ...]` — declaring a subscription to a list
+# not listed here fails daemon boot.
+#
+# `triggers` are bus event types whose publish causes a fanout to this list
+# (one system-sent mail per subscriber).
+lists:
+  - name: harness-activity
+    triggers:
+      - turn.started
+      - turn.completed
