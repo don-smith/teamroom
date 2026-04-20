@@ -90,4 +90,16 @@ Migration `003` leaves `topic`, `from_agent_id`, `conversation_id` in place even
 
 ---
 
+## 15. Agent-container observability (logging as an MCP tool)
+
+Manual testing during M4 surfaced that when a container is running but the LLM isn't making any visible progress, there's no good way to tell WHY. We capture tool calls at the daemon side via the `tool.call` bus event, but that only fires for MCP calls — the container's own runtime output (wake received, LLM starting, LLM done, errors) is currently only on stderr, which docker-runner accumulates and returns at exit time.
+
+Two shapes worth considering:
+- Runtime emits `{type:"log"}` stdout envelopes on wake-received / LLM-start / LLM-done / errors. Daemon's session manager subscribes to each container's `onEvent` and forwards to the daemon JSONL log.
+- **User's idea (worth capturing):** expose a logging MCP tool (e.g., `mcp__observability__log`) so the *agent itself* can log structured events from inside the LLM turn. Advantage: observability lives in the host, not the container, so no log-forwarding plumbing; same trust/auth as mail MCP.
+
+**Trigger:** next time we can't tell whether a container is stuck vs. running vs. silently deciding not to act. Likely bundled with M5 memory if memory adds another MCP surface.
+
+---
+
 *End of M4 follow-ups. Items accumulate during execution; entries resolved at milestone close migrate to the as-built's "known limitations" section or are dropped.*
