@@ -1,4 +1,4 @@
-import type { Message } from "../types.js";
+import type { Message, MessageCreateInput } from "../types.js";
 import type { Db } from "./database.js";
 
 interface MessageRow {
@@ -57,7 +57,7 @@ export interface ListInboxOpts {
 export class MessageRepo {
   constructor(private readonly db: Db) {}
 
-  create(m: Message): void {
+  create(m: MessageCreateInput): void {
     const to = JSON.stringify(m.to ?? []);
     const cc = m.cc == null ? null : JSON.stringify(m.cc);
     this.db
