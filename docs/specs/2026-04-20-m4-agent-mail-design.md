@@ -159,12 +159,15 @@ Internal; not MCP-exposed. API:
 sendMail(from, to[], cc[]?, subject?, body, thread_id?) → { id, thread_id }
 ```
 
-Per recipient:
-- `agent:<name>` → insert email row (`agent_id=<name>, direction=in, from=<from>, to=<original to[]>, cc=<cc>, subject, body, thread_id`) → publish `mail.delivered{to: <name>}`.
-- `cli:<user>` → insert plain CLI outbound row (`channel=cli, direction=out, body, thread_id`); publish `channel.cli.out{user}`.
-- `list:<name>` → expand via subscription index → recurse `sendMail` per subscriber with `to: [agent:<subscriber>]`.
+**Multi-recipient semantics.** Before any row is written, the dispatcher **expands** every `list:<name>` occurrence in `to` and `cc` to its subscriber agent addresses. The expansion snapshots list membership at send time — subsequent membership changes don't retroactively touch already-dispatched mail.
 
-Validation: unknown agent / unknown list → atomic reject of the entire send. Thread cap enforcement. Thread_id minting when absent.
+After expansion, `to` and `cc` contain only `agent:<name>` and `cli:<user>` addresses (no `list:*`). The dispatcher then writes rows per recipient. **All rows share identical `to`, `from`, `cc`, `subject`, `body`, `thread_id`** — only `agent_id` and row-specific state (`read_at`, `archived_at`, etc.) differ. This preserves group-discussion semantics: any recipient can `mail.reply(..., cc_all=true)` and reach the whole group, with the shared `thread_id` binding all responses into one thread visible to every participant.
+
+Per recipient (after expansion):
+- `agent:<name>` → insert email row (`agent_id=<name>, direction=in, from=<from>, to=<expanded to[]>, cc=<expanded cc>, subject, body, thread_id`) → publish `mail.delivered{to: <name>}`.
+- `cli:<user>` → insert plain CLI outbound row (`channel=cli, direction=out, body, thread_id`); publish `channel.cli.out{user}`. Note: the CLI tail renders body only — the full envelope isn't shown to the human.
+
+Validation: unknown agent / unknown list → atomic reject of the entire send. Thread cap enforcement (counts rows — a multi-recipient dispatch counts N toward the cap). Thread_id minting when absent. A list that expands to zero subscribers is not an error; it just produces no rows for that slot.
 
 ### 4.3 Event bus (`src/bus/`)
 
@@ -271,9 +274,10 @@ MCP client configured via `claude-agent-sdk` options pointing at `http://host.do
 1. Orchestrator publishes `turn.completed{agentId, turnId}` on bus.
 2. List-trigger listener: `turn.completed` is a trigger for `list:harness-activity`.
 3. `dispatcher.sendMail(from:"system", to:[list:harness-activity], body:"turn X completed", thread_id:null)`.
-4. Dispatcher expands `list:harness-activity` via subscription index → subscribers=[claude-researcher]. Inserts email row in researcher's inbox; publishes `mail.delivered`.
-5. Session manager wakes researcher (spawn if needed, else push wake to existing stdin).
-6. Researcher reads; may or may not act. Inbox ops as usual.
+4. Dispatcher expands `list:harness-activity` → `[agent:claude-researcher]`. (If the list had multiple subscribers, all would appear in every delivered row's `to`.)
+5. Inserts one email row per subscriber; **each row's `to` carries the full expanded subscriber set**. Publishes `mail.delivered` per row.
+6. Session manager wakes each subscriber (spawn if needed, else push wake to existing stdin).
+7. Any subscriber can `mail.reply(..., cc_all=true)` — the reply preserves `thread_id`, fans out to the whole group, and every participant sees the whole conversation in their inbox under one thread. Slack-style group discussion; each participant can also archive or mute their own copy without affecting others.
 
 ### 5.4 Idle timeout
 
