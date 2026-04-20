@@ -119,7 +119,15 @@ export class MailDispatcher {
           createdAt: now,
           threadId,
         });
-        this.deps.bus.publish("channel.cli.out", { user: addr.user });
+        // Include the row id so a bus-to-bus bridge (e.g., the daemon's
+        // tail-facing FileNotifyBus) can forward a message.outbound event
+        // without racing to find the most recent CLI row.
+        this.deps.bus.publish("channel.cli.out", {
+          user: addr.user,
+          messageId: id,
+          agentId: senderLabel,
+          threadId,
+        });
       }
       // `list` is already expanded out of the list — not reachable here.
     }

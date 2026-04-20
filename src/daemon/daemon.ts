@@ -289,6 +289,24 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (payload) => {
     sessionManager.onAgentActivity(payload.agentId);
   });
+  // Bridge channel.cli.out (M4 dispatcher event) to message.outbound on the
+  // FileNotifyBus so `teamroom tail` — which was written for M3's shape —
+  // sees agent replies addressed to cli:* recipients without needing its
+  // own M4-aware code path.
+  eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
+    "channel.cli.out",
+    (p) => {
+      void notifyBus.publish({
+        id: genId(),
+        type: "message.outbound",
+        ts: clock.nowIso(),
+        agentId: p.agentId,
+        messageId: p.messageId,
+        turnId: "",
+        traceId: p.messageId,
+      });
+    },
+  );
 
   await reconcile({ turnRepo, bus: notifyBus, logger: rootLogger, clock, genId });
 

@@ -70,7 +70,7 @@ class PayloadTooLargeError extends Error {
  */
 function emit(
   logger: Logger,
-  level: "info" | "warn" | "error",
+  level: "debug" | "info" | "warn" | "error",
   span: SpanLog,
 ): void {
   logger[level](span.event, span);
@@ -204,7 +204,12 @@ export class LocalModelProxy implements ModelProxy {
     }
 
     if (!token) {
-      emit(this.opts.logger, "warn", buildSpan({
+      // Downgraded to debug: the Claude Code CLI (spawned by
+      // claude-agent-sdk) makes an unauthenticated probe on startup that
+      // lands here. It's harmless — the real LLM call that follows carries
+      // our routing token — but at warn level it grabs attention every
+      // time an agent session spawns.
+      emit(this.opts.logger, "debug", buildSpan({
         event: "model.call.rejected",
         traceId,
         spanId,

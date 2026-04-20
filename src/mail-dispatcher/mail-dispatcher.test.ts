@@ -144,7 +144,12 @@ describe("MailDispatcher — cli recipient", () => {
     expect(cliRows[0]!.body).toBe("done");
     expect(cliRows[0]!.channel).toBe("cli");
     expect(cliRows[0]!.direction).toBe("out");
-    expect(out).toEqual([{ user: "don" }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      user: "don",
+      agentId: "claude-assistant",
+      messageId: cliRows[0]!.id,
+    });
 
     // And no inbox row anywhere for a cli:* recipient.
     expect(messageRepo.listInbox("claude-assistant", {})).toHaveLength(0);
