@@ -50,6 +50,7 @@ npm run build
 echo "==> Building agent images"
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
+docker build -t teamroom-agent-claude-researcher:latest -f agents/claude-researcher/Dockerfile .
 
 DAEMON_PID=""
 TAIL_PID=""
@@ -187,6 +188,33 @@ run_multiturn_check studio-assistant
 run_agent claude-assistant "claude-ok"
 run_multiturn_check claude-assistant
 
+# M4 scenario: CLI → claude-assistant → claude-researcher → reply back to CLI.
+# Exercises the mail substrate end-to-end (dispatcher, session manager, MCP
+# tools, second live agent). Success condition: the CLI tail shows a response
+# that references claude-researcher's contribution.
+run_m4_multi_agent_mail() {
+  echo "==> [m4-mail] Sending CLI mail that asks claude-assistant to consult claude-researcher"
+  : > /tmp/teamroom-smoke-output.txt
+  node dist/cli/main.js send --agent claude-assistant \
+    "Please ask claude-researcher (via mail.send to agent:claude-researcher) for a one-word summary of the word 'pelican'. When they reply, forward their answer back to me by replying to my original mail. Do not reply to me until you have received a response from claude-researcher."
+  echo "==> [m4-mail] Waiting for final CLI-visible answer (up to 120s)"
+  for _ in $(seq 1 240); do
+    # The response should mention 'researcher' OR 'pelican' — we don't pin to
+    # exact wording because the LLM's phrasing varies. Either surfaces proves
+    # the multi-agent chain ran end-to-end.
+    if grep -qiE "researcher|pelican" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
+      echo "==> [m4-mail] OK — multi-agent mail round-trip surfaced to CLI"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "==> FAIL: m4 multi-agent mail check did not surface a final CLI reply" >&2
+  dump_failure_diagnostics "claude-assistant+claude-researcher"
+  return 1
+}
+
+run_m4_multi_agent_mail
+
 echo "==> Verifying both providers' spans in the daemon log"
 LOG_FILE=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
 if [[ -z "$LOG_FILE" ]]; then
@@ -202,4 +230,4 @@ if ! grep -q '"provider":"lm-studio"' "$LOG_FILE"; then
   exit 1
 fi
 
-echo "==> SMOKE PASS — both agents responded; both providers' spans present"
+echo "==> SMOKE PASS — both agents responded; both providers' spans present; M4 multi-agent mail reached CLI"
