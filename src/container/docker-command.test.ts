@@ -90,4 +90,34 @@ describe("buildDockerRunArgs", () => {
     const aIndex = argv.indexOf("B=2");
     expect(bIndex).toBeLessThan(aIndex);
   });
+
+  it("emits --label flags for every entry, deterministically ordered", () => {
+    const argv = buildDockerRunArgs({
+      imageTag: "img:latest",
+      mounts: [],
+      env: {},
+      labels: {
+        "teamroom-agent": "true",
+        "teamroom-agent-id": "claude-assistant",
+      },
+    });
+    // Keys are sorted by buildDockerRunArgs.
+    const labelPairs: string[] = [];
+    for (let i = 0; i < argv.length; i++) {
+      if (argv[i] === "--label" && argv[i + 1] != null) labelPairs.push(argv[i + 1]!);
+    }
+    expect(labelPairs).toEqual([
+      "teamroom-agent=true",
+      "teamroom-agent-id=claude-assistant",
+    ]);
+  });
+
+  it("omits --label when spec.labels is absent", () => {
+    const argv = buildDockerRunArgs({
+      imageTag: "img:latest",
+      mounts: [],
+      env: {},
+    });
+    expect(argv).not.toContain("--label");
+  });
 });

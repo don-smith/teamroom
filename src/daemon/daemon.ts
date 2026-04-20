@@ -8,6 +8,7 @@ import { MessageRepo } from "../db/message-repo.js";
 import { TurnRepo } from "../db/turn-repo.js";
 import { FileNotifyBus } from "../bus/file-notify-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
+import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import { SystemClock } from "../clock/clock.js";
 import { JsonLinesLogger } from "../logger/logger.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
@@ -69,6 +70,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // PID file
   const pidFile = join(opts.dataDir, "teamroom.pid");
   writeFileSync(pidFile, String(process.pid));
+
+  // Kill any stale teamroom-agent containers left behind by a prior daemon.
+  // Per-agent container state isn't resumable across a daemon restart (mail
+  // persistence is in the DB); clean slate keeps the session map honest.
+  const killed = await killStaleTeamroomContainers({ logger: rootLogger });
+  if (killed.length > 0) {
+    rootLogger.info("stale containers killed", { count: killed.length, ids: killed });
+  }
 
   const db = createDatabase(join(opts.dataDir, "teamroom.db"));
   runMigrations(db);

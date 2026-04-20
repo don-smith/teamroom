@@ -15,11 +15,23 @@ export interface DockerRunSpec {
    * unique across running containers.
    */
   name?: string;
+  /**
+   * Optional docker labels applied with `--label <k>=<v>`. M4 uses these
+   * to identify teamroom-owned containers on daemon startup so stale
+   * ones can be killed without touching unrelated containers.
+   */
+  labels?: Record<string, string>;
 }
 
 export function buildDockerRunArgs(spec: DockerRunSpec): string[] {
   const args: string[] = ["run", "--rm", "-i"];
   if (spec.name) args.push("--name", spec.name);
+  if (spec.labels) {
+    const labelKeys = Object.keys(spec.labels).sort();
+    for (const key of labelKeys) {
+      args.push("--label", `${key}=${spec.labels[key]}`);
+    }
+  }
   for (const m of spec.mounts) {
     const suffix = m.readOnly ? ":ro" : "";
     args.push("-v", `${m.hostPath}:${m.containerPath}${suffix}`);
