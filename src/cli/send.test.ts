@@ -54,7 +54,17 @@ describe("teamroom send (channel-based)", () => {
     expect(inbox[0]?.from).toBe("channel:cli:don");
   });
 
-  it("supports an optional threadId", async () => {
+  it("preserves an explicit threadId end-to-end", async () => {
+    // Seed a parent message with the target threadId so the cap predicate has
+    // a thread to belong to; then send a reply with the same threadId and
+    // verify the inserted row carries it through.
+    await send({
+      port: channels.port,
+      user: "don",
+      agent: "alice",
+      body: "first",
+      threadId: "T-specific",
+    });
     await send({
       port: channels.port,
       user: "don",
@@ -63,10 +73,9 @@ describe("teamroom send (channel-based)", () => {
       threadId: "T-specific",
     });
     const inbox = storage.messageRepo.listInbox("alice", { includeArchived: false });
-    expect(inbox.length).toBe(1);
-    // The dispatcher may preserve the explicit threadId or assign a new one;
-    // at minimum the mail should be delivered. Verify with a threadId check
-    // if the inbox row exposes it.
-    expect(inbox[0]?.body).toBe("reply");
+    expect(inbox.length).toBe(2);
+    for (const row of inbox) {
+      expect(row.threadId).toBe("T-specific");
+    }
   });
 });
