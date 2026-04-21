@@ -9,6 +9,8 @@ import { composeStorage } from "../../src/modules/storage/storage.js";
 import { composeMessaging } from "../../src/modules/messaging/messaging.js";
 import { composeMcpMail } from "../../src/modules/mcp-mail/mcp-mail.js";
 import { composeSessionManagement } from "../../src/modules/session-management/session-management.js";
+import { composeChannels, type Channels } from "../../src/modules/channels/channels.js";
+import { composeMail, type Mail } from "../../src/modules/mail/mail.js";
 import type { MailDispatcher } from "../../src/mail-dispatcher/mail-dispatcher.js";
 import type { MailingListRegistry, ListDefinition } from "../../src/mailing-lists/registry.js";
 import type { SessionTimerManager, TimerFactory, TimerHandle } from "../../src/session-manager/session-manager.js";
@@ -94,6 +96,8 @@ export interface IntegrationHarness {
   sessionManager: SessionTimerManager;
   timerFactory: ManualTimers;
   runner: FakeRunner;
+  channels: Channels;
+  mail: Mail;
   cli: {
     send(input: { user: string; target: string; body: string; threadId?: string | null }): { threadId: string };
   };
@@ -106,7 +110,7 @@ export interface IntegrationHarness {
   shutdown(): Promise<void>;
 }
 
-export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness {
+export async function composeIntegrationHarness(opts: HarnessOpts): Promise<IntegrationHarness> {
   // --- Observability: inline (we want a controllable clock; the observability
   //     module's real SystemClock isn't what tests need).
   const clock = new ControllableClock("2026-04-20T10:00:00.000Z");
@@ -203,6 +207,20 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
     genToken: () => `tok-${++seq}`,
   });
 
+  // --- Channels (chat WebSocket) + Mail (query WebSocket)
+  const channels = await composeChannels({
+    storage,
+    messaging,
+    mcpMail,
+    logger,
+    port: 0,
+  });
+  const mail = await composeMail({
+    storage,
+    logger,
+    port: 0,
+  });
+
   const cli = {
     send(input: { user: string; target: string; body: string; threadId?: string | null }) {
       const { threadId } = cliAdapter.send({
@@ -250,6 +268,8 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
   }
 
   async function shutdown(): Promise<void> {
+    await channels.stop();
+    await mail.stop();
     await sessionMgmt.stop();
     storage.close();
   }
@@ -265,6 +285,8 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
     sessionManager: sessionMgmt.sessionManager,
     timerFactory,
     runner,
+    channels,
+    mail,
     cli,
     waitForCliOut,
     waitForInbox,

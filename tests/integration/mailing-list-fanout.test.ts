@@ -3,7 +3,7 @@ import { composeIntegrationHarness } from "./helpers.js";
 
 describe("mailing-list-fanout", () => {
   it("publishing a trigger event on the bus dispatches system-sent mail to subscribers", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant", "claude-researcher"],
       lists: [{ name: "harness-activity", triggers: ["turn.completed"] }],
       agentSubscriptions: {
@@ -29,7 +29,7 @@ describe("mailing-list-fanout", () => {
   });
 
   it("un-triggered events do not fan out", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       lists: [{ name: "activity", triggers: ["turn.started"] }],
       agentSubscriptions: { "claude-assistant": ["list:activity"] },
@@ -46,7 +46,7 @@ describe("mailing-list-fanout", () => {
 
 describe("session-idle-exit", () => {
   it("advances the timer and closes stdin, then removes the session", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       sessionIdleMinutes: 30,
       agentScripts: {
@@ -78,7 +78,7 @@ describe("session-idle-exit", () => {
   });
 
   it("session stays alive if any activity arrives before the timer fires", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       sessionIdleMinutes: 30,
       agentScripts: { "claude-assistant": () => {} },

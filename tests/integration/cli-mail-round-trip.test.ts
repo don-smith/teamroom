@@ -3,7 +3,7 @@ import { composeIntegrationHarness } from "./helpers.js";
 
 describe("cli-mail-round-trip", () => {
   it("CLI send → agent wakes → mail.list + mail.reply → CLI outbound row", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       agentScripts: {
         "claude-assistant": (tools) => {
@@ -29,7 +29,7 @@ describe("cli-mail-round-trip", () => {
 describe("agent-to-agent-mail", () => {
   it("two agents exchange mail in a shared thread, CLI sees the final answer", async () => {
     let assistantTurn = 0;
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant", "claude-researcher"],
       agentScripts: {
         "claude-assistant": (tools) => {

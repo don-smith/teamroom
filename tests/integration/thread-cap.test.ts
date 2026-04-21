@@ -3,7 +3,7 @@ import { composeIntegrationHarness } from "./helpers.js";
 
 describe("thread-cap", () => {
   it("rejects the (cap+1)th mail in a thread", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       maxMailsPerThread: 10,
     });
@@ -33,7 +33,7 @@ describe("thread-cap", () => {
   });
 
   it("cap applies per thread — unrelated threads are unaffected", async () => {
-    const h = composeIntegrationHarness({
+    const h = await composeIntegrationHarness({
       agents: ["claude-assistant"],
       maxMailsPerThread: 3,
     });
