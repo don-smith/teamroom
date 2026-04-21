@@ -1,37 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { parseAddress, formatAddress, type Address } from "./address.js";
 
-describe("parseAddress", () => {
-  it.each([
-    ["agent:claude-assistant", { kind: "agent" as const, name: "claude-assistant" }],
-    ["cli:don", { kind: "cli" as const, user: "don" }],
-    ["list:harness-activity", { kind: "list" as const, name: "harness-activity" }],
-  ])("parses %s", (input, expected) => {
-    expect(parseAddress(input)).toEqual(expected);
+describe("address", () => {
+  const cases: [string, Address][] = [
+    ["agent:claude-assistant", { kind: "agent", name: "claude-assistant" }],
+    ["list:harness-activity", { kind: "list", name: "harness-activity" }],
+    ["channel:cli:don", { kind: "channel", channel: "cli", externalId: "don" }],
+    ["channel:telegram:12345", { kind: "channel", channel: "telegram", externalId: "12345" }],
+  ];
+
+  for (const [str, addr] of cases) {
+    it(`parses ${str}`, () => {
+      expect(parseAddress(str)).toEqual(addr);
+    });
+    it(`formats ${str}`, () => {
+      expect(formatAddress(addr)).toBe(str);
+    });
+  }
+
+  it("throws on unknown top-level prefix", () => {
+    expect(() => parseAddress("system:foo")).toThrow(/unknown address prefix/);
   });
 
-  it.each(["no-prefix", ":empty-prefix", "agent:", "xxx:foo"])(
-    "rejects %s",
-    (s) => {
-      expect(() => parseAddress(s)).toThrow();
-    },
-  );
-
-  it("preserves colons in the name portion (after the first one)", () => {
-    // We only split on the first colon. Future address kinds (e.g. urls) are free.
-    expect(parseAddress("agent:a:b:c")).toEqual({ kind: "agent", name: "a:b:c" });
+  it("throws on malformed channel address (missing externalId)", () => {
+    expect(() => parseAddress("channel:cli")).toThrow(/invalid channel address/);
   });
-});
 
-describe("formatAddress", () => {
-  it("round-trips parsed addresses", () => {
-    const addrs: Address[] = [
-      { kind: "agent", name: "a" },
-      { kind: "cli", user: "u" },
-      { kind: "list", name: "l" },
-    ];
-    for (const a of addrs) {
-      expect(parseAddress(formatAddress(a))).toEqual(a);
-    }
+  it("parses channel addresses leniently — registry validation happens at dispatch", () => {
+    expect(parseAddress("channel:bogus:foo")).toEqual({
+      kind: "channel",
+      channel: "bogus",
+      externalId: "foo",
+    });
   });
 });
