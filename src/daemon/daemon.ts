@@ -200,6 +200,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   });
 
   // --- 13. Stop orchestration ---
+  // Ingress-first: shut off external-facing surfaces (channels, mail-MCP)
+  // before their dependencies (model proxy, storage) close. Any late-arriving
+  // inbound can't land in a half-torn-down substrate.
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -207,13 +210,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     orchestrator.stop();
     await sessionMgmt.stop();
     await loopPromise;
-    await mailMcpServer.stop();
-    await modelProxy.stop();
-    await notifyBus.close();
     await channels.stop();
     deletePortFile(opts.dataDir, "chat");
-    storage.close();
+    await mailMcpServer.stop();
     deletePortFile(opts.dataDir, "mail-mcp");
+    await modelProxy.stop();
+    await notifyBus.close();
+    storage.close();
     try { unlinkSync(pidFile); } catch { /* best-effort */ }
   };
 
