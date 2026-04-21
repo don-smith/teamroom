@@ -25,6 +25,9 @@ import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { MailingListRegistry } from "../mailing-lists/registry.js";
 import type { SessionTimerManager } from "../session-manager/session-manager.js";
+import type { Storage } from "../modules/storage/storage.js";
+import type { Clock } from "../clock/clock.js";
+import type { Logger } from "../logger/logger.js";
 import type { Db } from "../db/database.js";
 
 /**
@@ -216,17 +219,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
 // Private startup helpers
 // ---------------------------------------------------------------------------
 
-type StorageLike = {
-  agentRepo: { findById(id: string): unknown; create(agent: { id: string; configPath: string; createdAt: string }): void };
-};
-type ClockLike = { nowIso(): string };
-type LoggerLike = { info(msg: string, meta?: Record<string, unknown>): void };
-
 function discoverAgentConfigs(
   agentsDir: string,
-  storage: StorageLike,
-  logger: LoggerLike,
-  clock: ClockLike,
+  storage: Storage,
+  logger: Logger,
+  clock: Clock,
 ): Map<string, AgentConfig> {
   const agentConfigs = new Map<string, AgentConfig>();
   if (!existsSync(agentsDir)) return agentConfigs;
@@ -243,7 +240,7 @@ function discoverAgentConfigs(
   return agentConfigs;
 }
 
-function resolveCodebasePath(dataDir: string, logger: LoggerLike): string | null {
+function resolveCodebasePath(dataDir: string, logger: Logger): string | null {
   const raw = process.env.TEAMROOM_CODEBASE_PATH;
   let result: string | null;
   if (raw == null || raw.trim() === "") {
