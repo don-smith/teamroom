@@ -9,7 +9,7 @@ The source tree is split by runtime responsibility. Most of it runs on the **hos
 - `logger/` — `Logger` interface with `JsonLinesLogger` (prod) and `CapturingLogger` (tests). Single file; no README.
 - `env/` — `readEnvFile` — reads `.env` without polluting `process.env`. Single file; no README.
 - [`db/`](db/README.md) — SQLite schema, migrations, three repositories.
-- [`bus/`](bus/README.md) — `NotifyBus` seam; `FileNotifyBus` (prod), `InMemoryBus` (tests).
+- [`bus/`](bus/README.md) — in-process `EventBus` for M4 signals (mail, session, tool-call, channel).
 - [`container/`](container/README.md) — `ContainerRunner` seam; `DockerRunner` (prod), `FakeRunner` (tests).
 - [`agent-config/`](agent-config/README.md) — host-only loader for per-agent folder metadata.
 - [`daemon/`](daemon/README.md) — composition root, polling loop, turn processor, reconcile, safety nets.
