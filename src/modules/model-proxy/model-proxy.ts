@@ -71,9 +71,17 @@ function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
   });
 }
 
+/**
+ * "Exchange" function that returns the OAuth token directly as the temp key.
+ *
+ * See the M2 as-built / M3 as-built for background on why we skip the
+ * exchange: Anthropic gates the programmatic exchange endpoint with 403
+ * for `claude setup-token` issued tokens, but those tokens are themselves
+ * long-lived API tokens accepted directly via `x-api-key` on `/v1/messages`.
+ */
 function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
   return Promise.resolve({
     tempKey: oauthToken,
-    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
   });
 }

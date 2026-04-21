@@ -29,4 +29,14 @@ describe("composeModelProxy", () => {
     expect(mp.anthropicAdapterPresent).toBe(true);
     await mp.stop();
   });
+
+  it("includes the anthropic adapter for the oauth branch (directOAuthPassthrough)", async () => {
+    const mp = await composeModelProxy({
+      logger,
+      lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "test" },
+      anthropic: { mode: "oauth", oauthToken: "oauth-token-test" },
+    });
+    expect(mp.anthropicAdapterPresent).toBe(true);
+    await mp.stop();
+  });
 });
