@@ -102,11 +102,11 @@ export class MailDispatcher {
           threadId,
         });
         this.deps.bus.publish("mail.delivered", { to: addr.name });
-      } else if (addr.kind === "cli") {
+      } else if (addr.kind === "channel" && addr.channel === "cli") {
         // CLI outbound rows carry only body + thread_id; `teamroom tail`
         // renders the body, not the full envelope. We still scope the row
         // to the sending agent via agent_id (or the sender address verbatim
-        // when the sender is cli:* or 'system').
+        // when the sender is channel:cli:* or 'system').
         const senderLabel = this.senderLabel(input.from);
         this.deps.messageRepo.create({
           id,
@@ -123,7 +123,7 @@ export class MailDispatcher {
         // tail-facing FileNotifyBus) can forward a message.outbound event
         // without racing to find the most recent CLI row.
         this.deps.bus.publish("channel.cli.out", {
-          user: addr.user,
+          user: addr.externalId,
           messageId: id,
           agentId: senderLabel,
           threadId,
