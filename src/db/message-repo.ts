@@ -151,6 +151,15 @@ export class MessageRepo {
     this.db.prepare(`UPDATE messages SET deleted_at = ? WHERE id = ?`).run(now, id);
   }
 
+  listThread(threadId: string): Message[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM messages WHERE thread_id = ? AND deleted_at IS NULL ORDER BY created_at ASC`,
+      )
+      .all(threadId) as MessageRow[];
+    return rows.map(rowToMessage);
+  }
+
   listCliOutbound(limit = 100): Message[] {
     // M4 CLI is single-user — we don't yet tag rows per-user. When a second
     // user lands, add a `cli_user` column and filter here.
