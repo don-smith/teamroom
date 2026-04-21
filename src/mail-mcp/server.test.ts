@@ -58,7 +58,11 @@ async function startServer(
 }
 
 async function post(url: string, body: unknown, token?: string): Promise<Response> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    // MCP Streamable HTTP spec requires the client to accept both content types.
+    accept: "application/json, text/event-stream",
+  };
   if (token !== undefined) headers["x-teamroom-mcp-token"] = token;
   return fetch(url, {
     method: "POST",
@@ -95,7 +99,16 @@ describe("MailMcpServer", () => {
   it("answers initialize with capabilities + protocolVersion", async () => {
     const r = await post(
       h.url,
-      { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "0.0.1" },
+        },
+      },
       "tok-claude-assistant",
     );
     expect(r.status).toBe(200);
@@ -208,6 +221,7 @@ describe("MailMcpServer", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
         "x-teamroom-mcp-token": "tok-claude-assistant",
       },
       body: "{not valid",

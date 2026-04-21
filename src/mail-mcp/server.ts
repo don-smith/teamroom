@@ -1,35 +1,35 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+  ErrorCode,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { MailMcpTools } from "./tools.js";
 import type { CliChannelAdapter } from "../channels/cli.js";
 import type { Logger } from "../logger/logger.js";
 
 /**
- * Hand-rolled minimal MCP JSON-RPC 2.0 HTTP server.
+ * MCP server for the teamroom mail system, implemented on top of the
+ * @modelcontextprotocol/sdk McpServer + StreamableHTTPServerTransport.
  *
- * The client we care about is the claude-agent-sdk running inside an agent
- * container: it performs the standard MCP handshake (`initialize` →
- * `notifications/initialized`) then calls `tools/list` + `tools/call`. We
- * don't need SSE streaming, resources, or prompts for M4, so we keep the
- * protocol surface tight and hand-roll instead of pulling in the full MCP
- * SDK server + StreamableHTTPServerTransport machinery (which couples
- * per-request scope with per-session state in ways that don't fit our
- * token-per-spawn model).
+ * Every request to POST /mcp:
+ *   1. `x-teamroom-mcp-token: <token>` header resolved to callerAgentId (401 on failure).
+ *   2. A fresh McpServer + StreamableHTTPServerTransport is created per HTTP request.
+ *      This is the SDK's "stateless per-request" pattern — each HTTP POST is independent,
+ *      which matches our token-per-spawn model where each request already carries identity.
+ *   3. Tool calls are dispatched via the shared MailMcpTools instance with the resolved
+ *      agentId in the ToolContext.
  *
- * Every request:
- *   1. POST /mcp only.
- *   2. `x-teamroom-mcp-token: <token>` header (resolves to the caller's
- *       agentId via the injected resolver; 401 otherwise).
- *   3. Body is either a JSON-RPC request, notification, or a batch.
- *   4. Tool calls are dispatched via the shared MailMcpTools instance with
- *      the resolved agentId in the ToolContext.
+ * POST /cli/send is handled entirely at the HTTP layer (not through MCP transport).
  *
- * The server binds to 127.0.0.1 by default; containers reach it via
- * host.docker.internal.
+ * The server binds to 127.0.0.1 by default; containers reach it via host.docker.internal.
  */
 
-const MCP_PROTOCOL_VERSION = "2025-03-26";
-
-export const MAIL_TOOL_DESCRIPTORS = [
+const MAIL_TOOL_DESCRIPTORS = [
   {
     name: "mail.list",
     description:
@@ -119,32 +119,6 @@ export const MAIL_TOOL_DESCRIPTORS = [
   },
 ] as const;
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
-
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id?: string | number | null;
-  method: string;
-  params?: JsonValue;
-}
-
-interface JsonRpcError {
-  code: number;
-  message: string;
-  data?: JsonValue;
-}
-
-interface JsonRpcResponse {
-  jsonrpc: "2.0";
-  id: string | number | null;
-  result?: JsonValue;
-  error?: JsonRpcError;
-}
-
-const METHOD_NOT_FOUND = -32601;
-const INVALID_PARAMS = -32602;
-const INTERNAL_ERROR = -32603;
-
 export interface MailMcpServerDeps {
   tools: MailMcpTools;
   /** Resolve an MCP token to an agent id. Return null if the token is invalid. */
@@ -165,10 +139,12 @@ export interface MailMcpServerDeps {
 
 export class MailMcpServer {
   private httpServer?: Server;
+
   constructor(private readonly deps: MailMcpServerDeps) {}
 
   async start(): Promise<void> {
     const host = this.deps.host ?? "127.0.0.1";
+
     this.httpServer = createServer((req, res) => {
       this.handle(req, res).catch((err) => {
         this.deps.logger?.error("mail-mcp.unhandled", {
@@ -180,6 +156,7 @@ export class MailMcpServer {
         }
       });
     });
+
     await new Promise<void>((ok, fail) => {
       const server = this.httpServer!;
       server.once("error", fail);
@@ -207,15 +184,20 @@ export class MailMcpServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // /cli/send is handled entirely at the HTTP layer — not routed through
+    // the MCP transport. This matches the hand-rolled server's behavior.
     if (req.method === "POST" && req.url === "/cli/send" && this.deps.cliAdapter) {
       await this.handleCliSend(req, res, this.deps.cliAdapter);
       return;
     }
+
     if (req.method !== "POST" || req.url !== "/mcp") {
       res.statusCode = 404;
       res.end();
       return;
     }
+
+    // Validate the bearer token before handing off to the SDK transport.
     const token = (req.headers["x-teamroom-mcp-token"] ?? "") as string;
     const agentId = this.deps.tokenResolver(token);
     if (!agentId) {
@@ -225,33 +207,33 @@ export class MailMcpServer {
       return;
     }
 
-    const body = await readBody(req);
-    let parsed: unknown;
+    // Per-request McpServer + Transport (SDK stateless pattern).
+    // The SDK's StreamableHTTPServerTransport requires a fresh instance per
+    // HTTP request in stateless mode — it tracks state per-request internally
+    // and cannot be reused across requests.
+    const mcp = this.buildMcp(agentId);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    await mcp.connect(transport);
+
+    // Attach auth to the request so the transport propagates it to tool
+    // handlers via extra.authInfo. clientId carries the resolved agentId.
+    (req as IncomingMessage & { auth: AuthInfo }).auth = {
+      token,
+      clientId: agentId,
+      scopes: [],
+    };
+
     try {
-      parsed = body.length === 0 ? null : JSON.parse(body);
-    } catch {
-      res.statusCode = 400;
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ error: "invalid json" }));
-      return;
+      await transport.handleRequest(req, res);
+    } finally {
+      // Clean up the per-request McpServer/Transport. Errors in cleanup are
+      // non-fatal — the response has already been sent.
+      await transport.close().catch(() => undefined);
+      await mcp.close().catch(() => undefined);
     }
-
-    const messages = Array.isArray(parsed) ? parsed : [parsed];
-    const responses: JsonRpcResponse[] = [];
-    for (const msg of messages) {
-      const response = this.dispatch(agentId, msg as JsonRpcRequest);
-      if (response) responses.push(response);
-    }
-
-    res.setHeader("content-type", "application/json");
-    if (responses.length === 0) {
-      // All messages were notifications — MCP allows 202 Accepted with empty body.
-      res.statusCode = 202;
-      res.end();
-      return;
-    }
-    res.statusCode = 200;
-    res.end(JSON.stringify(Array.isArray(parsed) ? responses : responses[0]));
   }
 
   private async handleCliSend(
@@ -311,57 +293,26 @@ export class MailMcpServer {
   }
 
   /**
-   * Returns a response object for requests (has `id`); returns null for
-   * notifications (`id` absent/null).
+   * Build a per-request McpServer with all tool handlers registered.
+   * Called once per MCP HTTP POST, immediately before connecting to a fresh transport.
    */
-  private dispatch(agentId: string, rpc: JsonRpcRequest): JsonRpcResponse | null {
-    const isNotification = rpc.id === undefined || rpc.id === null;
-    const id = isNotification ? null : (rpc.id ?? null);
+  private buildMcp(agentId: string): McpServer {
+    const mcp = new McpServer({ name: "teamroom-mail", version: "0.1.0" });
+    const tools = this.deps.tools;
+    const ctx = { callerAgentId: agentId };
 
-    try {
-      const result = this.call(agentId, rpc.method, rpc.params);
-      if (isNotification) return null;
-      return { jsonrpc: "2.0", id, result: result as JsonValue };
-    } catch (err) {
-      if (isNotification) return null;
-      const isInvalidParams = err instanceof InvalidParamsError;
-      const isUnknown = err instanceof MethodNotFoundError;
-      return {
-        jsonrpc: "2.0",
-        id,
-        error: {
-          code: isUnknown ? METHOD_NOT_FOUND : isInvalidParams ? INVALID_PARAMS : INTERNAL_ERROR,
-          message: err instanceof Error ? err.message : String(err),
-        },
-      };
-    }
-  }
+    // Register capabilities and install handlers on the low-level server so
+    // we can access raw request.params.arguments without Zod schemas.
+    mcp.server.registerCapabilities({ tools: {} });
 
-  private call(agentId: string, method: string, params: JsonValue | undefined): unknown {
-    if (method === "initialize") {
-      return {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: { tools: {} },
-        serverInfo: { name: "teamroom-mail", version: "0.1.0" },
-      };
-    }
-    if (method === "notifications/initialized" || method === "notifications/cancelled") {
-      // MCP notification — no result. Caller handles null-returning.
-      return null;
-    }
-    if (method === "ping") {
-      return {};
-    }
-    if (method === "tools/list") {
-      return { tools: MAIL_TOOL_DESCRIPTORS };
-    }
-    if (method === "tools/call") {
-      const p = asObject(params);
-      const name = p.name;
-      const args = (p.arguments ?? {}) as Record<string, unknown>;
-      if (typeof name !== "string") throw new InvalidParamsError("missing tool name");
-      const ctx = { callerAgentId: agentId };
-      const tools = this.deps.tools;
+    mcp.server.setRequestHandler(ListToolsRequestSchema, () => ({
+      tools: MAIL_TOOL_DESCRIPTORS,
+    }));
+
+    mcp.server.setRequestHandler(CallToolRequestSchema, (request) => {
+      const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+      const name = request.params.name;
+
       switch (name) {
         case "mail.list":
           return jsonResult(tools.list(ctx, args as Parameters<typeof tools.list>[1]));
@@ -381,48 +332,37 @@ export class MailMcpServer {
           tools.delete(ctx, args as Parameters<typeof tools.delete>[1]);
           return okResult();
         default:
-          throw new MethodNotFoundError(`unknown tool: ${name}`);
+          throw new McpError(ErrorCode.MethodNotFound, `unknown tool: ${name}`);
       }
-    }
-    throw new MethodNotFoundError(`unknown method: ${method}`);
+    });
+
+    return mcp;
   }
 }
 
-class InvalidParamsError extends Error {}
-class MethodNotFoundError extends Error {}
-
-function asObject(v: JsonValue | undefined): Record<string, JsonValue> {
-  if (!v || typeof v !== "object" || Array.isArray(v)) {
-    throw new InvalidParamsError("params must be an object");
-  }
-  return v as Record<string, JsonValue>;
-}
-
-function jsonResult(value: unknown): JsonValue {
-  // MCP tool results use a `content` array whose entries are text/image/
-  // resource — `{type:"json"}` is not a spec content type (Claude Code
-  // rejects the response with a schema error if we try). Stringify into a
-  // text block.
-  //
-  // `structuredContent` is spec-optional AND its schema requires a
-  // Record<string, unknown> — an object, not an array. mail.list returns
-  // an array, so we wrap anything non-object into { result: ... } before
-  // exposing it as structuredContent, or skip the field entirely for
-  // non-object payloads. Clients that only look at `content[0].text`
-  // still get the full JSON either way.
-  const json = value as JsonValue;
-  const isPlainObject =
-    json !== null && typeof json === "object" && !Array.isArray(json);
-  const result: Record<string, JsonValue> = {
-    content: [{ type: "text", text: JSON.stringify(json) }],
-  };
+/**
+ * Wrap a tool result value in the MCP content envelope.
+ * Text content carries the full JSON; structuredContent mirrors it for
+ * clients that support it (only for plain-object payloads — arrays require
+ * a Record wrapper per the MCP spec).
+ */
+function jsonResult(value: unknown): {
+  content: { type: "text"; text: string }[];
+  structuredContent?: Record<string, unknown>;
+} {
+  const text = JSON.stringify(value);
+  const isPlainObject = value !== null && typeof value === "object" && !Array.isArray(value);
+  const result: {
+    content: { type: "text"; text: string }[];
+    structuredContent?: Record<string, unknown>;
+  } = { content: [{ type: "text", text }] };
   if (isPlainObject) {
-    result.structuredContent = json as JsonValue;
+    result.structuredContent = value as Record<string, unknown>;
   }
-  return result as JsonValue;
+  return result;
 }
 
-function okResult(): JsonValue {
+function okResult(): { content: { type: "text"; text: string }[] } {
   return { content: [{ type: "text", text: "ok" }] };
 }
 
