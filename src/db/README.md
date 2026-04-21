@@ -17,6 +17,6 @@ Every effectful SQL call goes through one of two repositories: `AgentRepo`, `Mes
 ## Related
 
 - **Parent:** [src/README.md](../README.md)
-- **Uses:** [types.ts](../types.ts) (`Agent`, `Message`, `Turn`), `better-sqlite3` npm package.
+- **Uses:** [types.ts](../types.ts) (`Agent`, `Message`), `better-sqlite3` npm package.
 - **Used by:** [daemon/README.md](../daemon/README.md), [cli/README.md](../cli/README.md).
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 data model. M4.5 as-built lands at milestone close.
