@@ -10,7 +10,7 @@ Every effectful SQL call goes through one of three repositories: `AgentRepo`, `M
 - `migrator.ts` — `runMigrations(db)` applies numbered SQL files from `migrations/` on boot; `getAppliedMigrations(db)` returns the ledger. Idempotent; uses a `_migrations` table.
 - `migrations/001_initial.sql` — initial schema (`agents`, `messages`, `turns`, three indexes).
 - `agent-repo.ts` — `AgentRepo.create / findById / findAll`.
-- `message-repo.ts` — `MessageRepo.create / findById / findPendingInbound / attachTurn / findOutboundAfter`.
+- `message-repo.ts` — `MessageRepo.create / findById / attachTurn / findOutboundAfter / listInbox / listCliOutbound`.
 - `turn-repo.ts` — `TurnRepo.create / markRunning / markDone / markError / findByStatus / countByStatus / latestDone`.
 - `migrator.test.ts`, `agent-repo.test.ts`, `message-repo.test.ts`, `turn-repo.test.ts` — co-located unit tests using `:memory:` databases.
 

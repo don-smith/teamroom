@@ -83,20 +83,6 @@ export class MessageRepo {
     return row ? rowToMessage(row) : null;
   }
 
-  findPendingInbound(): Message[] {
-    // Legacy poll path — no longer called by Orchestrator (removed Plan Task 34).
-    // Kept for now; Plan Task 35 will remove this method along with other
-    // unused MessageRepo methods.
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM messages
-         WHERE direction = 'in' AND turn_id IS NULL AND channel = 'cli'
-         ORDER BY created_at`,
-      )
-      .all() as MessageRow[];
-    return rows.map(rowToMessage);
-  }
-
   attachTurn(messageId: string, turnId: string): void {
     this.db.prepare("UPDATE messages SET turn_id = ? WHERE id = ?").run(turnId, messageId);
   }

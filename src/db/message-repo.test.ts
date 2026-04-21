@@ -25,37 +25,12 @@ describe("MessageRepo", () => {
     repo = new MessageRepo(db);
   });
 
-  it("creates an inbound message and finds it as pending", () => {
-    repo.create({
-      id: "m1",
-      agentId: "studio-assistant",
-      channel: "cli",
-      direction: "in",
-      body: "hello",
-      turnId: null,
-      traceId: "trace-1",
-      createdAt: "2026-04-18T00:00:00.000Z",
-    });
-    const pending = repo.findPendingInbound();
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.id).toBe("m1");
-  });
-
-  it("excludes inbound messages that already have a turnId", () => {
-    repo.create({
-      id: "m1", agentId: "studio-assistant", channel: "cli", direction: "in",
-      body: "a", turnId: "t-1", traceId: "tr", createdAt: "2026-04-18T00:00:00.000Z",
-    });
-    expect(repo.findPendingInbound()).toEqual([]);
-  });
-
   it("attaches a turnId to a message", () => {
     repo.create({
       id: "m1", agentId: "studio-assistant", channel: "cli", direction: "in",
       body: "a", turnId: null, traceId: "tr", createdAt: "2026-04-18T00:00:00.000Z",
     });
     repo.attachTurn("m1", "turn-abc");
-    expect(repo.findPendingInbound()).toEqual([]);
     const found = repo.findById("m1");
     expect(found?.turnId).toBe("turn-abc");
   });
