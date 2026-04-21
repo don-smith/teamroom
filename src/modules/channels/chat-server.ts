@@ -27,6 +27,7 @@ export class ChatServer {
   private wss: WebSocketServer | null = null;
   private listenPort = 0;
   private readonly connections = new Set<RegisteredConnection>();
+  private unsubscribe: (() => void) | null = null;
 
   constructor(private readonly opts: ChatServerOpts) {}
 
@@ -41,14 +42,18 @@ export class ChatServer {
 
     // Subscribe to channel.cli.out for cli-addressed outbound mail.
     // The dispatcher publishes this event (with messageId) whenever a message
-    // is delivered to a channel:cli:<externalId> recipient.
-    this.opts.messaging.eventBus.subscribe<{
+    // is delivered to a channel:cli:<externalId> recipient. Capture the
+    // unsubscribe handle so stop() can release it — without this, repeated
+    // start/stop cycles on a shared bus would accumulate stale subscribers.
+    this.unsubscribe = this.opts.messaging.eventBus.subscribe<{
       user: string;
       messageId: string;
       agentId: string;
       threadId: string;
     }>("channel.cli.out", (payload) => this.routeCliDelivery(payload));
 
+    // Localhost-only by design — auth lives in the channel registry policy,
+    // not at the network layer (M4.5 spec §External surfaces).
     await new Promise<void>((resolve) =>
       this.http!.listen(this.opts.port, "127.0.0.1", () => resolve()),
     );
@@ -58,6 +63,12 @@ export class ChatServer {
   }
 
   async stop(): Promise<void> {
+    // Release the bus subscription so a shared bus across start/stop cycles
+    // doesn't accumulate stale subscribers firing against a torn-down server.
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
     // Close all connected sockets first so wss.close() doesn't hang.
     for (const conn of this.connections) {
       try {
@@ -159,7 +170,13 @@ export class ChatServer {
 
     // Look up the full message row to forward the envelope.
     const row = this.opts.storage.messageRepo.findById(payload.messageId);
-    if (!row) return;
+    if (!row) {
+      // Anomalous: the dispatcher just inserted this row in the same loop
+      // iteration that emitted the event. A miss means corrupted DB, race
+      // against close, or wrong storage handle — log and drop loudly.
+      this.opts.logger.warn("chat-server.row-missing", { messageId: payload.messageId });
+      return;
+    }
 
     this.send(target.ws, {
       type: "mail",
