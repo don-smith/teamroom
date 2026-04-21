@@ -173,16 +173,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   writePortFile(opts.dataDir, "mail", mail.port);
   obs.rootLogger.info("mail query server started", { port: mail.port });
 
-  // --- 13. Legacy CLI path (removed in Plan Task 33) ---
+  // --- 13. Legacy notify bus (bridge removed in Plan Task 33; bus itself removed in Plan Task 34) ---
   const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
-  messaging.eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
-    "channel.cli.out", (p) => {
-      void notifyBus.publish({
-        id: genId(), type: "message.outbound", ts: obs.clock.nowIso(),
-        agentId: p.agentId, messageId: p.messageId, turnId: "", traceId: p.messageId,
-      });
-    },
-  );
   await reconcile({ turnRepo: storage.turnRepo, bus: notifyBus, logger: obs.rootLogger, clock: obs.clock, genId });
   const orchestrator = new Orchestrator({
     messageRepo: storage.messageRepo,
