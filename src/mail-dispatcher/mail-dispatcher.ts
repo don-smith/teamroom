@@ -122,11 +122,9 @@ export class MailDispatcher {
           to: toStrings,
           cc: ccStrings,
         });
-        // Include the row id so a bus-to-bus bridge (e.g., the daemon's
-        // tail-facing FileNotifyBus) can forward a message.outbound event
-        // without racing to find the most recent CLI row.
-        // Also include from/to strings so ChatServer can forward the full
-        // envelope to the registered WebSocket client.
+        // Include the row id so ChatServer can forward message.outbound events
+        // to the registered WebSocket client without racing to find the most
+        // recent row. Also include from/to strings for the full envelope.
         this.deps.bus.publish("channel.cli.out", {
           user: addr.externalId,
           messageId: id,

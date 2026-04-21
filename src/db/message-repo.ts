@@ -84,10 +84,9 @@ export class MessageRepo {
   }
 
   findPendingInbound(): Message[] {
-    // Orchestrator poll path — M3 CLI turns only. M4 `channel='mail'` rows
-    // are driven by the MailDispatcher → EventBus → SessionTimerManager
-    // chain and should NOT be picked up by this poll, or they'd get
-    // double-processed.
+    // Legacy poll path — no longer called by Orchestrator (removed Plan Task 34).
+    // Kept for now; Plan Task 35 will remove this method along with other
+    // unused MessageRepo methods.
     const rows = this.db
       .prepare(
         `SELECT * FROM messages

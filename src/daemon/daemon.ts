@@ -1,14 +1,11 @@
 import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { FileNotifyBus } from "../bus/file-notify-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
 import type { DockerRunSpec } from "../container/docker-command.js";
 import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
 import { installSafetyNets } from "./safety-nets.js";
-import { reconcile } from "./reconcile.js";
-import { Orchestrator } from "./orchestrator.js";
 import { buildSpec } from "../agent-spec/build-spec.js";
 import { writePortFile, deletePortFile } from "../cli/ports.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
@@ -65,7 +62,6 @@ export interface DaemonOptions {
 export interface StartedDaemon {
   db: Db;
   stop: () => Promise<void>;
-  orchestrator: Orchestrator;
   dispatcher: MailDispatcher;
   eventBus: EventBus;
   mailMcpServer: MailMcpServer;
@@ -76,7 +72,6 @@ export interface StartedDaemon {
 export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // --- 1. FS setup + PID file ---
   mkdirSync(opts.dataDir, { recursive: true });
-  mkdirSync(join(opts.dataDir, "bus"), { recursive: true }); // FileNotifyBus — removed in Plan Task 33
   const pidFile = join(opts.dataDir, "teamroom.pid");
   writeFileSync(pidFile, String(process.pid));
 
@@ -173,30 +168,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   writePortFile(opts.dataDir, "mail", mail.port);
   obs.rootLogger.info("mail query server started", { port: mail.port });
 
-  // --- 13. Legacy notify bus (bridge removed in Plan Task 33; bus itself removed in Plan Task 34) ---
-  const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
-  await reconcile({ turnRepo: storage.turnRepo, bus: notifyBus, logger: obs.rootLogger, clock: obs.clock, genId });
-  const orchestrator = new Orchestrator({
-    messageRepo: storage.messageRepo,
-    turnRepo: storage.turnRepo,
-    bus: notifyBus,
-    logger: obs.rootLogger,
-    clock: obs.clock,
-    runner,
-    agentConfigs,
-    modelProxy: modelProxy.modelProxy,
-    modelBaseUrl: modelProxy.modelBaseUrl,
-    anthropicAdapterPresent: modelProxy.anthropicAdapterPresent,
-    turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
-    pollIntervalMs: opts.pollIntervalMs ?? 200,
-    genId,
-    codebasePath,
-  });
-  const loopPromise = orchestrator.runLoop().catch((err) => {
-    obs.rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
-  });
-
-  // --- 14. Stop orchestration ---
+  // --- 13. Stop orchestration ---
   // Ingress-first: shut off external-facing surfaces (channels, mail-MCP)
   // before their dependencies (model proxy, storage) close. Any late-arriving
   // inbound can't land in a half-torn-down substrate.
@@ -204,9 +176,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const stop = async () => {
     if (stopped) return;
     stopped = true;
-    orchestrator.stop();
     await sessionMgmt.stop();
-    await loopPromise;
     await channels.stop();
     deletePortFile(opts.dataDir, "chat");
     await mail.stop();
@@ -214,7 +184,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     await mailMcpServer.stop();
     deletePortFile(opts.dataDir, "mail-mcp");
     await modelProxy.stop();
-    await notifyBus.close();
     storage.close();
     try { unlinkSync(pidFile); } catch { /* best-effort */ }
   };
@@ -222,7 +191,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   return {
     db: storage.db,
     stop,
-    orchestrator,
     dispatcher: mcpMail.dispatcher,
     eventBus: messaging.eventBus,
     mailMcpServer,
