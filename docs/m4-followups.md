@@ -90,6 +90,20 @@ Migration `003` leaves `topic`, `from_agent_id`, `conversation_id` in place even
 
 ---
 
+## 15a. MCP server — replace hand-roll with `@modelcontextprotocol/sdk`
+
+Retrofit of `src/mail-mcp/server.ts`. Current implementation is hand-rolled JSON-RPC over `node:http`; swap for `StreamableHTTPServerTransport` + `McpServer` from `@modelcontextprotocol/sdk`. Keep the server in-process in the daemon (same trust boundary). Preserve the `/cli/send` sibling endpoint — that's ours, not MCP. Migrate the 15 server-side tests; most assertions (token auth, CLI endpoint, tool-call semantics via `MailMcpTools`) translate cleanly.
+
+**Rationale:** hand-rolling cost us three post-test fix commits during M4 (invented `{type:"json"}` content, `structuredContent` array, tool-naming convention). MCP is a young protocol and will evolve; the SDK absorbs that drift for us. See M4 retro §2 "hand-rolling the MCP server side was false economy."
+
+**Trigger:** bundle into M4.5 alongside §15 (chat/watch/inbox). The new observability surfaces (`watch`) will benefit from a cleaner MCP server to build on.
+
+## 15b. Composition-parity between test harness and `startDaemon`
+
+The M4 manual-test bug (missing `SessionTimerManager` bus wiring) was invisible to 268 passing tests because the test harness (`composeIntegrationHarness`) wired the subscriptions but `startDaemon` didn't. Either extract a shared `composeMailStack(deps)` builder, or add a composition-snapshot test that asserts every expected bus subscription / token resolver / port file in `startDaemon`'s output. See M4 retro §2.
+
+**Trigger:** M4.5 acceptance criterion alongside §15. Ships with the new HTTP endpoints so the retrofit touches one coherent layer.
+
 ## 15. AI-native harness — `chat` / `watch` / `inbox` (mini-milestone)
 
 The next milestone after M4 closes. Three thin CLI surfaces that reuse M4 plumbing to make the harness self-testable by an AI collaborator (and less friction for humans) without hacking the DB directly:
@@ -128,7 +142,13 @@ Sequencing: §15 first (so the new agent can be driven and observed by the chat/
 
 **Trigger:** §15 ships.
 
-## 18. Agent-container observability (logging as an MCP tool)
+## 18. Experiment with a different LM Studio model for tests
+
+The currently loaded qwen model emits XML-shaped tool-call fragments mid-response — noticeable during manual chat, and hypothesized to be the source of the `lm-studio-real.test.ts` multi-turn codeword flake that's carried forward from M3. Rather than investigate the flake as a test-infrastructure bug, try a different model that behaves more predictably under tool-use prompts.
+
+**Trigger:** M5 LangGraph work will use LM Studio as its primary non-Anthropic test model anyway, so the selection lands naturally there. Update the `model:` field in `agents/studio-assistant/agent.yaml` and any test fixtures referencing the qwen identifier.
+
+## 19. Agent-container observability (logging as an MCP tool)
 
 Manual testing during M4 surfaced that when a container is running but the LLM isn't making any visible progress, there's no good way to tell WHY. We capture tool calls at the daemon side via the `tool.call` bus event, but that only fires for MCP calls — the container's own runtime output (wake received, LLM starting, LLM done, errors) is currently only on stderr, which docker-runner accumulates and returns at exit time.
 
