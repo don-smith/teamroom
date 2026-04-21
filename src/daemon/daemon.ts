@@ -21,6 +21,7 @@ import { composeMessaging } from "../modules/messaging/messaging.js";
 import { composeMcpMail } from "../modules/mcp-mail/mcp-mail.js";
 import { composeModelProxy } from "../modules/model-proxy/model-proxy.js";
 import { composeSessionManagement } from "../modules/session-management/session-management.js";
+import { composeChannels } from "../modules/channels/channels.js";
 import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { MailingListRegistry } from "../mailing-lists/registry.js";
@@ -156,7 +157,18 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   });
   resolveMcpToken = (t) => sessionMgmt.sessionManager.resolveToken(t);
 
-  // --- 11. Legacy CLI path (removed in Plan Task 33) ---
+  // --- 11. Channels (chat WebSocket on its own port) ---
+  const channels = await composeChannels({
+    storage,
+    messaging,
+    mcpMail,
+    logger: obs.rootLogger,
+    port: 0,
+  });
+  writePortFile(opts.dataDir, "chat", channels.port);
+  obs.rootLogger.info("chat server started", { port: channels.port });
+
+  // --- 12. Legacy CLI path (removed in Plan Task 33) ---
   const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
   messaging.eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
     "channel.cli.out", (p) => {
@@ -187,7 +199,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     obs.rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
   });
 
-  // --- 12. Stop orchestration ---
+  // --- 13. Stop orchestration ---
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -198,6 +210,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     await mailMcpServer.stop();
     await modelProxy.stop();
     await notifyBus.close();
+    await channels.stop();
+    deletePortFile(opts.dataDir, "chat");
     storage.close();
     deletePortFile(opts.dataDir, "mail-mcp");
     try { unlinkSync(pidFile); } catch { /* best-effort */ }
