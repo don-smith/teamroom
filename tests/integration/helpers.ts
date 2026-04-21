@@ -1,17 +1,19 @@
-import { createDatabase, type Db } from "../../src/db/database.js";
-import { runMigrations } from "../../src/db/migrator.js";
-import { AgentRepo } from "../../src/db/agent-repo.js";
-import { MessageRepo } from "../../src/db/message-repo.js";
-import { EventBus } from "../../src/bus/event-bus.js";
 import { ControllableClock } from "../../src/clock/clock.js";
-import { MailDispatcher } from "../../src/mail-dispatcher/mail-dispatcher.js";
-import { MailingListRegistry, type ListDefinition } from "../../src/mailing-lists/registry.js";
-import { MailingListTriggerListener } from "../../src/mailing-lists/trigger-listener.js";
+import { JsonLinesLogger } from "../../src/logger/logger.js";
+import { EventBus } from "../../src/bus/event-bus.js";
 import { CliChannelAdapter } from "../../src/channels/cli.js";
 import { MailMcpTools, type ToolContext } from "../../src/mail-mcp/tools.js";
-import { SessionTimerManager, type TimerFactory, type TimerHandle } from "../../src/session-manager/session-manager.js";
 import { FakeRunner } from "../../src/container/fake-runner.js";
 import type { AgentConfig } from "../../src/agent-config/agent-config.js";
+import { composeStorage } from "../../src/modules/storage/storage.js";
+import { composeMessaging } from "../../src/modules/messaging/messaging.js";
+import { composeMcpMail } from "../../src/modules/mcp-mail/mcp-mail.js";
+import { composeSessionManagement } from "../../src/modules/session-management/session-management.js";
+import type { MailDispatcher } from "../../src/mail-dispatcher/mail-dispatcher.js";
+import type { MailingListRegistry, ListDefinition } from "../../src/mailing-lists/registry.js";
+import type { SessionTimerManager, TimerFactory, TimerHandle } from "../../src/session-manager/session-manager.js";
+import type { Db } from "../../src/db/database.js";
+import type { MessageRepo } from "../../src/db/message-repo.js";
 
 /**
  * Scripted behavior for a FakeRunner-backed agent inside the harness.
@@ -105,14 +107,21 @@ export interface IntegrationHarness {
 }
 
 export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness {
-  const db = createDatabase(":memory:");
-  runMigrations(db);
+  // --- Observability: inline (we want a controllable clock; the observability
+  //     module's real SystemClock isn't what tests need).
+  const clock = new ControllableClock("2026-04-20T10:00:00.000Z");
+  const logger = new JsonLinesLogger(clock, () => {}, { component: "test" });
+  let seq = 0;
+  const genId = () => `id-${++seq}`;
 
-  const agentRepo = new AgentRepo(db);
-  const agentConfigs: AgentConfig[] = [];
+  // --- Storage (via module with :memory: substitution)
+  const storage = composeStorage({ dataDir: ":memory:" });
+
+  // --- Agent registry (same lazy-register pattern the daemon uses).
+  const agentConfigs = new Map<string, AgentConfig>();
   for (const name of opts.agents) {
-    agentRepo.create({ id: name, configPath: `/agents/${name}`, createdAt: "2026-04-20T00:00:00.000Z" });
-    agentConfigs.push({
+    storage.agentRepo.create({ id: name, configPath: `/agents/${name}`, createdAt: "2026-04-20T00:00:00.000Z" });
+    agentConfigs.set(name, {
       name,
       model: "claude-opus-4-7",
       imageTag: `teamroom-agent-${name}:latest`,
@@ -125,35 +134,26 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
     });
   }
 
-  const messageRepo = new MessageRepo(db);
-  const bus = new EventBus();
-  const clock = new ControllableClock("2026-04-20T10:00:00.000Z");
-  let seq = 0;
-  const genId = () => `id-${++seq}`;
+  // --- Messaging
+  const messaging = composeMessaging({ logger });
 
-  const mailingListRegistry = new MailingListRegistry(opts.lists ?? [], agentConfigs);
-
-  const dispatcher = new MailDispatcher({
-    messageRepo,
-    bus,
+  // --- McpMail (via module — pulls in dispatcher, registry, trigger listener, mcp tools)
+  const mcpMail = composeMcpMail({
+    storage,
+    messaging,
+    logger,
     clock,
     genId,
-    knownAgents: (n) => opts.agents.includes(n),
-    knownLists: (n) => mailingListRegistry.has(n),
-    listSubscribers: (n) => mailingListRegistry.subscribers(n),
+    agentConfigs,
+    lists: opts.lists ?? [],
     maxMailsPerThread: opts.maxMailsPerThread ?? 10,
   });
 
-  new MailingListTriggerListener({
-    bus,
-    registry: mailingListRegistry,
-    dispatcher,
-    formatBody: (eventType, payload) => `${eventType}: ${JSON.stringify(payload)}`,
-  });
+  // --- CLI channel adapter (tests still exercise the cli send path)
+  const cliAdapter = new CliChannelAdapter({ dispatcher: mcpMail.dispatcher });
 
-  const cliAdapter = new CliChannelAdapter({ dispatcher });
-  const mcpTools = new MailMcpTools({ messageRepo, dispatcher, bus, clock });
-
+  // --- Session management (via module — this installs the three bus subs;
+  //     M4 bug CANNOT recur because the subscriptions are part of this call's contract)
   const timerFactory = manualTimers();
   const runner = new FakeRunner();
 
@@ -176,7 +176,7 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
         // Serialize script invocations per session so a slow wake doesn't
         // race a fast follow-up — matches single-threaded LLM-turn behavior.
         chain = chain.then(async () => {
-          const tools = makeAgentTools(mcpTools, agentName);
+          const tools = makeAgentTools(mcpMail.mcpTools, agentName);
           try {
             await script(tools, env);
           } catch (err) {
@@ -188,7 +188,9 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
     return rc;
   };
 
-  const sessionManager = new SessionTimerManager({
+  const sessionMgmt = composeSessionManagement({
+    messaging,
+    logger,
     runner,
     idleMinutes: opts.sessionIdleMinutes ?? 30,
     timerFactory,
@@ -199,17 +201,6 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
       labels: { "teamroom-agent": "true", "teamroom-agent-id": agentId },
     }),
     genToken: () => `tok-${++seq}`,
-  });
-
-  // Wire bus → session manager.
-  bus.subscribe<{ to: string }>("mail.delivered", (p) => {
-    sessionManager.onMailDelivered(p.to);
-  });
-  bus.subscribe<{ from: string }>("mail.sent", (p) => {
-    sessionManager.onAgentActivity(p.from);
-  });
-  bus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
-    sessionManager.onAgentActivity(p.agentId);
   });
 
   const cli = {
@@ -227,12 +218,12 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
   async function waitForCliOut(opts2: { bodyMatch: RegExp; timeoutMs?: number }): Promise<string> {
     const deadline = Date.now() + (opts2.timeoutMs ?? 2000);
     while (Date.now() < deadline) {
-      const cliRows = messageRepo.listCliOutbound();
+      const cliRows = storage.messageRepo.listCliOutbound();
       const hit = cliRows.find((r) => opts2.bodyMatch.test(r.body));
       if (hit) return hit.body;
       await sleep(10);
     }
-    const rows = messageRepo.listCliOutbound();
+    const rows = storage.messageRepo.listCliOutbound();
     throw new Error(
       `waitForCliOut timeout: no row matched ${opts2.bodyMatch}; saw: ${rows.map((r) => r.body).join(" | ")}`,
     );
@@ -241,37 +232,37 @@ export function composeIntegrationHarness(opts: HarnessOpts): IntegrationHarness
   async function waitForInbox(opts2: { agent: string; minCount: number; timeoutMs?: number }): Promise<void> {
     const deadline = Date.now() + (opts2.timeoutMs ?? 2000);
     while (Date.now() < deadline) {
-      if (messageRepo.listInbox(opts2.agent, { includeArchived: true }).length >= opts2.minCount) return;
+      if (storage.messageRepo.listInbox(opts2.agent, { includeArchived: true }).length >= opts2.minCount) return;
       await sleep(10);
     }
     throw new Error(
-      `waitForInbox timeout: ${opts2.agent} has ${messageRepo.listInbox(opts2.agent, { includeArchived: true }).length} / ${opts2.minCount} expected`,
+      `waitForInbox timeout: ${opts2.agent} has ${storage.messageRepo.listInbox(opts2.agent, { includeArchived: true }).length} / ${opts2.minCount} expected`,
     );
   }
 
   async function waitForSessionGone(agentId: string, opts2?: { timeoutMs?: number }): Promise<void> {
     const deadline = Date.now() + (opts2?.timeoutMs ?? 500);
     while (Date.now() < deadline) {
-      if (!sessionManager.hasSession(agentId)) return;
+      if (!sessionMgmt.sessionManager.hasSession(agentId)) return;
       await sleep(5);
     }
     throw new Error(`waitForSessionGone timeout: ${agentId} still has a session`);
   }
 
   async function shutdown(): Promise<void> {
-    await sessionManager.killAll();
-    db.close();
+    await sessionMgmt.stop();
+    storage.close();
   }
 
   return {
-    db,
-    messageRepo,
-    bus,
-    dispatcher,
-    mailingListRegistry,
+    db: storage.db,
+    messageRepo: storage.messageRepo,
+    bus: messaging.eventBus,
+    dispatcher: mcpMail.dispatcher,
+    mailingListRegistry: mcpMail.mailingListRegistry,
     cliAdapter,
-    mcpTools,
-    sessionManager,
+    mcpTools: mcpMail.mcpTools,
+    sessionManager: sessionMgmt.sessionManager,
     timerFactory,
     runner,
     cli,
