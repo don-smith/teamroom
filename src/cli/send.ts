@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync, mkdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync, mkdirSync } from "node:fs";
+import { readPortFile } from "./ports.js";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -116,12 +117,7 @@ export async function sendViaHttp(opts: SendViaHttpOpts): Promise<SendViaHttpRes
  * the legacy direct-DB path (M3 behavior — kept during the transition).
  */
 export function readMailPort(dataDir: string): number | null {
-  const path = join(dataDir, "teamroom-mail.port");
-  if (!existsSync(path)) return null;
-  const raw = readFileSync(path, "utf8").trim();
-  const port = Number.parseInt(raw, 10);
-  if (!Number.isInteger(port) || port <= 0) return null;
-  return port;
+  return readPortFile(dataDir, "mail-mcp");
 }
 
 export async function send(body: string, agentName?: string): Promise<void> {

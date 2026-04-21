@@ -28,6 +28,7 @@ import { MailingListRegistry } from "../mailing-lists/registry.js";
 import { MailingListTriggerListener } from "../mailing-lists/trigger-listener.js";
 import { loadListsYaml } from "../mailing-lists/loader.js";
 import { CliChannelAdapter } from "../channels/cli.js";
+import { writePortFile, deletePortFile } from "../cli/ports.js";
 import { MailMcpTools } from "../mail-mcp/tools.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
 import {
@@ -217,7 +218,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   });
   await mailMcpServer.start();
   const { port: mailPort } = mailMcpServer.address();
-  writeFileSync(join(opts.dataDir, "teamroom-mail.port"), String(mailPort));
+  writePortFile(opts.dataDir, "mail-mcp", mailPort);
   rootLogger.info("mail mcp server started", { port: mailPort });
 
   const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
@@ -341,11 +342,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     await modelProxy.stop();
     await notifyBus.close();
     db.close();
-    try {
-      unlinkSync(join(opts.dataDir, "teamroom-mail.port"));
-    } catch {
-      /* best-effort */
-    }
+    deletePortFile(opts.dataDir, "mail-mcp");
     try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
   };
 

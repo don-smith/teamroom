@@ -80,13 +80,13 @@ describe("daemon shutdown", () => {
     }
   });
 
-  it("writes the mail-server port to data/teamroom-mail.port and clears it on stop", async () => {
+  it("writes the mail-server port to data/ports/mail-mcp.port and clears it on stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       anthropic: null,
     });
-    const portFile = join(dataDir, "teamroom-mail.port");
+    const portFile = join(dataDir, "ports", "mail-mcp.port");
     expect(existsSync(portFile)).toBe(true);
     const port = Number.parseInt(readFileSync(portFile, "utf8").trim(), 10);
     expect(port).toBeGreaterThan(0);

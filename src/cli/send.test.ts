@@ -80,7 +80,8 @@ describe("readMailPort", () => {
   it("returns the parsed port when present", () => {
     const dir = mkdtempSync(join(tmpdir(), "teamroom-port-"));
     try {
-      writeFileSync(join(dir, "teamroom-mail.port"), "43219\n");
+      mkdirSync(join(dir, "ports"), { recursive: true });
+      writeFileSync(join(dir, "ports", "mail-mcp.port"), "43219\n");
       expect(readMailPort(dir)).toBe(43219);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -90,7 +91,8 @@ describe("readMailPort", () => {
   it("returns null on invalid content", () => {
     const dir = mkdtempSync(join(tmpdir(), "teamroom-port-"));
     try {
-      writeFileSync(join(dir, "teamroom-mail.port"), "not-a-number");
+      mkdirSync(join(dir, "ports"), { recursive: true });
+      writeFileSync(join(dir, "ports", "mail-mcp.port"), "not-a-number");
       expect(readMailPort(dir)).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
