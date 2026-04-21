@@ -22,4 +22,4 @@ Six short-lived subcommands (`serve`, `send`, `chat`, `inbox`, `thread`, `status
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [db/README.md](../db/README.md), [bus/README.md](../bus/README.md), [env/env-file.ts](../env/env-file.ts), [agent-config/README.md](../agent-config/README.md), [daemon/README.md](../daemon/README.md).
 - **Used by:** `package.json` `bin` entry (`teamroom` → `dist/cli/main.js`).
-- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §1 exit criteria, §2 processes and boundaries (CLI subcommands). [M4.5](../../docs/as-built/2026-04-21-m4.5-ai-native-harness.md) — `tail` removed; `chat`, `inbox`, `thread` added; `send` refactored to chat WebSocket.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §1 exit criteria, §2 processes and boundaries (CLI subcommands). M4.5 as-built lands at milestone close.

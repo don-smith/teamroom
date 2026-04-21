@@ -1,9 +1,10 @@
 /**
  * In-memory registry of valid channel names. Populated at daemon startup
  * (cli is always registered; Telegram/Slack/etc. register themselves as
- * they come online). Consulted by the dispatcher at delivery time to
- * enforce "strict deliver" on channel-kind addresses (the parse side is
- * lenient — see address.ts for the full contract).
+ * they come online). Consulted by `ChatServer` to validate `register`
+ * messages against known channel names. Future dispatcher integration will
+ * additionally enforce strict deliver on channel-kind addresses (the parse
+ * side is already lenient — see address.ts for the full contract).
  *
  * Loud failure on duplicate registration: silent overwrite would mask
  * config bugs during module composition.

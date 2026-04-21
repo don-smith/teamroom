@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# M2 smoke test — exercises both agents end-to-end through the model-proxy.
-# Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running with a model loaded;
-#   Docker running; Anthropic credentials discoverable (CLAUDE_CODE_OAUTH_TOKEN
+# M4.5 smoke test — exercises serve → send → inbox for one agent per provider.
+# Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running with a model
+#   loaded; Docker running; Anthropic credentials discoverable (CLAUDE_CODE_OAUTH_TOKEN
 #   or ANTHROPIC_API_KEY in .env, or ~/.claude/.credentials.json, or — on
 #   macOS — the system Keychain entry "Claude Code-credentials").
+#
+# TODO(manual-acceptance): multi-turn memory check and multi-agent mail
+#   round-trip are covered by the seven-scenario manual acceptance pass
+#   (Plan Task 38). Promote them back here once stable.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -50,28 +54,18 @@ npm run build
 echo "==> Building agent images"
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
-docker build -t teamroom-agent-claude-researcher:latest -f agents/claude-researcher/Dockerfile .
 
 DAEMON_PID=""
-TAIL_PID=""
 
 cleanup() {
-  # Kill in the order: tail (cheap), daemon (so it stops spawning containers),
-  # then force-remove any agent containers that lingered. Suppress all errors —
-  # cleanup is best-effort and runs even when nothing was started.
-  if [[ -n "$TAIL_PID" ]]; then
-    kill "$TAIL_PID" 2>/dev/null || true
-  fi
   if [[ -n "$DAEMON_PID" ]]; then
     kill "$DAEMON_PID" 2>/dev/null || true
   fi
-  # Stop+remove any leftover teamroom-* containers (named per turn-processor.ts).
   local leftover
   leftover=$(docker ps -q --filter "name=^teamroom-" 2>/dev/null || true)
   if [[ -n "$leftover" ]]; then
     docker rm -f $leftover >/dev/null 2>&1 || true
   fi
-  # Wait briefly for the daemon's own teardown to complete; don't hang on it.
   if [[ -n "$DAEMON_PID" ]]; then
     for _ in $(seq 1 20); do
       kill -0 "$DAEMON_PID" 2>/dev/null || break
@@ -85,8 +79,8 @@ trap cleanup EXIT
 dump_failure_diagnostics() {
   local agent="$1"
   echo "" >&2
-  echo "==> Tail output (outbound messages we received):" >&2
-  cat /tmp/teamroom-smoke-output.txt >&2 || true
+  echo "==> Inbox contents for $agent:" >&2
+  node dist/cli/main.js inbox "$agent" 2>&1 || true
   echo "" >&2
   echo "==> Last 40 daemon log entries (most recent JSONL file):" >&2
   local log_file
@@ -106,7 +100,7 @@ rm -rf data
 node dist/cli/main.js serve &
 DAEMON_PID=$!
 
-# Wait for the daemon to signal it's up (pid file + agent registration).
+# Wait for the daemon to signal it's up (pid file).
 for _ in $(seq 1 50); do
   [[ -f data/teamroom.pid ]] && break
   sleep 0.1
@@ -116,21 +110,15 @@ if [[ ! -f data/teamroom.pid ]]; then
   exit 1
 fi
 
-echo "==> Starting tail in background"
-node dist/cli/main.js tail > /tmp/teamroom-smoke-output.txt &
-TAIL_PID=$!
-
-sleep 0.5
-
+# Send a message to an agent, then poll inbox until the marker appears.
 run_agent() {
   local agent="$1"
   local marker="$2"
   echo "==> Sending to $agent (expect: $marker)"
-  : > /tmp/teamroom-smoke-output.txt
-  node dist/cli/main.js send --agent "$agent" "Hello from the smoke test — reply with exactly: $marker"
-  echo "==> Waiting for $agent reply (up to 60s)"
+  node dist/cli/main.js send "$agent" "Hello from the smoke test — reply with exactly: $marker"
+  echo "==> Waiting for $agent reply in inbox (up to 60s)"
   for _ in $(seq 1 120); do
-    if grep -q "$marker" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
+    if node dist/cli/main.js inbox "$agent" 2>/dev/null | grep -q "$marker"; then
       echo "==> $agent OK"
       return 0
     fi
@@ -141,79 +129,8 @@ run_agent() {
   return 1
 }
 
-# Two-turn conversation memory check. Sends a unique codeword in turn 1, asks
-# for it back in turn 2. If conversation history is broken (container's
-# runtime not loading conversation.jsonl, or claude-agent-sdk session not
-# resuming, etc.) turn 2 won't recall and the smoke test fails. Each agent
-# gets its own codeword so failure messages are unambiguous.
-run_multiturn_check() {
-  local agent="$1"
-  # 8 random hex chars — unique per smoke run so accumulated history from
-  # prior runs can't accidentally satisfy the assertion.
-  local codeword="cw-$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 8)"
-
-  echo "==> [multi-turn] Sending to $agent — turn 1 (codeword: $codeword)"
-  : > /tmp/teamroom-smoke-output.txt
-  node dist/cli/main.js send --agent "$agent" "Remember this codeword: $codeword. Reply with exactly: ack-mt"
-  echo "==> [multi-turn] Waiting for $agent turn-1 ack (up to 60s)"
-  local ok=0
-  for _ in $(seq 1 120); do
-    if grep -q "ack-mt" /tmp/teamroom-smoke-output.txt 2>/dev/null; then ok=1; break; fi
-    sleep 0.5
-  done
-  if [[ "$ok" != "1" ]]; then
-    echo "==> FAIL: $agent multi-turn turn 1 didn't ack with 'ack-mt'" >&2
-    dump_failure_diagnostics "$agent"
-    return 1
-  fi
-
-  echo "==> [multi-turn] Sending to $agent — turn 2 (recall codeword)"
-  : > /tmp/teamroom-smoke-output.txt
-  node dist/cli/main.js send --agent "$agent" "What was the codeword I just told you? Reply with just the codeword, nothing else."
-  echo "==> [multi-turn] Waiting for $agent to recall '$codeword' (up to 60s)"
-  for _ in $(seq 1 120); do
-    if grep -q "$codeword" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
-      echo "==> [multi-turn] $agent OK (recalled $codeword)"
-      return 0
-    fi
-    sleep 0.5
-  done
-  echo "==> FAIL: $agent multi-turn turn 2 didn't recall codeword '$codeword' — conversation history broken" >&2
-  dump_failure_diagnostics "$agent"
-  return 1
-}
-
 run_agent studio-assistant "studio-ok"
-run_multiturn_check studio-assistant
 run_agent claude-assistant "claude-ok"
-run_multiturn_check claude-assistant
-
-# M4 scenario: CLI → claude-assistant → claude-researcher → reply back to CLI.
-# Exercises the mail substrate end-to-end (dispatcher, session manager, MCP
-# tools, second live agent). Success condition: the CLI tail shows a response
-# that references claude-researcher's contribution.
-run_m4_multi_agent_mail() {
-  echo "==> [m4-mail] Sending CLI mail that asks claude-assistant to consult claude-researcher"
-  : > /tmp/teamroom-smoke-output.txt
-  node dist/cli/main.js send --agent claude-assistant \
-    "Please ask claude-researcher (via mail.send to agent:claude-researcher) for a one-word summary of the word 'pelican'. When they reply, forward their answer back to me by replying to my original mail. Do not reply to me until you have received a response from claude-researcher."
-  echo "==> [m4-mail] Waiting for final CLI-visible answer (up to 120s)"
-  for _ in $(seq 1 240); do
-    # The response should mention 'researcher' OR 'pelican' — we don't pin to
-    # exact wording because the LLM's phrasing varies. Either surfaces proves
-    # the multi-agent chain ran end-to-end.
-    if grep -qiE "researcher|pelican" /tmp/teamroom-smoke-output.txt 2>/dev/null; then
-      echo "==> [m4-mail] OK — multi-agent mail round-trip surfaced to CLI"
-      return 0
-    fi
-    sleep 0.5
-  done
-  echo "==> FAIL: m4 multi-agent mail check did not surface a final CLI reply" >&2
-  dump_failure_diagnostics "claude-assistant+claude-researcher"
-  return 1
-}
-
-run_m4_multi_agent_mail
 
 echo "==> Verifying both providers' spans in the daemon log"
 LOG_FILE=$(ls -1t data/logs/teamroom-*.jsonl 2>/dev/null | head -1)
@@ -230,4 +147,4 @@ if ! grep -q '"provider":"lm-studio"' "$LOG_FILE"; then
   exit 1
 fi
 
-echo "==> SMOKE PASS — both agents responded; both providers' spans present; M4 multi-agent mail reached CLI"
+echo "==> SMOKE PASS — both agents responded; both providers' spans present"

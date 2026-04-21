@@ -19,4 +19,4 @@ Every effectful SQL call goes through one of three repositories: `AgentRepo`, `M
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [types.ts](../types.ts) (`Agent`, `Message`, `Turn`), `better-sqlite3` npm package.
 - **Used by:** [daemon/README.md](../daemon/README.md), [cli/README.md](../cli/README.md).
-- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 data model. [M4.5](../../docs/as-built/2026-04-21-m4.5-ai-native-harness.md) — `listThread` added; `findPendingInbound` removed with Orchestrator.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 data model. M4.5 as-built lands at milestone close.

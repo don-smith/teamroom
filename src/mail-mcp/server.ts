@@ -292,12 +292,3 @@ function jsonResult(value: unknown): {
 function okResult(): { content: { type: "text"; text: string }[] } {
   return { content: [{ type: "text", text: "ok" }] };
 }
-
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((ok, fail) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
-    req.on("end", () => ok(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", fail);
-  });
-}

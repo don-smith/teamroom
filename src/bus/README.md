@@ -14,4 +14,4 @@ The `EventBus` is the typed, in-process event bus for M4 signals (mail, session,
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [types.ts](../types.ts) (`BusEvent`).
 - **Used by:** [modules/](../modules/README.md) (composeMessaging wires the bus; session-management and mcp-mail subscribe).
-- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 event bus. [M4.5](../../docs/as-built/2026-04-21-m4.5-ai-native-harness.md) — NotifyBus/FileNotifyBus removed.
+- **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 event bus. M4.5 as-built lands at milestone close.

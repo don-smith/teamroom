@@ -122,7 +122,7 @@ export class MailDispatcher {
           to: toStrings,
           cc: ccStrings,
         });
-        // Include the row id so ChatServer can forward message.outbound events
+        // Include the row id so ChatServer can forward channel.cli.out events
         // to the registered WebSocket client without racing to find the most
         // recent row. Also include from/to strings for the full envelope.
         this.deps.bus.publish("channel.cli.out", {
@@ -172,7 +172,7 @@ export class MailDispatcher {
     const p = this.safeParseFrom(from);
     if (p?.kind === "agent") return p.name;
     // cli:* / 'system' / unparseable → keep the raw string as the row's
-    // agent_id so the CLI tail can display it verbatim.
+    // agent_id so the CLI can identify the sender.
     return from;
   }
 }
