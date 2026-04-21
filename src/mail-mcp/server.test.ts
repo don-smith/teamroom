@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MailMcpServer } from "./server.js";
 import { MailMcpTools } from "./tools.js";
 import { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
-import { CliChannelAdapter } from "../channels/cli.js";
 import { EventBus } from "../bus/event-bus.js";
 import { createDatabase } from "../db/database.js";
 import { runMigrations } from "../db/migrator.js";
@@ -18,10 +17,7 @@ type Harness = {
   messageRepo: MessageRepo;
 };
 
-async function startServer(
-  agents: string[],
-  opts: { cli?: boolean } = {},
-): Promise<Harness> {
+async function startServer(agents: string[]): Promise<Harness> {
   const db = createDatabase(":memory:");
   runMigrations(db);
   const agentRepo = new AgentRepo(db);
@@ -49,7 +45,6 @@ async function startServer(
   const server = new MailMcpServer({
     tools,
     tokenResolver: (t) => tokens.get(t) ?? null,
-    cliAdapter: opts.cli ? new CliChannelAdapter({ dispatcher }) : undefined,
     port: 0,
   });
   await server.start();
@@ -77,6 +72,7 @@ describe("MailMcpServer", () => {
   beforeEach(async () => {
     h = await startServer(["claude-assistant", "claude-researcher"]);
   });
+
 
   afterEach(async () => {
     await h.server.stop();
@@ -230,64 +226,3 @@ describe("MailMcpServer", () => {
   });
 });
 
-describe("MailMcpServer — /cli/send endpoint", () => {
-  let h: Harness;
-
-  beforeEach(async () => {
-    h = await startServer(["claude-assistant"], { cli: true });
-  });
-
-  afterEach(async () => {
-    await h.server.stop();
-  });
-
-  it("dispatches mail to the target agent's inbox", async () => {
-    const r = await fetch(`http://127.0.0.1:${h.port}/cli/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ user: "don", target: "claude-assistant", body: "hello" }),
-    });
-    expect(r.status).toBe(200);
-    const body = await r.json();
-    expect(body.threadId).toBeTruthy();
-
-    const inbox = h.messageRepo.listInbox("claude-assistant", {});
-    expect(inbox).toHaveLength(1);
-    expect(inbox[0]!.from).toBe("channel:cli:don");
-    expect(inbox[0]!.body).toBe("hello");
-  });
-
-  it("rejects a malformed payload with 400", async () => {
-    const r = await fetch(`http://127.0.0.1:${h.port}/cli/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ user: "don" }), // missing target, body
-    });
-    expect(r.status).toBe(400);
-  });
-
-  it("surfaces dispatcher errors (unknown target) with 400", async () => {
-    const r = await fetch(`http://127.0.0.1:${h.port}/cli/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ user: "don", target: "ghost", body: "x" }),
-    });
-    expect(r.status).toBe(400);
-    const body = await r.json();
-    expect(body.error).toMatch(/unknown recipient/i);
-  });
-
-  it("is 404 when the CLI adapter isn't configured", async () => {
-    const h2 = await startServer(["a"], { cli: false });
-    try {
-      const r = await fetch(`http://127.0.0.1:${h2.port}/cli/send`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ user: "don", target: "a", body: "x" }),
-      });
-      expect(r.status).toBe(404);
-    } finally {
-      await h2.server.stop();
-    }
-  });
-});

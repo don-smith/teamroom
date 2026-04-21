@@ -9,7 +9,6 @@ import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.
 import { installSafetyNets } from "./safety-nets.js";
 import { reconcile } from "./reconcile.js";
 import { Orchestrator } from "./orchestrator.js";
-import { CliChannelAdapter } from "../channels/cli.js";
 import { buildSpec } from "../agent-spec/build-spec.js";
 import { writePortFile, deletePortFile } from "../cli/ports.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
@@ -53,7 +52,7 @@ export interface DaemonOptions {
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
-  /** Port to bind the mail MCP + /cli/send HTTP server. 0 = ephemeral. */
+  /** Port to bind the mail MCP HTTP server. 0 = ephemeral. */
   mailPort?: number;
   /**
    * Minutes of inactivity before the session manager closes an agent
@@ -110,9 +109,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     maxMailsPerThread,
   });
 
-  // --- 6. CLI channel adapter (still needed for mail-MCP's /cli/send; removed in Plan Task 36) ---
-  const cliAdapter = new CliChannelAdapter({ dispatcher: mcpMail.dispatcher });
-
   // --- 7. Model proxy ---
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
@@ -128,7 +124,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const mailMcpServer = new MailMcpServer({
     tools: mcpMail.mcpTools,
     tokenResolver: (t) => resolveMcpToken(t),
-    cliAdapter,
     port: opts.mailPort ?? 0,
     logger: obs.rootLogger,
   });
