@@ -103,10 +103,10 @@ export class MailDispatcher {
         });
         this.deps.bus.publish("mail.delivered", { to: addr.name });
       } else if (addr.kind === "channel" && addr.channel === "cli") {
-        // CLI outbound rows carry only body + thread_id; `teamroom tail`
-        // renders the body, not the full envelope. We still scope the row
-        // to the sending agent via agent_id (or the sender address verbatim
-        // when the sender is channel:cli:* or 'system').
+        // CLI outbound rows carry the full mail envelope so that the
+        // ChatServer can forward it over WebSocket without additional lookups.
+        // We still scope the row to the sending agent via agent_id (or the
+        // sender address verbatim when the sender is channel:cli:* or 'system').
         const senderLabel = this.senderLabel(input.from);
         this.deps.messageRepo.create({
           id,
@@ -118,15 +118,22 @@ export class MailDispatcher {
           traceId: id,
           createdAt: now,
           threadId,
+          from: input.from,
+          to: toStrings,
+          cc: ccStrings,
         });
         // Include the row id so a bus-to-bus bridge (e.g., the daemon's
         // tail-facing FileNotifyBus) can forward a message.outbound event
         // without racing to find the most recent CLI row.
+        // Also include from/to strings so ChatServer can forward the full
+        // envelope to the registered WebSocket client.
         this.deps.bus.publish("channel.cli.out", {
           user: addr.externalId,
           messageId: id,
           agentId: senderLabel,
           threadId,
+          from: input.from,
+          to: toStrings,
         });
       }
       // `list` is already expanded out of the list — not reachable here.
