@@ -22,6 +22,7 @@ import { composeMcpMail } from "../modules/mcp-mail/mcp-mail.js";
 import { composeModelProxy } from "../modules/model-proxy/model-proxy.js";
 import { composeSessionManagement } from "../modules/session-management/session-management.js";
 import { composeChannels } from "../modules/channels/channels.js";
+import { composeMail } from "../modules/mail/mail.js";
 import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { MailingListRegistry } from "../mailing-lists/registry.js";
@@ -168,7 +169,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   writePortFile(opts.dataDir, "chat", channels.port);
   obs.rootLogger.info("chat server started", { port: channels.port });
 
-  // --- 12. Legacy CLI path (removed in Plan Task 33) ---
+  // --- 12. Mail query server (read-only WebSocket on its own port) ---
+  const mail = await composeMail({
+    storage,
+    logger: obs.rootLogger,
+    port: 0,
+  });
+  writePortFile(opts.dataDir, "mail", mail.port);
+  obs.rootLogger.info("mail query server started", { port: mail.port });
+
+  // --- 13. Legacy CLI path (removed in Plan Task 33) ---
   const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
   messaging.eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
     "channel.cli.out", (p) => {
@@ -199,7 +209,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     obs.rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
   });
 
-  // --- 13. Stop orchestration ---
+  // --- 14. Stop orchestration ---
   // Ingress-first: shut off external-facing surfaces (channels, mail-MCP)
   // before their dependencies (model proxy, storage) close. Any late-arriving
   // inbound can't land in a half-torn-down substrate.
@@ -212,6 +222,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     await loopPromise;
     await channels.stop();
     deletePortFile(opts.dataDir, "chat");
+    await mail.stop();
+    deletePortFile(opts.dataDir, "mail");
     await mailMcpServer.stop();
     deletePortFile(opts.dataDir, "mail-mcp");
     await modelProxy.stop();
