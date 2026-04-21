@@ -28,7 +28,7 @@ export interface Message {
   // ([] for `to`, null for the rest) before inserting. Reads from the DB
   // always populate every field (null when the column is null).
   to?: string[];                  // JSON array in DB; parsed here; [] for legacy CLI rows
-  from?: string | null;           // prefixed sender address (agent:*, cli:*, or 'system')
+  from?: string | null;           // prefixed sender address (agent:*, channel:*, or 'system')
   cc?: string[] | null;           // JSON array in DB; null when unset (distinct from [])
   subject?: string | null;
   threadId?: string | null;       // minted on fresh send; inherited on reply
