@@ -6,6 +6,10 @@
 --
 -- Idempotent: a re-run after a successful first pass rewrites zero rows
 -- because the `LIKE 'cli:%'` predicates no longer match.
+--
+-- Failure mode: if `to` or `cc` contains malformed JSON, `json_each`
+-- raises and the migration's transaction rolls back. Fail loudly is
+-- preferred to silent corruption.
 
 -- Update `from` (single string column).
 UPDATE messages

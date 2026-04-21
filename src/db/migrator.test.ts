@@ -80,9 +80,10 @@ describe("migration 004 — channel address scheme", () => {
               'cli:don', '["agent:a","cli:don"]', '["cli:other"]')
     `).run();
 
-    // Manually invoke the 004 SQL again to simulate idempotent re-run
-    // (the migrator itself records 004 as applied during runMigrations,
-    //  so we directly exec the statements to verify the rewrite logic).
+    // The row above was inserted AFTER runMigrations already applied 004
+    // to an empty messages table — so the first db.exec(sql) below is the
+    // actual rewrite for this row, and the second proves idempotency
+    // (no double-prefix, no further changes).
     const sql = `
       UPDATE messages SET "from" = 'channel:' || "from" WHERE "from" LIKE 'cli:%';
       UPDATE messages SET "to" = (SELECT json_group_array(CASE WHEN value LIKE 'cli:%' THEN 'channel:' || value ELSE value END) FROM json_each(messages."to")) WHERE EXISTS (SELECT 1 FROM json_each(messages."to") WHERE value LIKE 'cli:%');
