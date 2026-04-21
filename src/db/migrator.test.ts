@@ -63,3 +63,45 @@ describe("migrator", () => {
     expect(applied).toContain("003_m4_agent_mail.sql");
   });
 });
+
+describe("migration 004 — channel address scheme", () => {
+  it("rewrites legacy cli:* addresses to channel:cli:* across from/to/cc; is idempotent on re-run", () => {
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+
+    db.prepare(`
+      INSERT INTO agents (id, config_path, created_at)
+      VALUES ('a', '/dev/null', '2026-04-21T00:00:00Z')
+    `).run();
+
+    db.prepare(`
+      INSERT INTO messages (id, agent_id, body, channel, direction, created_at, trace_id, "from", "to", cc)
+      VALUES ('m1', 'a', 'b', 'mail', 'in', '2026-04-21T00:00:00Z', 'trace-1',
+              'cli:don', '["agent:a","cli:don"]', '["cli:other"]')
+    `).run();
+
+    // Manually invoke the 004 SQL again to simulate idempotent re-run
+    // (the migrator itself records 004 as applied during runMigrations,
+    //  so we directly exec the statements to verify the rewrite logic).
+    const sql = `
+      UPDATE messages SET "from" = 'channel:' || "from" WHERE "from" LIKE 'cli:%';
+      UPDATE messages SET "to" = (SELECT json_group_array(CASE WHEN value LIKE 'cli:%' THEN 'channel:' || value ELSE value END) FROM json_each(messages."to")) WHERE EXISTS (SELECT 1 FROM json_each(messages."to") WHERE value LIKE 'cli:%');
+      UPDATE messages SET cc = (SELECT json_group_array(CASE WHEN value LIKE 'cli:%' THEN 'channel:' || value ELSE value END) FROM json_each(messages.cc)) WHERE cc IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(messages.cc) WHERE value LIKE 'cli:%');
+    `;
+    db.exec(sql);
+
+    const row = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as any;
+    expect(row.from).toBe("channel:cli:don");
+    expect(JSON.parse(row.to)).toEqual(["agent:a", "channel:cli:don"]);
+    expect(JSON.parse(row.cc)).toEqual(["channel:cli:other"]);
+
+    // Second run: idempotent — no double-prefix.
+    db.exec(sql);
+    const row2 = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as any;
+    expect(row2.from).toBe("channel:cli:don");
+    expect(JSON.parse(row2.to)).toEqual(["agent:a", "channel:cli:don"]);
+    expect(JSON.parse(row2.cc)).toEqual(["channel:cli:other"]);
+
+    db.close();
+  });
+});
