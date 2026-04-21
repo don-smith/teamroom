@@ -93,7 +93,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const messaging = composeMessaging({ logger: obs.rootLogger });
   const listsPath = opts.listsYamlPath ?? join(opts.agentsDir, "..", "lists.yaml");
   const lists = existsSync(listsPath) ? loadListsYaml(listsPath) : [];
-  const maxMailsPerThread = readNonNegativeIntEnv("TEAMROOM_MAX_MAILS_PER_THREAD", 10);
+  const maxMailsPerThread = readNonNegativeIntEnv("TEAMROOM_MAX_MAILS_PER_THREAD", 40);
   const genId = () => randomUUID();
   const mcpMail = composeMcpMail({
     storage, messaging, logger: obs.rootLogger,
