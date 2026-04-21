@@ -1,7 +1,7 @@
 import { ControllableClock } from "../../src/clock/clock.js";
 import { JsonLinesLogger } from "../../src/logger/logger.js";
 import { EventBus } from "../../src/bus/event-bus.js";
-import { CliChannelAdapter } from "../../src/channels/cli.js";
+import { CliChannelAdapter } from "./cli-test-helper.js";
 import { MailMcpTools, type ToolContext } from "../../src/mail-mcp/tools.js";
 import { FakeRunner } from "../../src/container/fake-runner.js";
 import type { AgentConfig } from "../../src/agent-config/agent-config.js";

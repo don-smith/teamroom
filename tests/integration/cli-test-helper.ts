@@ -1,4 +1,4 @@
-import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import type { MailDispatcher } from "../../src/mail-dispatcher/mail-dispatcher.js";
 
 export interface CliChannelAdapterDeps {
   dispatcher: MailDispatcher;
@@ -12,13 +12,12 @@ export interface CliSendInput {
 }
 
 /**
- * Thin bridge between the CLI surface (`teamroom send <target> <body>`) and
- * the mail dispatcher. Inbound CLI messages enter the mail substrate as a
- * `channel:cli:<user> → agent:<target>` send; outbound CLI messages flow back
- * through the dispatcher when agents reply to `channel:cli:<user>`.
+ * Test-only helper: injects CLI-flavored mail directly into the dispatcher
+ * for integration tests. Production CLI flows through the chat WebSocket
+ * and does not use this adapter.
  *
- * Kept as its own module (rather than inline in the daemon) so the next
- * channel (Telegram, Slack, etc.) can slot in with the same shape.
+ * Relocated from src/channels/cli.ts in M4.5 close-out cleanup to make
+ * the test-only purpose explicit.
  */
 export class CliChannelAdapter {
   constructor(private readonly deps: CliChannelAdapterDeps) {}
