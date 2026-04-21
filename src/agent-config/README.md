@@ -13,5 +13,5 @@ Exports `loadAgentConfig(agentDir)` which reads an agent's on-disk metadata (`ag
 
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** `yaml` npm package; Node `fs`/`path`.
-- **Used by:** [daemon/README.md](../daemon/README.md) (agent discovery at startup), [cli/send.ts](../cli/) (to find the sole agent folder).
+- **Used by:** [daemon/README.md](../daemon/README.md) (agent discovery at startup), [cli/send.ts](../cli/) (to resolve the target agent name).
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 agent folder shape, §2 container contract (mounts/env).

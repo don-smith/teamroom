@@ -22,7 +22,7 @@ M2 scope: Anthropic + LM Studio backends; per-agent provider declared in `agent.
 
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [logger/](../logger/), [types.ts](../types.ts), Node `http`/`https`/`crypto`.
-- **Used by:** [daemon/](../daemon/README.md) (composition root + turn-processor).
+- **Used by:** [daemon/](../daemon/README.md) (composition root), [modules/session-management/](../modules/session-management/) (mints per-turn routing tokens).
 - **Container counterpart:** [agent-runtime/](../agent-runtime/README.md) — `AnthropicLlmClient` is mode-agnostic; all OAuth machinery lives here, not there.
 - **Spec:** [M2 design](../../docs/specs/2026-04-18-m2-model-abstraction-design.md) — §3.1 (interfaces), §4 (data flow), §6 (auth modes).
 - **Memory:** [project_teamroom_langgraph_direction](../../docs/memory/project_teamroom_langgraph_direction.md) — the language-agnostic container contract is preserved by this module.

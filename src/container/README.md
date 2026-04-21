@@ -16,5 +16,5 @@
 
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** Node `child_process` (DockerRunner only).
-- **Used by:** [daemon/README.md](../daemon/README.md) (turn-processor).
+- **Used by:** [daemon/README.md](../daemon/README.md) (session-management module spawns containers).
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 container contract (mounts, env, stdin/stdout protocol, exit codes, timeouts). M2 changed the `/AGENTS.md` mount from read-only to read-write (self-improvement loops in M7 will need this); the `parseEvent` spread-order fix landed here as M1 debt #3.

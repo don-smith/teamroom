@@ -14,7 +14,11 @@ for the architecture rationale.
 - [`observability/`](observability/) — clock, log sink, root logger.
 - [`storage/`](storage/) — DB connection, migrations, repos.
 - [`messaging/`](messaging/) — `EventBus`.
-- (later groups will add: `mcp-mail/`, `model-proxy/`, `session-management/`, `channels/`, `mail/`)
+- [`mcp-mail/`](mcp-mail/) — MCP tool registry (uses `@modelcontextprotocol/sdk`); wired into `MailMcpServer`.
+- [`model-proxy/`](model-proxy/) — `LocalModelProxy` factory + provider adapters.
+- [`session-management/`](session-management/) — session lifecycle; subscribes to bus events to drive agent turns.
+- [`channels/`](channels/) — `ChannelRegistry`, `ChatServer` (WebSocket); exposes the chat port.
+- [`mail/`](mail/) — `QueryServer` (WebSocket); exposes the mail query port.
 
 ## Related
 
