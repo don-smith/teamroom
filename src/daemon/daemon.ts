@@ -10,7 +10,7 @@ import { FileNotifyBus } from "../bus/file-notify-bus.js";
 import { EventBus } from "../bus/event-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
 import { killStaleTeamroomContainers } from "../container/kill-stale.js";
-import type { DockerRunSpec, Mount } from "../container/docker-command.js";
+import type { DockerRunSpec } from "../container/docker-command.js";
 import { SystemClock } from "../clock/clock.js";
 import { JsonLinesLogger } from "../logger/logger.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
@@ -28,6 +28,7 @@ import { MailingListRegistry } from "../mailing-lists/registry.js";
 import { MailingListTriggerListener } from "../mailing-lists/trigger-listener.js";
 import { loadListsYaml } from "../mailing-lists/loader.js";
 import { CliChannelAdapter } from "../channels/cli.js";
+import { buildSpec } from "../agent-spec/build-spec.js";
 import { writePortFile, deletePortFile } from "../cli/ports.js";
 import { MailMcpTools } from "../mail-mcp/tools.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
@@ -224,52 +225,23 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
   const runner = new DockerRunner();
 
-  const buildSpec = (agentId: string, mcpToken: string): DockerRunSpec => {
-    const cfg = agentConfigs.get(agentId);
-    if (!cfg) throw new Error(`no agent config for '${agentId}'`);
-    const proxyToken = tokenRegistry.mint({
+  const specBuilder = (agentId: string, mcpToken: string): DockerRunSpec =>
+    buildSpec({
       agentId,
-      turnId: `session-${mcpToken.slice(0, 8)}`,
-      traceId: genId(),
-      provider: cfg.provider,
-      model: cfg.model,
+      mcpToken,
+      agentConfigs,
+      tokenRegistry,
+      modelBaseUrl,
+      mailPort,
+      codebasePath,
+      genId,
     });
-    const mounts: Mount[] = [
-      { hostPath: cfg.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
-      { hostPath: cfg.storePath, containerPath: "/store", readOnly: false },
-    ];
-    if (codebasePath) {
-      mounts.push({ hostPath: codebasePath, containerPath: "/codebase", readOnly: false });
-    }
-    return {
-      imageTag: cfg.imageTag,
-      name: `teamroom-${agentId}-${mcpToken.slice(0, 8)}`,
-      mounts,
-      env: {
-        TEAMROOM_TRACE_ID: genId(),
-        TEAMROOM_AGENT_NAME: agentId,
-        TEAMROOM_PROVIDER: cfg.provider,
-        TEAMROOM_MODEL: cfg.model,
-        TEAMROOM_MODEL_BASE_URL: modelBaseUrl,
-        TEAMROOM_MODEL_API_TOKEN: proxyToken,
-        ANTHROPIC_BASE_URL: modelBaseUrl,
-        ANTHROPIC_AUTH_TOKEN: proxyToken,
-        TEAMROOM_ALLOWED_TOOLS: cfg.allowedTools.join(","),
-        TEAMROOM_MCP_URL: `http://host.docker.internal:${mailPort}/mcp`,
-        TEAMROOM_MCP_TOKEN: mcpToken,
-      },
-      labels: {
-        "teamroom-agent": "true",
-        "teamroom-agent-id": agentId,
-      },
-    };
-  };
 
   const sessionManager = new SessionTimerManager({
     runner,
     idleMinutes,
     timerFactory: realTimerFactory,
-    spec: buildSpec,
+    spec: specBuilder,
     genToken: () => randomUUID(),
     logger: rootLogger,
   });
