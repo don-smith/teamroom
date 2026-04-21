@@ -1,42 +1,31 @@
-import { mkdirSync, appendFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createDatabase, type Db } from "../db/database.js";
-import { runMigrations } from "../db/migrator.js";
-import { AgentRepo } from "../db/agent-repo.js";
-import { MessageRepo } from "../db/message-repo.js";
-import { TurnRepo } from "../db/turn-repo.js";
 import { FileNotifyBus } from "../bus/file-notify-bus.js";
-import { EventBus } from "../bus/event-bus.js";
 import { DockerRunner } from "../container/docker-runner.js";
-import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import type { DockerRunSpec } from "../container/docker-command.js";
-import { SystemClock } from "../clock/clock.js";
-import { JsonLinesLogger } from "../logger/logger.js";
+import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
 import { installSafetyNets } from "./safety-nets.js";
 import { reconcile } from "./reconcile.js";
 import { Orchestrator } from "./orchestrator.js";
-import { LocalModelProxy } from "../model-proxy/local-model-proxy.js";
-import { TokenRegistry } from "../model-proxy/token-registry.js";
-import type { ProviderAdapter } from "../model-proxy/adapters/adapter.js";
-import { LmStudioAdapter } from "../model-proxy/adapters/lm-studio-adapter.js";
-import { AnthropicAdapter } from "../model-proxy/adapters/anthropic-adapter.js";
-import { AnthropicOAuthCache } from "../model-proxy/adapters/anthropic-oauth-cache.js";
-import { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
-import { MailingListRegistry } from "../mailing-lists/registry.js";
-import { MailingListTriggerListener } from "../mailing-lists/trigger-listener.js";
-import { loadListsYaml } from "../mailing-lists/loader.js";
 import { CliChannelAdapter } from "../channels/cli.js";
 import { buildSpec } from "../agent-spec/build-spec.js";
 import { writePortFile, deletePortFile } from "../cli/ports.js";
-import { MailMcpTools } from "../mail-mcp/tools.js";
 import { MailMcpServer } from "../mail-mcp/server.js";
-import {
-  SessionTimerManager,
-  realTimerFactory,
-} from "../session-manager/session-manager.js";
-import type { Provider } from "../types.js";
+import { realTimerFactory } from "../session-manager/session-manager.js";
+import { loadListsYaml } from "../mailing-lists/loader.js";
+import { composeObservability } from "../modules/observability/observability.js";
+import { composeStorage } from "../modules/storage/storage.js";
+import { composeMessaging } from "../modules/messaging/messaging.js";
+import { composeMcpMail } from "../modules/mcp-mail/mcp-mail.js";
+import { composeModelProxy } from "../modules/model-proxy/model-proxy.js";
+import { composeSessionManagement } from "../modules/session-management/session-management.js";
+import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import type { EventBus } from "../bus/event-bus.js";
+import type { MailingListRegistry } from "../mailing-lists/registry.js";
+import type { SessionTimerManager } from "../session-manager/session-manager.js";
+import type { Db } from "../db/database.js";
 
 /**
  * Anthropic credentials. OAuth is preferred; API key is the fallback. `null` in
@@ -81,253 +70,193 @@ export interface StartedDaemon {
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
+  // --- 1. FS setup + PID file ---
   mkdirSync(opts.dataDir, { recursive: true });
-  mkdirSync(join(opts.dataDir, "bus"), { recursive: true });
-  mkdirSync(join(opts.dataDir, "logs"), { recursive: true });
-
-  const clock = new SystemClock();
-  const dateStr = clock.nowIso().slice(0, 10);
-  const logFile = join(opts.dataDir, "logs", `teamroom-${dateStr}.jsonl`);
-  const logSink = (line: string) => {
-    process.stdout.write(line + "\n");
-    appendFileSync(logFile, line + "\n");
-  };
-  const rootLogger = new JsonLinesLogger(clock, logSink, { component: "daemon" });
-  installSafetyNets(rootLogger);
-
-  // PID file
+  mkdirSync(join(opts.dataDir, "bus"), { recursive: true }); // FileNotifyBus — removed in Plan Task 33
   const pidFile = join(opts.dataDir, "teamroom.pid");
   writeFileSync(pidFile, String(process.pid));
 
-  // Kill any stale teamroom-agent containers left behind by a prior daemon.
-  // Per-agent container state isn't resumable across a daemon restart (mail
-  // persistence is in the DB); clean slate keeps the session map honest.
-  const killed = await killStaleTeamroomContainers({ logger: rootLogger });
+  // --- 2. Observability (clock, logger) ---
+  const obs = composeObservability({ dataDir: opts.dataDir });
+  installSafetyNets(obs.rootLogger);
+
+  // --- 3. Stale-container cleanup ---
+  const killed = await killStaleTeamroomContainers({ logger: obs.rootLogger });
   if (killed.length > 0) {
-    rootLogger.info("stale containers killed", { count: killed.length, ids: killed });
+    obs.rootLogger.info("stale containers killed", { count: killed.length, ids: killed });
   }
 
-  const db = createDatabase(join(opts.dataDir, "teamroom.db"));
-  runMigrations(db);
+  // --- 4. Storage + agent discovery ---
+  const storage = composeStorage({ dataDir: opts.dataDir });
+  const agentConfigs = discoverAgentConfigs(opts.agentsDir, storage, obs.rootLogger, obs.clock);
 
-  const agentRepo = new AgentRepo(db);
-  const messageRepo = new MessageRepo(db);
-  const turnRepo = new TurnRepo(db);
-  const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
-
-  // Discover and register each agent folder under agentsDir.
-  const agentConfigs = new Map<string, AgentConfig>();
-  if (existsSync(opts.agentsDir)) {
-    for (const entry of readdirSync(opts.agentsDir)) {
-      const full = join(opts.agentsDir, entry);
-      if (!statSync(full).isDirectory()) continue;
-      const cfg = loadAgentConfig(full);
-      agentConfigs.set(cfg.name, cfg);
-      if (!agentRepo.findById(cfg.name)) {
-        agentRepo.create({ id: cfg.name, configPath: cfg.configPath, createdAt: clock.nowIso() });
-      }
-      rootLogger.info("agent registered", { agentName: cfg.name });
-    }
-  }
-
-  // --- M4 mail substrate ---
-  const eventBus = new EventBus(rootLogger);
+  // --- 5. Messaging + mcp-mail ---
+  const messaging = composeMessaging({ logger: obs.rootLogger });
   const listsPath = opts.listsYamlPath ?? join(opts.agentsDir, "..", "lists.yaml");
-  const listDefs = existsSync(listsPath) ? loadListsYaml(listsPath) : [];
-  const mailingListRegistry = new MailingListRegistry(listDefs, [...agentConfigs.values()]);
-  rootLogger.info("mailing-list registry built", {
-    lists: listDefs.length,
-    triggers: mailingListRegistry.allTriggers(),
-  });
-
+  const lists = existsSync(listsPath) ? loadListsYaml(listsPath) : [];
   const maxMailsPerThread = readNonNegativeIntEnv("TEAMROOM_MAX_MAILS_PER_THREAD", 10);
-
   const genId = () => randomUUID();
-
-  const dispatcher = new MailDispatcher({
-    messageRepo,
-    bus: eventBus,
-    clock,
+  const mcpMail = composeMcpMail({
+    storage, messaging, logger: obs.rootLogger,
+    clock: obs.clock,
     genId,
-    knownAgents: (n) => agentConfigs.has(n),
-    knownLists: (n) => mailingListRegistry.has(n),
-    listSubscribers: (n) => mailingListRegistry.subscribers(n),
+    agentConfigs,
+    lists,
     maxMailsPerThread,
   });
 
-  new MailingListTriggerListener({
-    bus: eventBus,
-    registry: mailingListRegistry,
-    dispatcher,
-    formatBody: (eventType, payload) => `${eventType}: ${JSON.stringify(payload)}`,
+  // --- 6. CLI channel adapter (still needed for mail-MCP's /cli/send; removed in Plan Task 36) ---
+  const cliAdapter = new CliChannelAdapter({ dispatcher: mcpMail.dispatcher });
+
+  // --- 7. Model proxy ---
+  const modelProxy = await composeModelProxy({
+    logger: obs.rootLogger,
+    lmStudio: opts.lmStudio,
+    anthropic: opts.anthropic,
   });
 
-  const cliAdapter = new CliChannelAdapter({ dispatcher });
+  // --- 8. Codebase-mount resolution ---
+  const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
 
-  const mailMcpTools = new MailMcpTools({
-    messageRepo,
-    dispatcher,
-    bus: eventBus,
-    clock,
-  });
-
-  // --- Model proxy (M2 carryover for live LLM calls) ---
-  const tokenRegistry = new TokenRegistry();
-  const adapters: Partial<Record<Provider, ProviderAdapter>> = {
-    "lm-studio": new LmStudioAdapter({
-      upstreamUrl: opts.lmStudio.upstreamUrl,
-      realKey: opts.lmStudio.realKey,
-    }),
-  };
-  const anthropicAdapterPresent = opts.anthropic !== null;
-  if (opts.anthropic) {
-    adapters.anthropic = buildAnthropicAdapter(opts.anthropic);
-  }
-  const modelProxy = new LocalModelProxy({
-    registry: tokenRegistry,
-    adapters: adapters as Record<Provider, ProviderAdapter>,
-    logger: rootLogger,
-  });
-  const proxyInfo = await modelProxy.start();
-  const modelBaseUrl = `http://host.docker.internal:${proxyInfo.port}`;
-  rootLogger.info("model proxy started", { port: proxyInfo.port, anthropicAdapterPresent });
-
-  const codebasePath = (() => {
-    const raw = process.env.TEAMROOM_CODEBASE_PATH;
-    if (raw == null || raw.trim() === "") {
-      const defaultPath = join(opts.dataDir, "..", "codebase");
-      return existsSync(defaultPath) ? defaultPath : null;
-    }
-    if (!existsSync(raw)) {
-      throw new Error(`TEAMROOM_CODEBASE_PATH does not exist: ${raw}`);
-    }
-    return raw;
-  })();
-  rootLogger.info("codebase mount", { path: codebasePath ?? "(none)" });
-
-  // --- MCP server + session manager ---
-  // tokenResolver is wired to the session manager after construction so
-  // the server/manager pair can hold references to each other without a
-  // circular constructor arg.
-  let resolveMcpToken: (token: string) => string | null = () => null;
+  // --- 9. Mail MCP server (with late-bound token resolver) ---
+  let resolveMcpToken: (t: string) => string | null = () => null;
   const mailMcpServer = new MailMcpServer({
-    tools: mailMcpTools,
+    tools: mcpMail.mcpTools,
     tokenResolver: (t) => resolveMcpToken(t),
     cliAdapter,
     port: opts.mailPort ?? 0,
-    logger: rootLogger,
+    logger: obs.rootLogger,
   });
   await mailMcpServer.start();
   const { port: mailPort } = mailMcpServer.address();
   writePortFile(opts.dataDir, "mail-mcp", mailPort);
-  rootLogger.info("mail mcp server started", { port: mailPort });
+  obs.rootLogger.info("mail mcp server started", { port: mailPort });
 
+  // --- 10. Session management ---
   const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
   const runner = new DockerRunner();
-
-  const specBuilder = (agentId: string, mcpToken: string): DockerRunSpec =>
-    buildSpec({
-      agentId,
-      mcpToken,
-      agentConfigs,
-      tokenRegistry,
-      modelBaseUrl,
-      mailPort,
-      codebasePath,
-      genId,
-    });
-
-  const sessionManager = new SessionTimerManager({
+  const sessionMgmt = composeSessionManagement({
+    messaging,
+    logger: obs.rootLogger,
     runner,
     idleMinutes,
     timerFactory: realTimerFactory,
-    spec: specBuilder,
+    spec: (agentId: string, mcpToken: string): DockerRunSpec => buildSpec({
+      agentId, mcpToken, agentConfigs,
+      tokenRegistry: modelProxy.tokenRegistry,
+      modelBaseUrl: modelProxy.modelBaseUrl,
+      mailPort,
+      codebasePath,
+      genId,
+    }),
     genToken: () => randomUUID(),
-    logger: rootLogger,
   });
+  resolveMcpToken = (t) => sessionMgmt.sessionManager.resolveToken(t);
 
-  // Wire up the token resolver for the MCP server now that the session
-  // manager exists.
-  resolveMcpToken = (t) => sessionManager.resolveToken(t);
-
-  // The bus → session-manager subscriptions are what make M4 actually flow.
-  // Without these, `mail.delivered` events fire into the void and no agent
-  // container is ever spawned.
-  eventBus.subscribe<{ to: string }>("mail.delivered", (payload) => {
-    sessionManager.onMailDelivered(payload.to);
-  });
-  eventBus.subscribe<{ from: string }>("mail.sent", (payload) => {
-    sessionManager.onAgentActivity(payload.from);
-  });
-  eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (payload) => {
-    sessionManager.onAgentActivity(payload.agentId);
-  });
-  // Bridge channel.cli.out (M4 dispatcher event) to message.outbound on the
-  // FileNotifyBus so `teamroom tail` — which was written for M3's shape —
-  // sees agent replies addressed to cli:* recipients without needing its
-  // own M4-aware code path.
-  eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
-    "channel.cli.out",
-    (p) => {
+  // --- 11. Legacy CLI path (removed in Plan Task 33) ---
+  const notifyBus = new FileNotifyBus(join(opts.dataDir, "bus"));
+  messaging.eventBus.subscribe<{ messageId: string; agentId: string; threadId: string }>(
+    "channel.cli.out", (p) => {
       void notifyBus.publish({
-        id: genId(),
-        type: "message.outbound",
-        ts: clock.nowIso(),
-        agentId: p.agentId,
-        messageId: p.messageId,
-        turnId: "",
-        traceId: p.messageId,
+        id: genId(), type: "message.outbound", ts: obs.clock.nowIso(),
+        agentId: p.agentId, messageId: p.messageId, turnId: "", traceId: p.messageId,
       });
     },
   );
-
-  await reconcile({ turnRepo, bus: notifyBus, logger: rootLogger, clock, genId });
-
-  // The orchestrator poll loop still runs for legacy CLI `channel='cli'
-  // direction='in'` turns. M4 mail rows (channel='mail') are handled out
-  // of band by the dispatcher/bus/session-manager chain — findPendingInbound
-  // filters to `channel='cli'` explicitly so there's no double-processing.
+  await reconcile({ turnRepo: storage.turnRepo, bus: notifyBus, logger: obs.rootLogger, clock: obs.clock, genId });
   const orchestrator = new Orchestrator({
-    messageRepo, turnRepo, bus: notifyBus, logger: rootLogger, clock, runner,
+    messageRepo: storage.messageRepo,
+    turnRepo: storage.turnRepo,
+    bus: notifyBus,
+    logger: obs.rootLogger,
+    clock: obs.clock,
+    runner,
     agentConfigs,
-    modelProxy,
-    modelBaseUrl,
-    anthropicAdapterPresent,
+    modelProxy: modelProxy.modelProxy,
+    modelBaseUrl: modelProxy.modelBaseUrl,
+    anthropicAdapterPresent: modelProxy.anthropicAdapterPresent,
     turnTimeoutMs: opts.turnTimeoutMs ?? 5 * 60 * 1000,
     pollIntervalMs: opts.pollIntervalMs ?? 200,
     genId,
     codebasePath,
   });
-
   const loopPromise = orchestrator.runLoop().catch((err) => {
-    rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
+    obs.rootLogger.fatal("orchestrator loop exited abnormally (daemon does not exit)", { error: String(err) });
   });
 
+  // --- 12. Stop orchestration ---
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
     stopped = true;
     orchestrator.stop();
-    await sessionManager.killAll();
+    await sessionMgmt.stop();
     await loopPromise;
     await mailMcpServer.stop();
     await modelProxy.stop();
     await notifyBus.close();
-    db.close();
+    storage.close();
     deletePortFile(opts.dataDir, "mail-mcp");
-    try { unlinkSync(pidFile); } catch { /* swallow — best-effort cleanup on the way out */ }
+    try { unlinkSync(pidFile); } catch { /* best-effort */ }
   };
 
   return {
-    db,
+    db: storage.db,
     stop,
     orchestrator,
-    dispatcher,
-    eventBus,
+    dispatcher: mcpMail.dispatcher,
+    eventBus: messaging.eventBus,
     mailMcpServer,
-    mailingListRegistry,
-    sessionManager,
+    mailingListRegistry: mcpMail.mailingListRegistry,
+    sessionManager: sessionMgmt.sessionManager,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Private startup helpers
+// ---------------------------------------------------------------------------
+
+type StorageLike = {
+  agentRepo: { findById(id: string): unknown; create(agent: { id: string; configPath: string; createdAt: string }): void };
+};
+type ClockLike = { nowIso(): string };
+type LoggerLike = { info(msg: string, meta?: Record<string, unknown>): void };
+
+function discoverAgentConfigs(
+  agentsDir: string,
+  storage: StorageLike,
+  logger: LoggerLike,
+  clock: ClockLike,
+): Map<string, AgentConfig> {
+  const agentConfigs = new Map<string, AgentConfig>();
+  if (!existsSync(agentsDir)) return agentConfigs;
+  for (const entry of readdirSync(agentsDir)) {
+    const full = join(agentsDir, entry);
+    if (!statSync(full).isDirectory()) continue;
+    const cfg = loadAgentConfig(full);
+    agentConfigs.set(cfg.name, cfg);
+    if (!storage.agentRepo.findById(cfg.name)) {
+      storage.agentRepo.create({ id: cfg.name, configPath: cfg.configPath, createdAt: clock.nowIso() });
+    }
+    logger.info("agent registered", { agentName: cfg.name });
+  }
+  return agentConfigs;
+}
+
+function resolveCodebasePath(dataDir: string, logger: LoggerLike): string | null {
+  const raw = process.env.TEAMROOM_CODEBASE_PATH;
+  let result: string | null;
+  if (raw == null || raw.trim() === "") {
+    const defaultPath = join(dataDir, "..", "codebase");
+    result = existsSync(defaultPath) ? defaultPath : null;
+  } else {
+    if (!existsSync(raw)) {
+      throw new Error(`TEAMROOM_CODEBASE_PATH does not exist: ${raw}`);
+    }
+    result = raw;
+  }
+  logger.info("codebase mount", { path: result ?? "(none)" });
+  return result;
 }
 
 function readNonNegativeIntEnv(name: string, fallback: number): number {
@@ -338,34 +267,4 @@ function readNonNegativeIntEnv(name: string, fallback: number): number {
     throw new Error(`${name} must be a non-negative integer (got '${raw}')`);
   }
   return n;
-}
-
-function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
-  if (creds.mode === "api-key") {
-    return new AnthropicAdapter({ auth: { mode: "api-key", apiKey: creds.apiKey } });
-  }
-  const cache = new AnthropicOAuthCache();
-  return new AnthropicAdapter({
-    auth: {
-      mode: "oauth",
-      oauthToken: creds.oauthToken,
-      cache,
-      exchange: directOAuthPassthrough,
-    },
-  });
-}
-
-/**
- * "Exchange" function that returns the OAuth token directly as the temp key.
- *
- * See the M2 as-built / M3 as-built for background on why we skip the
- * exchange: Anthropic gates the programmatic exchange endpoint with 403
- * for `claude setup-token` issued tokens, but those tokens are themselves
- * long-lived API tokens accepted directly via `x-api-key` on `/v1/messages`.
- */
-function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
-  return Promise.resolve({
-    tempKey: oauthToken,
-    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
-  });
 }
