@@ -12,11 +12,22 @@
  *   - error: structured error envelope with machine-readable code
  */
 
+/**
+ * Timestamps on the wire are ISO 8601 (`Clock.nowIso()` format) throughout
+ * the project; future non-daemon producers (Telegram gateway, etc.) must
+ * conform.
+ */
+
 export type ClientMessage =
   | { type: "register"; channel: string; externalId: string }
+  /**
+   * `threadId: null` means "start a new thread; the dispatcher assigns
+   * the id." `cc: []` means no carbon copies.
+   */
   | { type: "publish"; to: string[]; body: string; threadId: string | null; cc: string[] };
 
 export type ServerMessage =
+  /** `threadId` is non-nullable: by the time mail reaches a client, the dispatcher has resolved a thread. */
   | { type: "mail"; id: string; from: string; to: string[]; cc: string[]; body: string; threadId: string; ts: string }
   | { type: "event"; event: string; payload: unknown }
   | { type: "error"; code: string; message: string };
@@ -48,7 +59,15 @@ export function parseClientMessage(raw: string): ClientMessage {
         throw new Error("publish: to[] elements must be strings");
       }
     }
-    const cc = Array.isArray(p.cc) ? p.cc.filter((x): x is string => typeof x === "string") : [];
+    let cc: string[] = [];
+    if (Array.isArray(p.cc)) {
+      for (const c of p.cc) {
+        if (typeof c !== "string") {
+          throw new Error("publish: cc[] elements must be strings");
+        }
+      }
+      cc = p.cc as string[];
+    }
     return {
       type: "publish",
       to: p.to as string[],

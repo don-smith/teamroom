@@ -41,6 +41,12 @@ describe("chat WebSocket protocol", () => {
     expect(() => parseClientMessage(JSON.stringify({ type: "publish", to: ["agent:a"] }))).toThrow();
   });
 
+  it("rejects publish with non-string elements in cc[] (consistent with to[])", () => {
+    expect(() =>
+      parseClientMessage(JSON.stringify({ type: "publish", to: ["agent:a"], body: "hi", cc: ["agent:b", 42] })),
+    ).toThrow(/cc\[\] elements must be strings/);
+  });
+
   it("server message types are discriminated", () => {
     const m: ServerMessage = {
       type: "mail",
