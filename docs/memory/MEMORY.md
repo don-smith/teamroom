@@ -27,6 +27,8 @@
 - [Team Room — no skipped tests; pass means full E2E success](feedback_teamroom_no_skipped_tests.md) — integration tests run on every npm test, no opt-in gates; "passing" requires the full success criterion, never an intermediate signal like "auth accepted but rate-limited"
 - [Team Room — no failing tests before moving on, ever](feedback_teamroom_no_failing_tests.md) — any test failure is a hard stop on all downstream work (milestone close, brainstorms, planning); never categorise as "environmental" before investigating
 - [Team Room — best up-front architecture, graceful flexibility when implementation reveals gaps](feedback_teamroom_flexibility_on_discovery.md) — up-front design is first-order; pivot gracefully when implementation exposes a gap; don't lean on flexibility as a pass on design work
+- [Team Room — integration harnesses and prod composition must share their wiring shape](feedback_teamroom_composition_parity.md) — extract a shared builder or add a composition-snapshot test so test-green ≠ prod-green gaps can't hide
+- [Team Room — default to the reference SDK when implementing a third-party protocol](feedback_teamroom_protocol_sdk_default.md) — MCP, OAuth, etc. — protocols drift; SDKs absorb the drift; hand-roll only with a documented blocker-grade reason
 
 ## Project
 - [Team Room — LangGraph is the intended per-agent runtime](project_teamroom_langgraph_direction.md) — agents will run LangGraph workflows eventually; M1 keeps the runtime simple but the container contract is language-agnostic to accommodate it
