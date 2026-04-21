@@ -38,12 +38,12 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "m1", agentId: "A", channel: "mail", direction: "in", body: "x",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     messageRepo.create({
       id: "m2", agentId: "B", channel: "mail", direction: "in", body: "y",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:B"], from: "channel:cli:don", threadId: "T2",
     });
     const aRows = tools.list({ callerAgentId: "A" }, {});
@@ -64,7 +64,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     const got = tools.get({ callerAgentId: "A" }, { id: "r1" });
@@ -75,7 +75,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     expect(() => tools.get({ callerAgentId: "B" }, { id: "r1" })).toThrow(/not found/i);
@@ -97,7 +97,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "agent:B", threadId: "T1",
     });
     const r = tools.reply({ callerAgentId: "A" }, { id: "r1", body: "hello back" });
@@ -110,7 +110,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A", "agent:C"], from: "agent:B", cc: null, threadId: "T1",
     });
     tools.reply({ callerAgentId: "A" }, { id: "r1", body: "hello", ccAll: true });
@@ -127,7 +127,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "agent:B", threadId: "T1",
     });
     tools.reply({ callerAgentId: "A" }, { id: "r1", body: "hello" });
@@ -140,7 +140,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     tools.markRead({ callerAgentId: "A" }, { id: "r1" });
@@ -155,7 +155,7 @@ describe("MailMcpTools", () => {
     const { tools, messageRepo } = setup();
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
-      turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
+      traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     expect(() => tools.markRead({ callerAgentId: "B" }, { id: "r1" })).toThrow(/not found/);

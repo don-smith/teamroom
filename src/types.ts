@@ -1,5 +1,4 @@
 export type MessageDirection = "in" | "out";
-export type TurnStatus = "pending" | "running" | "done" | "error";
 export type Provider = "anthropic" | "lm-studio";
 
 export interface Agent {
@@ -14,7 +13,6 @@ export interface Message {
   channel: string;
   direction: MessageDirection;
   body: string;
-  turnId: string | null;
   traceId: string;
   createdAt: string;
   // M3 additions — deprecated in M4 (dispatcher no longer writes them),
@@ -46,41 +44,11 @@ export type MessageCreateInput =
   & Omit<Message, "topic" | "fromAgentId" | "conversationId">
   & Partial<Pick<Message, "topic" | "fromAgentId" | "conversationId">>;
 
-export interface Turn {
-  id: string;
-  agentId: string;
-  inboundMessageId: string;
-  status: TurnStatus;
-  containerId: string | null;
-  error: string | null;
-  traceId: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  createdAt: string;
-  conversationId: string | null;  // M3 addition; null for pre-M3 rows
-}
-
 export interface BusEvent {
   id: string;
   type: string;
   ts: string;
   [k: string]: unknown;
-}
-
-export interface MessageOutboundEvent extends BusEvent {
-  type: "message.outbound";
-  agentId: string;
-  messageId: string;
-  turnId: string;
-  traceId: string;
-}
-
-export interface TurnLifecycleEvent extends BusEvent {
-  type: "turn.started" | "turn.completed" | "turn.errored";
-  agentId: string;
-  turnId: string;
-  traceId: string;
-  error?: string;
 }
 
 export type AuthMode = "api-key" | "oauth";
@@ -91,5 +59,5 @@ export interface SpanFields {
   spanId: string;
   parentSpanId?: string;
   agentId?: string;
-  turnId?: string;
+  turnId?: string;  // model-proxy trace identifier; distinct from the now-removed DB turns.turn_id
 }

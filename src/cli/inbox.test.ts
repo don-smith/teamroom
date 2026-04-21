@@ -30,7 +30,6 @@ describe("teamroom inbox", () => {
       direction: "in",
       createdAt: "2026-04-21T00:00:00Z",
       traceId: "trace-1",
-      turnId: null,
       from: "agent:bob",
       to: ["agent:alice"],
       threadId: "T1",

@@ -7,7 +7,6 @@ interface MessageRow {
   channel: string;
   direction: "in" | "out";
   body: string;
-  turn_id: string | null;
   trace_id: string;
   created_at: string;
   topic: string;
@@ -30,7 +29,6 @@ function rowToMessage(row: MessageRow): Message {
     channel: row.channel,
     direction: row.direction,
     body: row.body,
-    turnId: row.turn_id,
     traceId: row.trace_id,
     createdAt: row.created_at,
     topic: row.topic,
@@ -63,13 +61,13 @@ export class MessageRepo {
     this.db
       .prepare(
         `INSERT INTO messages
-           (id, agent_id, channel, direction, body, turn_id, trace_id, created_at,
+           (id, agent_id, channel, direction, body, trace_id, created_at,
             topic, from_agent_id, conversation_id,
             "to", "from", cc, subject, thread_id, read_at, archived_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        m.id, m.agentId, m.channel, m.direction, m.body, m.turnId, m.traceId, m.createdAt,
+        m.id, m.agentId, m.channel, m.direction, m.body, m.traceId, m.createdAt,
         m.topic ?? "", m.fromAgentId ?? null, m.conversationId ?? null,
         to, m.from ?? null, cc, m.subject ?? null, m.threadId ?? null,
         m.readAt ?? null, m.archivedAt ?? null, m.deletedAt ?? null,
@@ -81,23 +79,6 @@ export class MessageRepo {
       .prepare(`SELECT * FROM messages WHERE id = ?`)
       .get(id) as MessageRow | undefined;
     return row ? rowToMessage(row) : null;
-  }
-
-  attachTurn(messageId: string, turnId: string): void {
-    this.db.prepare("UPDATE messages SET turn_id = ? WHERE id = ?").run(turnId, messageId);
-  }
-
-  findOutboundAfter(lastSeenId: string | null): Message[] {
-    const sql = lastSeenId
-      ? `SELECT * FROM messages
-         WHERE direction = 'out'
-           AND created_at > (SELECT created_at FROM messages WHERE id = ?)
-         ORDER BY created_at, id`
-      : `SELECT * FROM messages WHERE direction = 'out' ORDER BY created_at, id`;
-    const rows = lastSeenId
-      ? (this.db.prepare(sql).all(lastSeenId) as MessageRow[])
-      : (this.db.prepare(sql).all() as MessageRow[]);
-    return rows.map(rowToMessage);
   }
 
   listInbox(agentId: string, opts: ListInboxOpts): Message[] {

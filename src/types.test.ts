@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Agent, Message, Turn, BusEvent } from "./types.js";
+import type { Agent, Message, BusEvent } from "./types.js";
 
 describe("shared types", () => {
   it("compiles with all expected fields", () => {
@@ -15,7 +15,6 @@ describe("shared types", () => {
       channel: "cli",
       direction: "in",
       body: "hi",
-      turnId: null,
       traceId: "trace-1",
       createdAt: "2026-04-18T00:00:00.000Z",
       topic: "",
@@ -31,20 +30,6 @@ describe("shared types", () => {
       deletedAt: null,
     };
 
-    const turn: Turn = {
-      id: "turn-1",
-      agentId: "studio-assistant",
-      inboundMessageId: "msg-1",
-      status: "pending",
-      containerId: null,
-      error: null,
-      traceId: "trace-1",
-      startedAt: null,
-      finishedAt: null,
-      createdAt: "2026-04-18T00:00:00.000Z",
-      conversationId: null,
-    };
-
     const event: BusEvent = {
       id: "evt-1",
       type: "message.outbound",
@@ -53,7 +38,6 @@ describe("shared types", () => {
 
     expect(agent.id).toBe("studio-assistant");
     expect(message.direction).toBe("in");
-    expect(turn.status).toBe("pending");
     expect(event.type).toBe("message.outbound");
   });
 });

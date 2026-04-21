@@ -35,7 +35,6 @@ describe("QueryServer", () => {
       from: "agent:bob",
       to: ["agent:alice"],
       threadId: "T1",
-      turnId: null,
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/`);
@@ -56,13 +55,11 @@ describe("QueryServer", () => {
     storage.messageRepo.create({
       id: "m1", agentId: "alice", body: "hi", channel: "mail", direction: "in",
       createdAt: "2026-04-21T00:00:00Z", traceId: "trace-1",
-      from: "agent:bob", to: ["agent:alice"], threadId: "T1", turnId: null,
-    });
+      from: "agent:bob", to: ["agent:alice"], threadId: "T1",    });
     storage.messageRepo.create({
       id: "m2", agentId: "alice", body: "reply", channel: "mail", direction: "in",
       createdAt: "2026-04-21T00:00:01Z", traceId: "trace-2",
-      from: "agent:carol", to: ["agent:alice"], threadId: "T1", turnId: null,
-    });
+      from: "agent:carol", to: ["agent:alice"], threadId: "T1",    });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/`);
     await new Promise<void>((ok) => ws.on("open", () => ok()));

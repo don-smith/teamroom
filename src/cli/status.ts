@@ -1,40 +1,30 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { createDatabase } from "../db/database.js";
-import { runMigrations } from "../db/migrator.js";
-import { AgentRepo } from "../db/agent-repo.js";
-import { TurnRepo } from "../db/turn-repo.js";
+import { readPortFile } from "./ports.js";
 
 export async function status(): Promise<void> {
   const root = resolve(process.cwd());
   const dataDir = join(root, "data");
   const pidFile = join(dataDir, "teamroom.pid");
 
-  const daemonUp = existsSync(pidFile) && pidAlive(Number(readFileSync(pidFile, "utf8").trim()));
-  process.stdout.write(`daemon:     ${daemonUp ? "running" : "not running"}\n`);
-
-  const dbPath = join(dataDir, "teamroom.db");
-  if (!existsSync(dbPath)) {
-    process.stdout.write("database:   (none yet)\n");
-    process.exit(daemonUp ? 0 : 1);
+  if (!existsSync(pidFile)) {
+    process.stdout.write("daemon:    not running\n");
+    process.exit(1);
   }
 
-  const db = createDatabase(dbPath);
-  runMigrations(db);
-  const turnRepo = new TurnRepo(db);
-  const agents = new AgentRepo(db).findAll();
+  const pid = Number(readFileSync(pidFile, "utf8").trim());
+  const alive = pidAlive(pid);
+  process.stdout.write(`daemon:    pid ${pid} (${alive ? "alive" : "dead"})\n`);
 
-  process.stdout.write(`agents:     ${agents.map((a) => a.id).join(", ") || "(none)"}\n`);
-  process.stdout.write(`pending:    ${turnRepo.countByStatus("pending")}\n`);
-  process.stdout.write(`running:    ${turnRepo.countByStatus("running")}\n`);
-  process.stdout.write(`done:       ${turnRepo.countByStatus("done")}\n`);
-  process.stdout.write(`errors:     ${turnRepo.countByStatus("error")}\n`);
+  const mailMcpPort = readPortFile(dataDir, "mail-mcp");
+  const chatPort = readPortFile(dataDir, "chat");
+  const mailPort = readPortFile(dataDir, "mail");
 
-  const latest = turnRepo.latestDone();
-  process.stdout.write(`last turn:  ${latest?.finishedAt ?? "(never)"}\n`);
+  process.stdout.write(`mail-mcp:  ${mailMcpPort != null ? `127.0.0.1:${mailMcpPort}` : "(no port file)"}\n`);
+  process.stdout.write(`chat:      ${chatPort != null ? `127.0.0.1:${chatPort}` : "(no port file)"}\n`);
+  process.stdout.write(`mail:      ${mailPort != null ? `127.0.0.1:${mailPort}` : "(no port file)"}\n`);
 
-  db.close();
-  process.exit(daemonUp ? 0 : 1);
+  process.exit(alive ? 0 : 1);
 }
 
 function pidAlive(pid: number): boolean {

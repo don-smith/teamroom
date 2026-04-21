@@ -4,13 +4,11 @@ import { createDatabase, type Db } from "../../db/database.js";
 import { runMigrations } from "../../db/migrator.js";
 import { AgentRepo } from "../../db/agent-repo.js";
 import { MessageRepo } from "../../db/message-repo.js";
-import { TurnRepo } from "../../db/turn-repo.js";
 
 export interface Storage {
   db: Db;
   agentRepo: AgentRepo;
   messageRepo: MessageRepo;
-  turnRepo: TurnRepo;
   close(): void;
 }
 
@@ -33,7 +31,6 @@ export function composeStorage(deps: StorageDeps): Storage {
     db,
     agentRepo: new AgentRepo(db),
     messageRepo: new MessageRepo(db),
-    turnRepo: new TurnRepo(db),
     close: () => db.close(),
   };
 }

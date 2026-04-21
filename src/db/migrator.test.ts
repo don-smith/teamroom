@@ -12,7 +12,8 @@ describe("migrator", () => {
     const names = tables.map((t) => t.name);
     expect(names).toContain("agents");
     expect(names).toContain("messages");
-    expect(names).toContain("turns");
+    // turns table was dropped by migration 005
+    expect(names).not.toContain("turns");
     expect(names).toContain("_migrations");
   });
 
@@ -35,8 +36,7 @@ describe("migrator", () => {
       expect.arrayContaining(["topic", "from_agent_id", "conversation_id"]),
     );
 
-    const turnCols = (db.prepare("PRAGMA table_info(turns)").all() as { name: string }[]).map((r) => r.name);
-    expect(turnCols).toEqual(expect.arrayContaining(["conversation_id"]));
+    // turns table was dropped by migration 005 — skip the turns column check
 
     const applied = (db.prepare("SELECT name FROM _migrations ORDER BY name").all() as { name: string }[])
       .map((r) => r.name);

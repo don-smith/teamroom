@@ -12,7 +12,6 @@ describe("composeStorage", () => {
       expect(storage.db).toBeDefined();
       expect(storage.agentRepo).toBeDefined();
       expect(storage.messageRepo).toBeDefined();
-      expect(storage.turnRepo).toBeDefined();
       const tables = storage.db
         .prepare("SELECT name FROM sqlite_master WHERE type='table'")
         .all() as { name: string }[];
