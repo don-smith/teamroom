@@ -11,7 +11,7 @@ describe("thread-cap", () => {
       let threadId = "";
       for (let i = 0; i < 10; i++) {
         const r = h.dispatcher.sendMail({
-          from: "cli:don",
+          from: "channel:cli:don",
           to: ["agent:claude-assistant"],
           body: `msg ${i}`,
           threadId: threadId || null,
@@ -21,7 +21,7 @@ describe("thread-cap", () => {
       expect(h.messageRepo.countInThread(threadId)).toBe(10);
       expect(() =>
         h.dispatcher.sendMail({
-          from: "cli:don",
+          from: "channel:cli:don",
           to: ["agent:claude-assistant"],
           body: "one more",
           threadId,
@@ -38,18 +38,18 @@ describe("thread-cap", () => {
       maxMailsPerThread: 3,
     });
     try {
-      const a = h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "a1" });
-      const b = h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "b1" });
+      const a = h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "a1" });
+      const b = h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "b1" });
       // Fill thread A to cap.
-      h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "a2", threadId: a.threadId });
-      h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "a3", threadId: a.threadId });
+      h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "a2", threadId: a.threadId });
+      h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "a3", threadId: a.threadId });
       // A is at cap (3); another send to A throws.
       expect(() =>
-        h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "a4", threadId: a.threadId }),
+        h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "a4", threadId: a.threadId }),
       ).toThrow(/thread cap/i);
       // B still has headroom.
       expect(() =>
-        h.dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "b2", threadId: b.threadId }),
+        h.dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "b2", threadId: b.threadId }),
       ).not.toThrow();
     } finally {
       await h.shutdown();

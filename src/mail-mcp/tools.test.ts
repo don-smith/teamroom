@@ -39,12 +39,12 @@ describe("MailMcpTools", () => {
     messageRepo.create({
       id: "m1", agentId: "A", channel: "mail", direction: "in", body: "x",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:A"], from: "cli:don", threadId: "T1",
+      to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     messageRepo.create({
       id: "m2", agentId: "B", channel: "mail", direction: "in", body: "y",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:B"], from: "cli:don", threadId: "T2",
+      to: ["agent:B"], from: "channel:cli:don", threadId: "T2",
     });
     const aRows = tools.list({ callerAgentId: "A" }, {});
     expect(aRows.map((r) => r.id)).toEqual(["m1"]);
@@ -65,7 +65,7 @@ describe("MailMcpTools", () => {
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:A"], from: "cli:don", threadId: "T1",
+      to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     const got = tools.get({ callerAgentId: "A" }, { id: "r1" });
     expect(got.id).toBe("r1");
@@ -76,7 +76,7 @@ describe("MailMcpTools", () => {
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:A"], from: "cli:don", threadId: "T1",
+      to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     expect(() => tools.get({ callerAgentId: "B" }, { id: "r1" })).toThrow(/not found/i);
   });
@@ -141,7 +141,7 @@ describe("MailMcpTools", () => {
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:A"], from: "cli:don", threadId: "T1",
+      to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     tools.markRead({ callerAgentId: "A" }, { id: "r1" });
     expect(messageRepo.findById("r1")!.readAt).toBeTruthy();
@@ -156,7 +156,7 @@ describe("MailMcpTools", () => {
     messageRepo.create({
       id: "r1", agentId: "A", channel: "mail", direction: "in", body: "hi",
       turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:A"], from: "cli:don", threadId: "T1",
+      to: ["agent:A"], from: "channel:cli:don", threadId: "T1",
     });
     expect(() => tools.markRead({ callerAgentId: "B" }, { id: "r1" })).toThrow(/not found/);
     expect(() => tools.archive({ callerAgentId: "B" }, { id: "r1" })).toThrow(/not found/);

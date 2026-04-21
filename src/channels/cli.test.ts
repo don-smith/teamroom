@@ -11,7 +11,7 @@ describe("CliChannelAdapter", () => {
     adapter.send({ user: "don", target: "claude-assistant", body: "hello" });
 
     expect(sendMail).toHaveBeenCalledWith({
-      from: "cli:don",
+      from: "channel:cli:don",
       to: ["agent:claude-assistant"],
       body: "hello",
       threadId: null,

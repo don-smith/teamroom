@@ -168,7 +168,7 @@ describe("MessageRepo — M4 additions", () => {
       traceId: "t1",
       createdAt: "2026-04-20T10:00:00.000Z",
       to: ["agent:claude-assistant"],
-      from: "cli:don",
+      from: "channel:cli:don",
       cc: ["agent:claude-researcher"],
       subject: "greetings",
       threadId: "T1",
@@ -176,7 +176,7 @@ describe("MessageRepo — M4 additions", () => {
     const got = repo.findById("m1");
     expect(got).not.toBeNull();
     expect(got!.to).toEqual(["agent:claude-assistant"]);
-    expect(got!.from).toBe("cli:don");
+    expect(got!.from).toBe("channel:cli:don");
     expect(got!.cc).toEqual(["agent:claude-researcher"]);
     expect(got!.subject).toBe("greetings");
     expect(got!.threadId).toBe("T1");
@@ -189,12 +189,12 @@ describe("MessageRepo — M4 additions", () => {
     repo.create({
       id: "m-null", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "x", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", cc: null, threadId: "T",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", cc: null, threadId: "T",
     });
     repo.create({
       id: "m-empty", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "y", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:01.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", cc: [], threadId: "T",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", cc: [], threadId: "T",
     });
     expect(repo.findById("m-null")!.cc).toBeNull();
     expect(repo.findById("m-empty")!.cc).toEqual([]);
@@ -204,7 +204,7 @@ describe("MessageRepo — M4 additions", () => {
     repo.create({
       id: "m1", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "x", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", threadId: "T1",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", threadId: "T1",
     });
     repo.softDelete("m1", "2026-04-20T11:00:00.000Z");
     expect(repo.listInbox("claude-assistant", {})).toHaveLength(0);
@@ -215,7 +215,7 @@ describe("MessageRepo — M4 additions", () => {
     repo.create({
       id: "m1", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "x", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", threadId: "T1",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", threadId: "T1",
     });
     repo.markRead("m1", "2026-04-20T10:05:00.000Z");
     expect(repo.listInbox("claude-assistant", { unreadOnly: true })).toHaveLength(0);
@@ -226,7 +226,7 @@ describe("MessageRepo — M4 additions", () => {
     repo.create({
       id: "m1", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "x", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", threadId: "T1",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", threadId: "T1",
     });
     repo.archive("m1", "2026-04-20T10:05:00.000Z");
     expect(repo.listInbox("claude-assistant", {})).toHaveLength(0);
@@ -238,7 +238,7 @@ describe("MessageRepo — M4 additions", () => {
       repo.create({
         id, agentId, channel: "mail", direction: "in", body: id, turnId: null,
         traceId: "t", createdAt: t,
-        to: [`agent:${agentId}`], from: "cli:don", threadId,
+        to: [`agent:${agentId}`], from: "channel:cli:don", threadId,
       });
     mk("a1", "claude-assistant", "T1", "2026-04-20T10:00:00.000Z");
     mk("a2", "claude-assistant", "T2", "2026-04-20T10:00:01.000Z");
@@ -254,17 +254,17 @@ describe("MessageRepo — M4 additions", () => {
     repo.create({
       id: "m1", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "x", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:00.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", threadId: "T1",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", threadId: "T1",
     });
     repo.create({
       id: "m2", agentId: "claude-researcher", channel: "mail", direction: "in",
       body: "y", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:01.000Z",
-      to: ["agent:claude-researcher"], from: "cli:don", threadId: "T1",
+      to: ["agent:claude-researcher"], from: "channel:cli:don", threadId: "T1",
     });
     repo.create({
       id: "m3", agentId: "claude-assistant", channel: "mail", direction: "in",
       body: "z", turnId: null, traceId: "t", createdAt: "2026-04-20T10:00:02.000Z",
-      to: ["agent:claude-assistant"], from: "cli:don", threadId: "T2",
+      to: ["agent:claude-assistant"], from: "channel:cli:don", threadId: "T2",
     });
     expect(repo.countInThread("T1")).toBe(2);
     expect(repo.countInThread("T2")).toBe(1);

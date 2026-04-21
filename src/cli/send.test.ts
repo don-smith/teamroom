@@ -135,7 +135,7 @@ describe("sendViaHttp", () => {
       expect(r.threadId).toBeTruthy();
       const inbox = repo.listInbox("claude-assistant", {});
       expect(inbox).toHaveLength(1);
-      expect(inbox[0]!.from).toBe("cli:don");
+      expect(inbox[0]!.from).toBe("channel:cli:don");
     } finally {
       await server.stop();
     }

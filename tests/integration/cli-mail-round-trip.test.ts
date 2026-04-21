@@ -48,7 +48,7 @@ describe("agent-to-agent-mail", () => {
               // Later wake: researcher replied. Reply to the ORIGINAL CLI
               // mail in the thread so the response surfaces to the user.
               const thread = tools.mailList({ threadId: m.threadId ?? undefined });
-              const originalCli = thread.find((t) => (t.from ?? "").startsWith("cli:"));
+              const originalCli = thread.find((t) => (t.from ?? "").startsWith("channel:cli:"));
               if (originalCli) {
                 tools.mailReply({ id: originalCli.id, body: `final answer: ${m.body}` });
               }

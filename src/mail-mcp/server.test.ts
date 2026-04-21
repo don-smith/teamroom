@@ -239,7 +239,7 @@ describe("MailMcpServer — /cli/send endpoint", () => {
 
     const inbox = h.messageRepo.listInbox("claude-assistant", {});
     expect(inbox).toHaveLength(1);
-    expect(inbox[0]!.from).toBe("cli:don");
+    expect(inbox[0]!.from).toBe("channel:cli:don");
     expect(inbox[0]!.body).toBe("hello");
   });
 

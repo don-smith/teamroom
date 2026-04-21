@@ -58,7 +58,7 @@ export const MAIL_TOOL_DESCRIPTORS = [
   {
     name: "mail.send",
     description:
-      "Send a new mail. `to` and `cc` accept `agent:<name>`, `cli:<user>`, or `list:<name>` addresses.",
+      "Send a new mail. `to` and `cc` accept `agent:<name>`, `channel:cli:<user>`, or `list:<name>` addresses.",
     inputSchema: {
       type: "object",
       properties: {

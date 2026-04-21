@@ -52,7 +52,7 @@ describe("MailDispatcher — agent recipient", () => {
     bus.subscribe("mail.delivered", (p) => events.push(p));
 
     const result = dispatcher.sendMail({
-      from: "cli:don",
+      from: "channel:cli:don",
       to: ["agent:claude-assistant"],
       body: "hi",
     });
@@ -60,7 +60,7 @@ describe("MailDispatcher — agent recipient", () => {
     expect(result.threadId).toBeTruthy();
     const rows = messageRepo.listInbox("claude-assistant", {});
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.from).toBe("cli:don");
+    expect(rows[0]!.from).toBe("channel:cli:don");
     expect(rows[0]!.to).toEqual(["agent:claude-assistant"]);
     expect(rows[0]!.body).toBe("hi");
     expect(rows[0]!.threadId).toBe(result.threadId);
@@ -69,16 +69,16 @@ describe("MailDispatcher — agent recipient", () => {
 
   it("mints a fresh thread_id when none is provided", () => {
     const { dispatcher } = makeHarness();
-    const r1 = dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "a" });
-    const r2 = dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "b" });
+    const r1 = dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "a" });
+    const r2 = dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "b" });
     expect(r1.threadId).not.toBe(r2.threadId);
   });
 
   it("inherits thread_id when explicitly provided", () => {
     const { dispatcher, messageRepo } = makeHarness();
-    const r1 = dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "first" });
+    const r1 = dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "first" });
     const r2 = dispatcher.sendMail({
-      from: "cli:don",
+      from: "channel:cli:don",
       to: ["agent:claude-assistant"],
       body: "second",
       threadId: r1.threadId,
@@ -106,7 +106,7 @@ describe("MailDispatcher — agent recipient", () => {
     const { dispatcher, bus } = makeHarness();
     const sent: unknown[] = [];
     bus.subscribe("mail.sent", (p) => sent.push(p));
-    dispatcher.sendMail({ from: "cli:don", to: ["agent:claude-assistant"], body: "x" });
+    dispatcher.sendMail({ from: "channel:cli:don", to: ["agent:claude-assistant"], body: "x" });
     expect(sent).toEqual([]);
   });
 
@@ -135,7 +135,7 @@ describe("MailDispatcher — cli recipient", () => {
 
     dispatcher.sendMail({
       from: "agent:claude-assistant",
-      to: ["cli:don"],
+      to: ["channel:cli:don"],
       body: "done",
     });
 
@@ -161,7 +161,7 @@ describe("MailDispatcher — validation", () => {
     const { dispatcher, messageRepo } = makeHarness();
     expect(() =>
       dispatcher.sendMail({
-        from: "cli:don",
+        from: "channel:cli:don",
         to: ["agent:ghost", "agent:claude-assistant"],
         body: "x",
       }),
@@ -175,7 +175,7 @@ describe("MailDispatcher — validation", () => {
     const { dispatcher } = makeHarness();
     expect(() =>
       dispatcher.sendMail({
-        from: "cli:don",
+        from: "channel:cli:don",
         to: ["list:ghost"],
         body: "x",
       }),
@@ -185,7 +185,7 @@ describe("MailDispatcher — validation", () => {
   it("rejects invalid address strings outright", () => {
     const { dispatcher } = makeHarness();
     expect(() =>
-      dispatcher.sendMail({ from: "cli:don", to: ["no-prefix"], body: "x" }),
+      dispatcher.sendMail({ from: "channel:cli:don", to: ["no-prefix"], body: "x" }),
     ).toThrow();
   });
 
@@ -194,7 +194,7 @@ describe("MailDispatcher — validation", () => {
       knownLists: { empty: [] },
     });
     expect(() =>
-      dispatcher.sendMail({ from: "cli:don", to: ["list:empty"], body: "x" }),
+      dispatcher.sendMail({ from: "channel:cli:don", to: ["list:empty"], body: "x" }),
     ).not.toThrow();
     expect(messageRepo.listInbox("claude-assistant", {})).toHaveLength(0);
     expect(messageRepo.listInbox("claude-researcher", {})).toHaveLength(0);
@@ -220,7 +220,7 @@ describe("MailDispatcher — thread cap", () => {
     }
     expect(() =>
       dispatcher.sendMail({
-        from: "cli:don",
+        from: "channel:cli:don",
         to: ["agent:claude-assistant"],
         body: "one more",
         threadId: seedThreadId,
@@ -245,7 +245,7 @@ describe("MailDispatcher — thread cap", () => {
     }
     expect(() =>
       dispatcher.sendMail({
-        from: "cli:don",
+        from: "channel:cli:don",
         to: ["agent:claude-assistant"],
         body: "x",
         threadId: "T",
