@@ -105,6 +105,17 @@ export class SessionTimerManager {
     return this.tokens.get(token) ?? null;
   }
 
+  /**
+   * Ensure a session exists for this agent without writing a wake envelope.
+   * Used at daemon boot for persistent-lifecycle agents so their container
+   * is already up when the first mail arrives. No-op if a session already
+   * exists.
+   */
+  spawnIfAbsent(agentId: string): void {
+    if (this.sessions.has(agentId)) return;
+    this.spawn(agentId);
+  }
+
   hasSession(agentId: string): boolean {
     return this.sessions.has(agentId);
   }

@@ -158,4 +158,29 @@ describe("SessionTimerManager", () => {
     // FakeRunningContainer.kill → simulateExit(137); both sessions should be gone.
     expect(runner.sessions.every((s) => !manager.hasSession(s.spec.imageTag))).toBe(true);
   });
+
+  it("spawnIfAbsent creates a session without writing a wake envelope", () => {
+    const { manager, runner } = setup();
+    manager.spawnIfAbsent("A");
+    expect(runner.sessions).toHaveLength(1);
+    expect(runner.sessions[0]!.envelopes).toEqual([]);
+    expect(manager.hasSession("A")).toBe(true);
+  });
+
+  it("spawnIfAbsent is a no-op when the session already exists", () => {
+    const { manager, runner } = setup();
+    manager.onMailDelivered("A");
+    manager.spawnIfAbsent("A");
+    expect(runner.sessions).toHaveLength(1);
+    // The initial wake is still the only envelope — spawnIfAbsent didn't write one.
+    expect(runner.sessions[0]!.envelopes).toHaveLength(1);
+  });
+
+  it("onMailDelivered reuses a session created by spawnIfAbsent and writes its first wake", () => {
+    const { manager, runner } = setup();
+    manager.spawnIfAbsent("A");
+    manager.onMailDelivered("A");
+    expect(runner.sessions).toHaveLength(1);
+    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+  });
 });
