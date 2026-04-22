@@ -42,8 +42,8 @@ Four cadences carry the practice. The mechanics of each live in an invocable ski
 | **Event-driven: epiphanies** | Anytime a realization surfaces mid-work that is not trivially in-scope. | `.claude/skills/epiphany-tabling/` |
 | **Pre-execution plan review** | After a plan is written, before executing. Both Claude and the user read and dry-run the plan before approving. Catches plan-level gaps (config/secrets, test layout, build assets, test/impl inconsistencies) before they become drifts during execution. | (inline rule for now; skill candidate once we see the second sighting) |
 | **End-of-artifact checkpoint** | After each approved spec, plan, or major commit set. | `.claude/skills/capturing-learnings/` |
-| **End-of-milestone retrospective** | At milestone close. Four sections (keep doing / stop or change / promote to artifact / commit to memory) with concrete owned action items. | `.claude/skills/writing-retros/` |
 | **Significant-work closeout** | When a milestone, major feature, or large refactor closes — produce an as-built and purge the scaffolding. Default expectation is **yes, write one**. | `.claude/skills/writing-as-built/` |
+| **End-of-milestone retrospective** | At milestone close, AFTER the as-built + roadmap update + tabled.md processing are done. Running it last means the retro can reflect on the closeout activities themselves (e.g., "the as-built surfaced a doc drift we hadn't noticed"), not just the milestone work. Four sections (keep doing / stop or change / promote to artifact / commit to memory) with concrete owned action items. | `.claude/skills/writing-retros/` |
 
 ## Document inventory
 
