@@ -9,6 +9,12 @@ export interface RunChatArgs {
   initialBody?: string;
   stdin: Readable;
   stdout: Writable;
+  /**
+   * When true, render a `you: ` prompt and add blank-line separators around
+   * incoming messages — for terminal use. Defaults to false so test
+   * harnesses (PassThrough streams) get clean structured output.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -35,6 +41,11 @@ export async function runChat(args: RunChatArgs): Promise<void> {
   // reused thereafter so subsequent publishes stay in the same thread.
   let sessionThreadId: string | null = null;
 
+  const interactive = args.interactive === true;
+  const writePrompt = (): void => {
+    if (interactive) args.stdout.write("you: ");
+  };
+
   // Set up message handling
   ws.on("message", (raw) => {
     try {
@@ -43,9 +54,13 @@ export async function runChat(args: RunChatArgs): Promise<void> {
         if (sessionThreadId === null && typeof msg.threadId === "string" && msg.threadId.length > 0) {
           sessionThreadId = msg.threadId;
         }
+        if (interactive) args.stdout.write("\n");
         args.stdout.write(`${msg.from ?? ""}: ${msg.body ?? ""}\n`);
+        if (interactive) args.stdout.write("\n");
+        writePrompt();
       } else if (msg.type === "error") {
         args.stdout.write(`error: ${msg.code ?? ""} — ${msg.message ?? ""}\n`);
+        writePrompt();
       }
     } catch {
       /* ignore malformed server frames */
@@ -88,12 +103,19 @@ export async function runChat(args: RunChatArgs): Promise<void> {
   // Initial body (if provided)
   if (args.initialBody) publish(args.initialBody);
 
+  // Initial prompt so the user knows where to type.
+  writePrompt();
+
   try {
     for await (const line of rl) {
       const trimmed = line.trim();
       if (trimmed === "/quit" || trimmed === "/exit") break;
-      if (trimmed.length === 0) continue;
+      if (trimmed.length === 0) {
+        writePrompt();
+        continue;
+      }
       publish(trimmed);
+      writePrompt();
     }
   } finally {
     rl.close();

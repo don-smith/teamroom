@@ -129,6 +129,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
 
   // --- 10. Session management ---
   const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
+  obs.rootLogger.info("session idle config", { idleMinutes });
   const runner = new DockerRunner();
   const sessionMgmt = composeSessionManagement({
     messaging,
@@ -147,6 +148,20 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     genToken: () => randomUUID(),
   });
   resolveMcpToken = (t) => sessionMgmt.sessionManager.resolveToken(t);
+
+  // --- 10b. Observability: log mail-substrate bus events so operators can
+  // see in the daemon log when agents send/receive mail and call MCP tools.
+  // (composeSessionManagement consumes the same events for timer-reset; this
+  // adds a parallel logging consumer with no behavioral effect.)
+  messaging.eventBus.subscribe<{ to: string }>("mail.delivered", (p) => {
+    obs.rootLogger.info("mail.delivered", { to: p.to });
+  });
+  messaging.eventBus.subscribe<{ from: string }>("mail.sent", (p) => {
+    obs.rootLogger.info("mail.sent", { from: p.from });
+  });
+  messaging.eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
+    obs.rootLogger.info("tool.call", { agentId: p.agentId, tool: p.tool });
+  });
 
   // --- 11. Channels (chat WebSocket on its own port) ---
   const channels = await composeChannels({

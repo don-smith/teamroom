@@ -99,6 +99,7 @@ program
         initialBody,
         stdin: process.stdin,
         stdout: process.stdout,
+        interactive: true,
       });
     } catch (err) {
       process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n`);
