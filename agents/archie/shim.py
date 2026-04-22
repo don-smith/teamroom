@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""
+Archie container entrypoint.
+
+Reads {"type":"wake","events":[...]} JSON envelopes from stdin, one per line.
+On each wake, invokes the DeepAgents graph with a canned "check your inbox"
+prompt; the graph itself (mail-MCP tools + DeepAgents filesystem tools) does
+the real work. Errors are printed to stderr; the wake loop continues.
+
+Environment (injected by Team Room's build-spec.ts):
+  TEAMROOM_AGENT_NAME     — "archie"
+  TEAMROOM_MCP_URL        — http://host.docker.internal:<port>/mcp
+  TEAMROOM_MCP_TOKEN      — bearer for mail-MCP
+  TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compat)
+  ANTHROPIC_BASE_URL      — daemon proxy URL (Anthropic-shape)
+  ANTHROPIC_AUTH_TOKEN    — proxy-minted token
+  TEAMROOM_MODEL          — e.g. "claude-opus-4-7"
+
+API notes (verified against vendor/deepagents/libs/deepagents/deepagents/graph.py):
+  - create_deep_agent accepts system_prompt= (not instructions=)
+  - checkpointer= is a direct kwarg on create_deep_agent (graph.py line 230)
+  - create_deep_agent returns a CompiledStateGraph; use .ainvoke()
+  - AsyncSqliteSaver.from_conn_string is an async context manager
+    (confirmed from vendor/deepagents/libs/cli/deepagents_cli/sessions.py);
+    opened once in main() and held for the process lifetime.
+  - MCP get_tools() makes a network call; deferred to first wake so the
+    boot path (building agent, printing "ready") does not depend on MCP
+    reachability. Agent is rebuilt on first wake only.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+
+from deepagents import create_deep_agent
+from langchain_anthropic import ChatAnthropic
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+
+WAKE_PROMPT = (
+    "A new-mail wake fired. Check your inbox with mail_list (unreadOnly=true). "
+    "For each unread message, use mail_get to read the full thread, do whatever "
+    "reading/editing under /codebase the message asks for, and reply with "
+    "mail_reply. If the inbox is empty, do nothing and report 'no mail'."
+)
+
+
+def load_system_prompt() -> str:
+    path = Path("/AGENTS.md")
+    if path.exists():
+        return path.read_text()
+    return "You are Archie, Team Room's architect."
+
+
+def make_model() -> ChatAnthropic:
+    """Build the LLM instance. No network call — just constructs the client object."""
+    anthropic_base = os.environ["ANTHROPIC_BASE_URL"]
+    anthropic_token = os.environ["ANTHROPIC_AUTH_TOKEN"]
+    model_id = os.environ.get("TEAMROOM_MODEL", "claude-opus-4-7")
+    return ChatAnthropic(
+        model=model_id,
+        base_url=anthropic_base,
+        api_key=anthropic_token,
+    )
+
+
+async def build_agent(checkpointer: AsyncSqliteSaver):
+    """Fetch MCP tools (network call) and compile the DeepAgents graph.
+
+    Called on the first wake, not at boot, so that the boot path does not
+    depend on MCP reachability.
+    """
+    mcp_url = os.environ["TEAMROOM_MCP_URL"]
+    mcp_token = os.environ["TEAMROOM_MCP_TOKEN"]
+
+    mcp_client = MultiServerMCPClient({
+        "mail": {
+            "transport": "streamable_http",
+            "url": mcp_url,
+            "headers": {"Authorization": f"Bearer {mcp_token}"},
+        },
+    })
+    mail_tools = await mcp_client.get_tools()
+
+    model = make_model()
+
+    # checkpointer= is a direct kwarg on create_deep_agent (confirmed from
+    # vendor/deepagents/libs/deepagents/deepagents/graph.py line 230).
+    # system_prompt= is correct; instructions= does not exist in this version.
+    agent = create_deep_agent(
+        model=model,
+        tools=mail_tools,
+        system_prompt=load_system_prompt(),
+        checkpointer=checkpointer,
+    )
+    return agent
+
+
+async def handle_wake(state: dict, checkpointer: AsyncSqliteSaver, envelope: dict) -> None:
+    # Build agent on first wake; cache in state dict for subsequent wakes.
+    if state.get("agent") is None:
+        print("[archie] first wake: connecting to MCP and building agent", file=sys.stderr)
+        state["agent"] = await build_agent(checkpointer)
+        print("[archie] first wake: agent ready", file=sys.stderr)
+
+    agent = state["agent"]
+
+    # Single thread id for all M6 wakes — lets the checkpointer accumulate
+    # history across wakes. M6.1 or later can key on mail thread_id.
+    thread_id = "archie-main"
+    config = {"configurable": {"thread_id": thread_id}}
+    result = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": WAKE_PROMPT}]},
+        config=config,
+    )
+    # Emit the last AI text to stderr so it shows in daemon logs.
+    for message in reversed(result.get("messages", [])):
+        if getattr(message, "type", None) == "ai" and getattr(message, "content", None):
+            print(f"[archie] {message.content}", file=sys.stderr)
+            return
+
+
+async def main() -> None:
+    print("[archie] boot: building agent", file=sys.stderr)
+
+    # AsyncSqliteSaver.from_conn_string is an async context manager (confirmed
+    # from vendor/deepagents/libs/cli/deepagents_cli/sessions.py line 1030).
+    # Keep it open for the entire process lifetime so the checkpointer DB
+    # connection is available across all wakes.
+    async with AsyncSqliteSaver.from_conn_string("/store/langgraph-checkpoint.db") as checkpointer:
+        # State dict holds the lazily-initialised agent (None until first wake).
+        # Model construction (no network call) happens here; MCP connection is
+        # deferred to first wake so the boot path is independent of MCP availability.
+        state: dict = {"agent": None}
+        print("[archie] boot: ready, awaiting wake envelopes on stdin", file=sys.stderr)
+
+        loop = asyncio.get_running_loop()
+        reader = asyncio.StreamReader()
+        reader_protocol = asyncio.StreamReaderProtocol(reader)
+        await loop.connect_read_pipe(lambda: reader_protocol, sys.stdin)
+
+        while True:
+            line = await reader.readline()
+            if not line:
+                print("[archie] EOF on stdin — clean exit", file=sys.stderr)
+                return
+            text = line.decode().strip()
+            if not text:
+                continue
+            try:
+                envelope = json.loads(text)
+            except json.JSONDecodeError as e:
+                print(f"[archie] invalid wake envelope: {e}", file=sys.stderr)
+                continue
+            try:
+                await handle_wake(state, checkpointer, envelope)
+            except Exception as e:
+                print(f"[archie] handle_wake failed: {e!r}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
