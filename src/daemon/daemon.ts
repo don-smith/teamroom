@@ -46,6 +46,9 @@ export interface DaemonOptions {
     upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:1234
     realKey: string;     // bearer token for the upstream LM Studio endpoint
   };
+  ollama: {
+    upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:11434
+  };
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -108,6 +111,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
     lmStudio: opts.lmStudio,
+    ollama: opts.ollama,
     anthropic: opts.anthropic,
   });
 

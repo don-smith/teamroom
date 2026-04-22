@@ -10,6 +10,7 @@ describe("composeModelProxy", () => {
     const mp = await composeModelProxy({
       logger,
       lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "test" },
+      ollama: { upstreamUrl: "http://host.docker.internal:11434" },
       anthropic: null,
     });
     expect(mp.tokenRegistry).toBeDefined();
@@ -24,6 +25,7 @@ describe("composeModelProxy", () => {
     const mp = await composeModelProxy({
       logger,
       lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "test" },
+      ollama: { upstreamUrl: "http://host.docker.internal:11434" },
       anthropic: { mode: "api-key", apiKey: "sk-test" },
     });
     expect(mp.anthropicAdapterPresent).toBe(true);
@@ -34,9 +36,24 @@ describe("composeModelProxy", () => {
     const mp = await composeModelProxy({
       logger,
       lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "test" },
+      ollama: { upstreamUrl: "http://host.docker.internal:11434" },
       anthropic: { mode: "oauth", oauthToken: "oauth-token-test" },
     });
     expect(mp.anthropicAdapterPresent).toBe(true);
+    await mp.stop();
+  });
+
+  it("registers both lm-studio and ollama OpenAI-compat adapters", async () => {
+    const mp = await composeModelProxy({
+      logger,
+      lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "k" },
+      ollama: { upstreamUrl: "http://host.docker.internal:11434" },
+      anthropic: null,
+    });
+    const t1 = mp.tokenRegistry.mint({ agentId: "a", turnId: "t", traceId: "r", provider: "lm-studio", model: "m" });
+    const t2 = mp.tokenRegistry.mint({ agentId: "a", turnId: "t", traceId: "r", provider: "ollama", model: "m" });
+    expect(mp.tokenRegistry.lookup(t1)?.provider).toBe("lm-studio");
+    expect(mp.tokenRegistry.lookup(t2)?.provider).toBe("ollama");
     await mp.stop();
   });
 });

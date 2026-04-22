@@ -23,6 +23,7 @@ export interface ModelProxyModule {
 export interface ModelProxyDeps {
   logger: Logger;
   lmStudio: { upstreamUrl: string; realKey: string };
+  ollama: { upstreamUrl: string };
   anthropic: AnthropicCreds | null;
 }
 
@@ -33,6 +34,11 @@ export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProx
       id: "lm-studio",
       upstreamUrl: deps.lmStudio.upstreamUrl,
       auth: { mode: "bearer", key: deps.lmStudio.realKey },
+    }),
+    ollama: new OpenAICompatAdapter({
+      id: "ollama",
+      upstreamUrl: deps.ollama.upstreamUrl,
+      auth: { mode: "none" },
     }),
   };
   const anthropicAdapterPresent = deps.anthropic !== null;

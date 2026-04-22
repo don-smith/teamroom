@@ -30,6 +30,11 @@ export async function serve(): Promise<void> {
       upstreamUrl: process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234",
       realKey: lmStudioToken,
     },
+    ollama: {
+      // Same host-side reasoning as LM Studio above — proxy runs on host, so
+      // Ollama is reached at localhost. Ollama has no auth by default.
+      upstreamUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
+    },
     anthropic,
   });
 
