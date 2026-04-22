@@ -1,5 +1,5 @@
 export type MessageDirection = "in" | "out";
-export type Provider = "anthropic" | "lm-studio";
+export type Provider = "anthropic" | "lm-studio" | "ollama";
 
 export interface Agent {
   id: string;

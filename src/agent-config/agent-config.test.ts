@@ -169,4 +169,13 @@ describe("loadAgentConfig — provider field", () => {
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/got 'openai'/);
   });
+
+  it("accepts provider: ollama", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: m\nimage_tag: t\nprovider: ollama\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("ollama");
+  });
 });
