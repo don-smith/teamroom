@@ -39,7 +39,7 @@ Replace the existing `persistent` behavior list with:
 ```markdown
 `persistent` behavior:
 
-- Container spawns once at daemon boot (see §5.6 — compose-layer init).
+- Container spawns once at daemon boot (via the session-management compose-layer init — see plan Task A6).
 - Stdin pipe kept open for the container's lifetime.
 - No idle timeout (the per-agent idle-timeout backlog item is effectively folded in: `persistent` means "idle-timeout = ∞").
 - On unexpected container exit, the session-manager's `onExit` handler fires and the manager respawns a fresh container (fresh MCP token, fresh DockerRunSpec). A short backoff (1s initial, doubling to a cap of 30s) prevents tight crash loops.
