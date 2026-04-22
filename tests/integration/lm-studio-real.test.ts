@@ -164,7 +164,8 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
       const codeword = `cw-${Math.random().toString(16).slice(2, 10)}`;
 
       // Turn 1: introduce codeword. Maintain messages array between calls
-      // (this is what runtime.ts does in production via /store/conversation.jsonl).
+      // (matches how LangGraphAgentWorker keeps a bounded BaseMessage[] across
+      // wakes within a single container lifetime).
       const messages: { role: "user" | "assistant" | "system"; content: string }[] = [
         { role: "system", content: "Be brief. Reply with the minimum needed." },
         { role: "user", content: `Remember this codeword: ${codeword}. Reply with exactly: ack-mt` },
