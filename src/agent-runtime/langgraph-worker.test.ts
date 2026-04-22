@@ -180,6 +180,35 @@ describe("LangGraphAgentWorker", () => {
     }
   });
 
+  it("skips the filesystem MCP server when none of the declared roots exist on disk", async () => {
+    // /codebase is optional per src/daemon/daemon.ts#resolveCodebasePath —
+    // if it's absent, the worker must still boot with mail-only capability
+    // rather than crashing inside the stdio child.
+    harness = await startMailHarness();
+    const errs: string[] = [];
+    const model = fakeModel().respond(new AIMessage("ok"));
+    const worker = await LangGraphAgentWorker.createForTest({
+      model,
+      mcpUrl: harness.mcpUrl,
+      mcpToken: harness.mcpToken,
+      systemPrompt: "test",
+      agentsMdPath: "/does-not-exist",
+      filesystemRoots: ["/definitely-not-a-real-path-xyz"],
+      onError: (e) => errs.push(e instanceof Error ? e.message : String(e)),
+    });
+    const toolNames = worker.toolNamesForTest();
+    // Mail tools still present
+    expect(toolNames).toEqual(
+      expect.arrayContaining(["mail.list", "mail.get", "mail.send", "mail.reply"]),
+    );
+    // No filesystem tools — the server was skipped
+    expect(toolNames).not.toEqual(expect.arrayContaining(["read_text_file"]));
+    expect(toolNames).not.toEqual(expect.arrayContaining(["write_file"]));
+    // Operator visibility: the skip was reported
+    expect(errs.some((e) => e.includes("filesystem MCP roots not present"))).toBe(true);
+    expect(errs.some((e) => e.includes("/definitely-not-a-real-path-xyz"))).toBe(true);
+  });
+
   it("filesystem tools round-trip: write then read a file via the MCP stdio server", async () => {
     harness = await startMailHarness();
     const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), "tr-fs-rt-")));

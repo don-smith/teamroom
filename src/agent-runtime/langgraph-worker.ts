@@ -110,7 +110,46 @@ export class LangGraphAgentWorker implements AgentWorker {
   }
 
   private static async build(opts: LangGraphAgentWorkerOpts): Promise<LangGraphAgentWorker> {
-    const fsRoots = opts.filesystemRoots ?? ["/codebase", "/store"];
+    // The filesystem MCP server (@modelcontextprotocol/server-filesystem)
+    // exits status=1 if any declared allowed-root doesn't exist on disk,
+    // which then crashes build() with an opaque MCP error. `/codebase` is
+    // deliberately optional per src/daemon/daemon.ts#resolveCodebasePath,
+    // so we filter defensively: keep only roots that exist, and skip the
+    // filesystem server entry entirely if none remain (agent still boots
+    // with mail-only capability).
+    const requestedRoots = opts.filesystemRoots ?? ["/codebase", "/store"];
+    const fsRoots = requestedRoots.filter((r) => existsSync(r));
+    const skippedRoots = requestedRoots.filter((r) => !existsSync(r));
+    if (skippedRoots.length > 0 && opts.onError) {
+      opts.onError(
+        new Error(
+          `filesystem MCP roots not present, skipping: ${skippedRoots.join(", ")}`,
+        ),
+      );
+    }
+
+    const mcpServers: Record<string, unknown> = {
+      mail: {
+        transport: "http",
+        url: opts.mcpUrl,
+        headers: { "x-teamroom-mcp-token": opts.mcpToken },
+        automaticSSEFallback: false,
+      },
+    };
+    if (fsRoots.length > 0) {
+      // Resolved relative to process.cwd(): /app in the container,
+      // the repo root in tests — node_modules/ sits at both locations.
+      mcpServers.filesystem = {
+        transport: "stdio",
+        command: "node",
+        args: [
+          "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+          ...fsRoots,
+        ],
+        stderr: "inherit",
+      };
+    }
+
     const mcpClient = new MultiServerMCPClient({
       // Disable the default prefixing behavior so tools come through with
       // their native names (e.g., "mail.list", "read_text_file"). Prior
@@ -118,25 +157,7 @@ export class LangGraphAgentWorker implements AgentWorker {
       // pin explicitly now that two servers are in play.
       prefixToolNameWithServerName: false,
       additionalToolNamePrefix: "",
-      mcpServers: {
-        mail: {
-          transport: "http",
-          url: opts.mcpUrl,
-          headers: { "x-teamroom-mcp-token": opts.mcpToken },
-          automaticSSEFallback: false,
-        },
-        // Resolved relative to process.cwd(): /app in the container,
-        // the repo root in tests — node_modules/ sits at both locations.
-        filesystem: {
-          transport: "stdio",
-          command: "node",
-          args: [
-            "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-            ...fsRoots,
-          ],
-          stderr: "inherit",
-        },
-      },
+      mcpServers: mcpServers as never,
     });
     const tools = await mcpClient.getTools();
 
