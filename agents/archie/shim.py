@@ -86,11 +86,31 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
         },
     })
     try:
-        mail_tools = await mcp_client.get_tools()
+        raw_tools = await mcp_client.get_tools()
     except Exception as err:
         # Re-raise with the MCP URL in the message so operators can see what
         # was unreachable. The original exception is chained via `from`.
         raise RuntimeError(f"failed to connect to mail-MCP at {mcp_url}: {err!r}") from err
+
+    def _rename_tool_dots_to_underscores(tool):
+        """Anthropic's API requires tool names match `^[a-zA-Z0-9_-]{1,128}$`.
+        Mail-MCP exposes tools with dots (mail.list etc.). Rename in-flight so
+        DeepAgents passes Anthropic-compatible names through ChatAnthropic.
+        Idempotent — safe to call on already-underscored names."""
+        new_name = tool.name.replace(".", "_")
+        if new_name == tool.name:
+            return tool
+        # Try the cheap path: direct attribute set. Most LangChain BaseTool
+        # subclasses allow this. If it raises (frozen Pydantic), fall back
+        # to model_copy with update.
+        try:
+            tool.name = new_name
+            return tool
+        except (AttributeError, TypeError, ValueError):
+            # Pydantic v2 frozen fallback. model_copy preserves the rest.
+            return tool.model_copy(update={"name": new_name})
+
+    mail_tools = [_rename_tool_dots_to_underscores(t) for t in raw_tools]
 
     model = make_model()
 
