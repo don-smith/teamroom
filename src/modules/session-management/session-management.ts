@@ -62,8 +62,16 @@ export function composeSessionManagement(deps: SessionManagementDeps): SessionMa
   // reflects the declared team composition.
   for (const [agentId, cfg] of deps.agentConfigs) {
     if (cfg.lifecycle === "persistent") {
-      deps.logger.info("session.persistent_boot_spawn", { agentId });
-      sessionManager.spawnIfAbsent(agentId);
+      try {
+        deps.logger.info("session.persistent_boot_spawn", { agentId });
+        sessionManager.spawnIfAbsent(agentId);
+      } catch (err) {
+        deps.logger.error("session.persistent_boot_spawn.failed", {
+          agentId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        // continue to next persistent agent — don't let one bad spec kill boot
+      }
     }
   }
 

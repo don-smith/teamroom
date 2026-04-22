@@ -226,13 +226,7 @@ describe("SessionTimerManager — persistent lifecycle", () => {
     manager.spawnIfAbsent("persistent-one");
     const firstToken = manager.tokenFor("persistent-one");
     runner.sessions[0]!.simulateExit({ exitCode: 1 });
-    // Respawn is synchronous in the manager; the async backoff is wrapped
-    // in a timer we can advance deterministically.
-    // Initial backoff is 1000ms per the implementation.
-    // (If the test setup's timerFactory doesn't implement setTimeout-style
-    //  advance for the backoff, refactor the manager to pass the delay
-    //  through the injected timerFactory.)
-    // Expect: two container spawn attempts, fresh token on second.
+    // Synchronous respawn — no backoff in this milestone; see A5 commit message.
     expect(runner.sessions).toHaveLength(2);
     expect(runner.sessions[1]!.envelopes).toEqual([]); // respawn does NOT write wake
     expect(manager.tokenFor("persistent-one")).not.toBe(firstToken);
