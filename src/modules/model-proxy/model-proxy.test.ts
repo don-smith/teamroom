@@ -44,16 +44,36 @@ describe("composeModelProxy", () => {
   });
 
   it("registers both lm-studio and ollama OpenAI-compat adapters", async () => {
+    // Use an unreachable-but-immediately-failing upstream (127.0.0.1 on a
+    // closed port) so the forward path fails fast with ECONNREFUSED rather
+    // than paying DNS-resolution latency. We only care that the proxy
+    // CONSULTED the adapter, which is proven by the absence of
+    // `"no adapter"` in the response body.
     const mp = await composeModelProxy({
       logger,
-      lmStudio: { upstreamUrl: "http://host.docker.internal:1234", realKey: "k" },
-      ollama: { upstreamUrl: "http://host.docker.internal:11434" },
+      lmStudio: { upstreamUrl: "http://127.0.0.1:1", realKey: "k" },
+      ollama: { upstreamUrl: "http://127.0.0.1:1" },
       anthropic: null,
     });
     const t1 = mp.tokenRegistry.mint({ agentId: "a", turnId: "t", traceId: "r", provider: "lm-studio", model: "m" });
     const t2 = mp.tokenRegistry.mint({ agentId: "a", turnId: "t", traceId: "r", provider: "ollama", model: "m" });
+    // Registry sanity checks (cheap, still valid).
     expect(mp.tokenRegistry.lookup(t1)?.provider).toBe("lm-studio");
     expect(mp.tokenRegistry.lookup(t2)?.provider).toBe("ollama");
+    // Actually exercise the proxy: a token whose provider has no registered
+    // adapter returns 500 `{"error": "no adapter for provider"}` (see
+    // local-model-proxy.ts "no_adapter" branch). A registered adapter will
+    // instead attempt to forward and fail with 502 upstream_error. Either
+    // way, the response body must NOT contain "no adapter".
+    for (const tok of [t1, t2]) {
+      const resp = await fetch(`http://127.0.0.1:${mp.port}/v1/messages`, {
+        method: "POST",
+        headers: { "x-api-key": tok, "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await resp.text();
+      expect(body).not.toMatch(/no adapter/);
+    }
     await mp.stop();
   });
 });
