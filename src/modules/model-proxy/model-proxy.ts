@@ -1,7 +1,7 @@
 import { LocalModelProxy } from "../../model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../model-proxy/token-registry.js";
 import type { ProviderAdapter } from "../../model-proxy/adapters/adapter.js";
-import { LmStudioAdapter } from "../../model-proxy/adapters/lm-studio-adapter.js";
+import { OpenAICompatAdapter } from "../../model-proxy/adapters/openai-compat-adapter.js";
 import { AnthropicAdapter } from "../../model-proxy/adapters/anthropic-adapter.js";
 import { AnthropicOAuthCache } from "../../model-proxy/adapters/anthropic-oauth-cache.js";
 import type { Logger } from "../../logger/logger.js";
@@ -29,9 +29,10 @@ export interface ModelProxyDeps {
 export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProxyModule> {
   const tokenRegistry = new TokenRegistry();
   const adapters: Partial<Record<Provider, ProviderAdapter>> = {
-    "lm-studio": new LmStudioAdapter({
+    "lm-studio": new OpenAICompatAdapter({
+      id: "lm-studio",
       upstreamUrl: deps.lmStudio.upstreamUrl,
-      realKey: deps.lmStudio.realKey,
+      auth: { mode: "bearer", key: deps.lmStudio.realKey },
     }),
   };
   const anthropicAdapterPresent = deps.anthropic !== null;

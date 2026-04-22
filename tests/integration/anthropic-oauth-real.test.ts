@@ -31,7 +31,7 @@ import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
 import { AnthropicAdapter } from "../../src/model-proxy/adapters/anthropic-adapter.js";
 import { AnthropicOAuthCache } from "../../src/model-proxy/adapters/anthropic-oauth-cache.js";
-import { LmStudioAdapter } from "../../src/model-proxy/adapters/lm-studio-adapter.js";
+import { OpenAICompatAdapter } from "../../src/model-proxy/adapters/openai-compat-adapter.js";
 import { CapturingLogger } from "../../src/logger/logger.js";
 import { SystemClock } from "../../src/clock/clock.js";
 import { AnthropicLlmClient } from "../../src/agent-runtime/anthropic-llm-client.js";
@@ -77,11 +77,12 @@ describe("AnthropicLlmClient — real Anthropic via proxy + claude-agent-sdk", (
     const adapter = new AnthropicAdapter({
       auth: { mode: "oauth", oauthToken: creds.oauthToken, cache, exchange },
     });
-    const lmStudio = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const lmStudio = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://unused", auth: { mode: "bearer", key: "_" } });
+    const ollama = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: adapter, "lm-studio": lmStudio },
+      adapters: { anthropic: adapter, "lm-studio": lmStudio, ollama },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();
@@ -146,11 +147,12 @@ describe("AnthropicLlmClient — real Anthropic via proxy + claude-agent-sdk", (
     const adapter = new AnthropicAdapter({
       auth: { mode: "oauth", oauthToken: creds.oauthToken, cache, exchange },
     });
-    const lmStudio = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const lmStudio = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://unused", auth: { mode: "bearer", key: "_" } });
+    const ollama = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: adapter, "lm-studio": lmStudio },
+      adapters: { anthropic: adapter, "lm-studio": lmStudio, ollama },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();

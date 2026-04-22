@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
 import { AnthropicAdapter } from "../../src/model-proxy/adapters/anthropic-adapter.js";
-import { LmStudioAdapter } from "../../src/model-proxy/adapters/lm-studio-adapter.js";
+import { OpenAICompatAdapter } from "../../src/model-proxy/adapters/openai-compat-adapter.js";
 import { AnthropicOAuthCache } from "../../src/model-proxy/adapters/anthropic-oauth-cache.js";
 import { CapturingLogger } from "../../src/logger/logger.js";
 import { SystemClock } from "../../src/clock/clock.js";
@@ -70,11 +70,12 @@ describe("proxy end-to-end", () => {
       }),
     });
     const adapter = new AnthropicAdapter({ auth: { mode: "api-key", apiKey: "sk-real" }, upstreamUrl: upstream.url });
-    const lmStudio = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const lmStudio = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://unused", auth: { mode: "bearer", key: "_" } });
+    const ollama = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: adapter, "lm-studio": lmStudio },
+      adapters: { anthropic: adapter, "lm-studio": lmStudio, ollama },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();
@@ -135,11 +136,12 @@ describe("proxy end-to-end", () => {
       auth: { mode: "oauth", oauthToken: "oauth-1", cache, exchange },
       upstreamUrl: upstream.url,
     });
-    const lmStudio = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const lmStudio = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://unused", auth: { mode: "bearer", key: "_" } });
+    const ollama = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: adapter, "lm-studio": lmStudio },
+      adapters: { anthropic: adapter, "lm-studio": lmStudio, ollama },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();
@@ -170,7 +172,8 @@ describe("proxy end-to-end", () => {
     });
     const adapters = {
       anthropic: new AnthropicAdapter({ auth: { mode: "api-key", apiKey: "sk-a" }, upstreamUrl: anthropicUpstream.url }),
-      "lm-studio": new LmStudioAdapter({ upstreamUrl: lmStudioUpstream.url, realKey: "lm-real" }),
+      "lm-studio": new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: lmStudioUpstream.url, auth: { mode: "bearer", key: "lm-real" } }),
+      ollama: new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } }),
     };
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({

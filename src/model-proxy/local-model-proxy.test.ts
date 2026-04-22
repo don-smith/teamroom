@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { LocalModelProxy } from "./local-model-proxy.js";
 import { TokenRegistry } from "./token-registry.js";
 import { AnthropicAdapter } from "./adapters/anthropic-adapter.js";
-import { LmStudioAdapter } from "./adapters/lm-studio-adapter.js";
+import { OpenAICompatAdapter } from "./adapters/openai-compat-adapter.js";
 import { AnthropicOAuthCache } from "./adapters/anthropic-oauth-cache.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { SystemClock } from "../clock/clock.js";
@@ -108,7 +108,8 @@ describe("LocalModelProxy", () => {
       registry,
       adapters: {
         anthropic: adapter,
-        "lm-studio": new LmStudioAdapter({ upstreamUrl: "http://x", realKey: "_" }),
+        "lm-studio": new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://x", auth: { mode: "bearer", key: "_" } }),
+        ollama: new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } }),
       },
       logger,
     });
@@ -142,11 +143,11 @@ describe("LocalModelProxy", () => {
 
   it("unknown routing token → 401 with model.call.rejected span", async () => {
     const registry = new TokenRegistry();
-    const adapter = new LmStudioAdapter({ upstreamUrl: "http://unused", realKey: "_" });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://unused", auth: { mode: "bearer", key: "_" } });
     const proxy = new LocalModelProxy({
       registry,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
       logger,
     });
     const { port } = await proxy.start();
@@ -186,7 +187,8 @@ describe("LocalModelProxy", () => {
       registry,
       adapters: {
         anthropic: adapter,
-        "lm-studio": new LmStudioAdapter({ upstreamUrl: "http://x", realKey: "_" }),
+        "lm-studio": new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: "http://x", auth: { mode: "bearer", key: "_" } }),
+        ollama: new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } }),
       },
       logger,
     });
@@ -212,11 +214,11 @@ describe("LocalModelProxy", () => {
       return { status: 200, body: "{}" };
     });
     const registry = new TokenRegistry();
-    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "k" });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: upstream.url, auth: { mode: "bearer", key: "k" } });
     const proxy = new LocalModelProxy({
       registry,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
       logger,
       upstreamTimeoutMs: 50,
     });
@@ -251,11 +253,11 @@ describe("LocalModelProxy", () => {
       }),
     }));
     const registry = new TokenRegistry();
-    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: upstream.url, auth: { mode: "bearer", key: "lm-real" } });
     const proxy = new LocalModelProxy({
       registry,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
       logger,
     });
     const { port } = await proxy.start();
@@ -286,11 +288,11 @@ describe("LocalModelProxy", () => {
   it("rejects oversized request bodies with 413 + payload_too_large span", async () => {
     const upstream = await startFakeUpstream(() => ({ status: 200, body: "{}" }));
     const registry = new TokenRegistry();
-    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: upstream.url, auth: { mode: "bearer", key: "lm-real" } });
     const proxy = new LocalModelProxy({
       registry,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
       logger,
       maxBodyBytes: 128, // tiny cap so we don't have to allocate megabytes
     });
@@ -328,11 +330,11 @@ describe("LocalModelProxy", () => {
       return { status: 200, body: "{}" };
     });
     const registry = new TokenRegistry();
-    const adapter = new LmStudioAdapter({ upstreamUrl: upstream.url, realKey: "lm-real" });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: upstream.url, auth: { mode: "bearer", key: "lm-real" } });
     const proxy = new LocalModelProxy({
       registry,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adapters: { anthropic: adapter as any, "lm-studio": adapter },
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
       logger,
     });
     const { port } = await proxy.start();

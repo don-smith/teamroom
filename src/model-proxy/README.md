@@ -15,7 +15,7 @@ M2 scope: Anthropic + LM Studio backends; per-agent provider declared in `agent.
 - `adapters/adapter.ts` — `ProviderAdapter` interface.
 - `adapters/anthropic-adapter.ts` — Anthropic adapter, both auth modes.
 - `adapters/anthropic-oauth-cache.ts` — temp-key cache with single-flight semantics.
-- `adapters/lm-studio-adapter.ts` — LM Studio (OpenAI-compatible) adapter.
+- `adapters/openai-compat-adapter.ts` — OpenAI-compatible adapter (LM Studio bearer, Ollama none).
 - `*.test.ts` — co-located unit tests using real http on ephemeral ports.
 
 ## Related

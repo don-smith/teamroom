@@ -3,8 +3,8 @@
  * via the FULL container-side OpenAI SDK chain through our LocalModelProxy.
  * Mirrors what the agent container does in production:
  *   container OpenAI SDK → ANTHROPIC_BASE_URL-style routing →
- *   LocalModelProxy (LmStudioAdapter substitutes routing token for real LM
- *   Studio API token) → real LM Studio at localhost:1234.
+ *   LocalModelProxy (OpenAICompatAdapter in bearer mode substitutes routing
+ *   token for real LM Studio API token) → real LM Studio at localhost:1234.
  *
  * Two cases:
  *   1. Single-turn round-trip — proves the proxy + SDK + LM Studio chain
@@ -26,7 +26,7 @@ import OpenAI from "openai";
 import { loadEnvFile } from "../../src/env/env-file.js";
 import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
-import { LmStudioAdapter } from "../../src/model-proxy/adapters/lm-studio-adapter.js";
+import { OpenAICompatAdapter } from "../../src/model-proxy/adapters/openai-compat-adapter.js";
 import { AnthropicAdapter } from "../../src/model-proxy/adapters/anthropic-adapter.js";
 import { AnthropicOAuthCache } from "../../src/model-proxy/adapters/anthropic-oauth-cache.js";
 import { CapturingLogger } from "../../src/logger/logger.js";
@@ -79,12 +79,13 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
     ).toBe(true);
     if (!lmStudioToken) throw new Error("unreachable after guards");
 
-    const adapter = new LmStudioAdapter({ upstreamUrl: lmStudioUrl, realKey: lmStudioToken });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: lmStudioUrl, auth: { mode: "bearer", key: lmStudioToken } });
     const anthropicStub = new AnthropicAdapter({ auth: { mode: "api-key", apiKey: "unused" } });
+    const ollamaStub = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: anthropicStub, "lm-studio": adapter },
+      adapters: { anthropic: anthropicStub, "lm-studio": adapter, ollama: ollamaStub },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();
@@ -133,12 +134,13 @@ describe("OpenAI SDK against real LM Studio via proxy", () => {
     ).toBe(true);
     if (!lmStudioToken) throw new Error("unreachable after guards");
 
-    const adapter = new LmStudioAdapter({ upstreamUrl: lmStudioUrl, realKey: lmStudioToken });
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: lmStudioUrl, auth: { mode: "bearer", key: lmStudioToken } });
     const anthropicStub = new AnthropicAdapter({ auth: { mode: "api-key", apiKey: "unused" } });
+    const ollamaStub = new OpenAICompatAdapter({ id: "ollama", upstreamUrl: "http://unused.invalid", auth: { mode: "none" } });
     const registry = new TokenRegistry();
     const proxy = new LocalModelProxy({
       registry,
-      adapters: { anthropic: anthropicStub, "lm-studio": adapter },
+      adapters: { anthropic: anthropicStub, "lm-studio": adapter, ollama: ollamaStub },
       logger: new CapturingLogger(new SystemClock()),
     });
     const { port } = await proxy.start();
