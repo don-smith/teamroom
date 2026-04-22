@@ -18,21 +18,24 @@ const TOKEN_PREFIX = "sk-ant-oat01-";
 
 /**
  * Resolves Anthropic credentials in this order:
- *   1. CLAUDE_CODE_OAUTH_TOKEN env var (.env)
+ *   1. CLAUDE_CODE_OAUTH_TOKEN env var (loaded from .env or shell)
  *   2. macOS Keychain entry "Claude Code-credentials" (darwin only)
  *   3. ~/.claude/.credentials.json (Linux/Windows file fallback)
- *   4. ANTHROPIC_API_KEY env var (.env)
+ *   4. ANTHROPIC_API_KEY env var (loaded from .env or shell)
  *   5. null — daemon will refuse provider:anthropic agents with `missing_credential`.
  *
  * Steps 2 and 3 may store the token either as a raw `sk-ant-oat01-...` string OR as a JSON
  * blob with one of the fields `oauth_token` / `access_token` / `token`. Both shapes are
  * accepted (the keychain blob format is undocumented and may evolve with Claude Code updates).
+ *
+ * `env` defaults to `process.env`. Tests pass an explicit env dict to avoid polluting
+ * the global process state.
  */
 export function discoverAnthropic(
-  envFromDotenv: Record<string, string>,
+  env: Record<string, string | undefined> = process.env,
   deps: DiscoverDeps = {},
 ): AnthropicCreds | null {
-  const oauthFromEnv = envFromDotenv.CLAUDE_CODE_OAUTH_TOKEN;
+  const oauthFromEnv = env.CLAUDE_CODE_OAUTH_TOKEN;
   if (oauthFromEnv) return { mode: "oauth", oauthToken: oauthFromEnv };
 
   const plat = deps.platform ?? platform();
@@ -52,8 +55,8 @@ export function discoverAnthropic(
     if (tok) return { mode: "oauth", oauthToken: tok };
   }
 
-  if (envFromDotenv.ANTHROPIC_API_KEY) {
-    return { mode: "api-key", apiKey: envFromDotenv.ANTHROPIC_API_KEY };
+  if (env.ANTHROPIC_API_KEY) {
+    return { mode: "api-key", apiKey: env.ANTHROPIC_API_KEY };
   }
   return null;
 }

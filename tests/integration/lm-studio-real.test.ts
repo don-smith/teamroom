@@ -23,7 +23,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { resolve } from "node:path";
 import OpenAI from "openai";
-import { readEnvFile } from "../../src/env/env-file.js";
+import { loadEnvFile } from "../../src/env/env-file.js";
 import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
 import { LmStudioAdapter } from "../../src/model-proxy/adapters/lm-studio-adapter.js";
@@ -32,9 +32,9 @@ import { AnthropicOAuthCache } from "../../src/model-proxy/adapters/anthropic-oa
 import { CapturingLogger } from "../../src/logger/logger.js";
 import { SystemClock } from "../../src/clock/clock.js";
 
-const env = readEnvFile(resolve(process.cwd()), ["LM_STUDIO_API_TOKEN", "LM_STUDIO_BASE_URL"]);
-const lmStudioToken = env.LM_STUDIO_API_TOKEN;
-const lmStudioUrl = env.LM_STUDIO_BASE_URL ?? "http://localhost:1234";
+loadEnvFile(resolve(process.cwd()));
+const lmStudioToken = process.env.LM_STUDIO_API_TOKEN;
+const lmStudioUrl = process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234";
 // Mirrors agents/studio-assistant/agent.yaml — keep in sync.
 const LM_STUDIO_MODEL = "qwen/qwen3.5-9b";
 

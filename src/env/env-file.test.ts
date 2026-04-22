@@ -2,52 +2,71 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readEnvFile } from "./env-file.js";
+import { loadEnvFile } from "./env-file.js";
 
-describe("readEnvFile", () => {
+const TEST_KEYS = [
+  "TR_TEST_A",
+  "TR_TEST_B",
+  "TR_TEST_C",
+  "TR_TEST_TOKEN",
+  "TR_TEST_URL",
+  "TR_TEST_PLAIN",
+  "TR_TEST_VALID",
+  "TR_TEST_ANOTHER",
+  "TR_TEST_OVERRIDE",
+] as const;
+
+describe("loadEnvFile", () => {
   let dir: string;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "teamroom-env-"));
+    // Clean up any leftover state so each test gets a clean process.env.
+    for (const k of TEST_KEYS) delete process.env[k];
   });
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
+    for (const k of TEST_KEYS) delete process.env[k];
   });
 
-  it("returns empty when .env is absent", () => {
-    expect(readEnvFile(dir, ["X"])).toEqual({});
+  it("is a no-op when .env is absent", () => {
+    loadEnvFile(dir);
+    for (const k of TEST_KEYS) {
+      expect(process.env[k]).toBeUndefined();
+    }
   });
 
-  it("returns only the requested keys", () => {
-    writeFileSync(join(dir, ".env"), "A=1\nB=2\nC=3\n");
-    expect(readEnvFile(dir, ["A", "C"])).toEqual({ A: "1", C: "3" });
+  it("injects every well-formed KEY=value into process.env", () => {
+    writeFileSync(join(dir, ".env"), "TR_TEST_A=1\nTR_TEST_B=2\nTR_TEST_C=3\n");
+    loadEnvFile(dir);
+    expect(process.env.TR_TEST_A).toBe("1");
+    expect(process.env.TR_TEST_B).toBe("2");
+    expect(process.env.TR_TEST_C).toBe("3");
   });
 
   it("strips surrounding quotes and ignores comments and blank lines", () => {
     writeFileSync(
       join(dir, ".env"),
-      `# a comment\n\nTOKEN="abc-xyz"\nURL='http://x:1/v1'\nPLAIN=value\n`,
+      `# a comment\n\nTR_TEST_TOKEN="abc-xyz"\nTR_TEST_URL='http://x:1/v1'\nTR_TEST_PLAIN=value\n`,
     );
-    expect(readEnvFile(dir, ["TOKEN", "URL", "PLAIN"])).toEqual({
-      TOKEN: "abc-xyz",
-      URL: "http://x:1/v1",
-      PLAIN: "value",
-    });
+    loadEnvFile(dir);
+    expect(process.env.TR_TEST_TOKEN).toBe("abc-xyz");
+    expect(process.env.TR_TEST_URL).toBe("http://x:1/v1");
+    expect(process.env.TR_TEST_PLAIN).toBe("value");
   });
 
   it("skips malformed lines (no equals sign)", () => {
-    writeFileSync(join(dir, ".env"), "VALID=ok\nnotakey\nANOTHER=yes\n");
-    expect(readEnvFile(dir, ["VALID", "ANOTHER"])).toEqual({
-      VALID: "ok",
-      ANOTHER: "yes",
-    });
+    writeFileSync(join(dir, ".env"), "TR_TEST_VALID=ok\nnotakey\nTR_TEST_ANOTHER=yes\n");
+    loadEnvFile(dir);
+    expect(process.env.TR_TEST_VALID).toBe("ok");
+    expect(process.env.TR_TEST_ANOTHER).toBe("yes");
   });
 
-  it("does not pollute process.env", () => {
-    writeFileSync(join(dir, ".env"), "MY_SECRET_XYZ=hunter2\n");
-    expect(process.env.MY_SECRET_XYZ).toBeUndefined();
-    readEnvFile(dir, ["MY_SECRET_XYZ"]);
-    expect(process.env.MY_SECRET_XYZ).toBeUndefined();
+  it("does NOT override values already set on process.env (shell wins)", () => {
+    process.env.TR_TEST_OVERRIDE = "from-shell";
+    writeFileSync(join(dir, ".env"), "TR_TEST_OVERRIDE=from-dotenv\n");
+    loadEnvFile(dir);
+    expect(process.env.TR_TEST_OVERRIDE).toBe("from-shell");
   });
 });

@@ -25,7 +25,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { readEnvFile } from "../../src/env/env-file.js";
+import { loadEnvFile } from "../../src/env/env-file.js";
 import { discoverAnthropic } from "../../src/env/anthropic-credentials.js";
 import { LocalModelProxy } from "../../src/model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../src/model-proxy/token-registry.js";
@@ -36,11 +36,8 @@ import { CapturingLogger } from "../../src/logger/logger.js";
 import { SystemClock } from "../../src/clock/clock.js";
 import { AnthropicLlmClient } from "../../src/agent-runtime/anthropic-llm-client.js";
 
-const env = readEnvFile(resolve(process.cwd()), [
-  "CLAUDE_CODE_OAUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-]);
-const creds = discoverAnthropic(env);
+loadEnvFile(resolve(process.cwd()));
+const creds = discoverAnthropic();
 
 describe("AnthropicLlmClient — real Anthropic via proxy + claude-agent-sdk", () => {
   // Capture and restore env vars we mutate so other tests aren't polluted.
