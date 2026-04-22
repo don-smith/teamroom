@@ -39,6 +39,13 @@ export interface SessionTimerManagerDeps {
   /** Mint a fresh MCP token per spawn. */
   genToken: () => string;
   logger?: Logger;
+  /**
+   * Per-agent lifecycle lookup. `persistent` agents skip the idle timer
+   * entirely and are respawned on unexpected exit. `session` (default)
+   * keeps today's behavior. Defaults to a function returning "session"
+   * if omitted — existing callers keep working.
+   */
+  lifecycleFor?: (agentId: string) => "session" | "persistent";
 }
 
 interface Session {
@@ -174,7 +181,8 @@ export class SessionTimerManager {
 
   private armTimer(s: Session): void {
     s.timer?.cancel();
-    if (this.deps.idleMinutes <= 0) {
+    const lifecycle = this.deps.lifecycleFor?.(s.agentId) ?? "session";
+    if (lifecycle === "persistent" || this.deps.idleMinutes <= 0) {
       s.timer = null;
       return;
     }

@@ -184,3 +184,40 @@ describe("SessionTimerManager", () => {
     expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
   });
 });
+
+describe("SessionTimerManager — persistent lifecycle", () => {
+  function persistentSetup(agentId: string, idleMinutes = 30) {
+    const runner = new FakeRunner();
+    const timerFactory = manualTimers();
+    let seq = 0;
+    const manager = new SessionTimerManager({
+      runner,
+      idleMinutes,
+      timerFactory,
+      spec: (aid, mcpToken) => ({
+        imageTag: `teamroom-agent-${aid}:latest`,
+        mounts: [],
+        env: { TEAMROOM_MCP_TOKEN: mcpToken },
+      }),
+      genToken: () => `tok-${++seq}`,
+      lifecycleFor: (aid) => (aid === agentId ? "persistent" : "session"),
+    });
+    return { manager, runner, timerFactory };
+  }
+
+  it("does not arm the idle timer for a persistent agent on mail.delivered", () => {
+    const { manager, runner, timerFactory } = persistentSetup("persistent-one", 30);
+    manager.onMailDelivered("persistent-one");
+    expect(timerFactory.pending()).toBe(0);
+    timerFactory.advance(365 * 24 * 60 * 60 * 1000);
+    expect(runner.sessions[0]!.isStdinClosed()).toBe(false);
+  });
+
+  it("does arm the idle timer for a session agent even when other agents are persistent", () => {
+    const { manager, runner, timerFactory } = persistentSetup("persistent-one", 30);
+    manager.onMailDelivered("session-other");
+    expect(timerFactory.pending()).toBe(1);
+    timerFactory.advance(30 * 60 * 1000);
+    expect(runner.sessions[0]!.isStdinClosed()).toBe(true);
+  });
+});
