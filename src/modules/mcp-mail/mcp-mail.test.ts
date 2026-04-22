@@ -18,6 +18,7 @@ describe("composeMcpMail", () => {
     storePath: "/a/store",
     subscriptions: [],
     allowedTools: [],
+    lifecycle: "session",
   };
 
   it("exposes dispatcher, mailing-list registry, and mcp tools wired to the bus", () => {

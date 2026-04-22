@@ -277,10 +277,10 @@ npx vitest run
 
 Expected: everything passes.
 
-- [ ] **Step 6: Run `tsc --noEmit` to catch any type drift.**
+- [ ] **Step 6: Run `npm run typecheck` to catch any type drift.**
 
 ```bash
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Expected: clean.
@@ -389,7 +389,7 @@ Expected: all pass.
 
 ```bash
 npx vitest run
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Expected: clean. If any `switch (provider)` exhaustiveness checks elsewhere in the code now fail, fix them — add `deepagents`/`hermes` branches that either throw "not yet wired at this layer" or are no-ops as appropriate. Likely locations: `src/agent-runtime/worker.ts` (buildWorker switch), `src/modules/model-proxy/model-proxy.ts` (provider-adapter map). Adapt each case:
@@ -789,7 +789,7 @@ Expected: all pass.
 
 ```bash
 npx vitest run
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Expected: clean.
@@ -941,7 +941,7 @@ Expected: the new test passes. Existing tests may need `agentConfigs: new Map()`
 
 ```bash
 npx vitest run
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Expected: clean. Some existing tests that call `composeSessionManagement` without `agentConfigs` need the field added. Fix each — they all pass `new Map()` if they don't care about the init spawn.
@@ -994,7 +994,7 @@ const sessionManagement = composeSessionManagement({
 
 ```bash
 npx vitest run
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Expected: clean.

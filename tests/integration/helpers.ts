@@ -135,6 +135,7 @@ export async function composeIntegrationHarness(opts: HarnessOpts): Promise<Inte
       storePath: `/agents/${name}/store`,
       subscriptions: opts.agentSubscriptions?.[name] ?? [],
       allowedTools: [],
+      lifecycle: "session",
     });
   }
 

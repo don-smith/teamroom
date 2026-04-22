@@ -14,6 +14,7 @@ describe("buildSpec", () => {
     storePath: "/agents/alice/store",
     subscriptions: [],
     allowedTools: ["mail.send"],
+    lifecycle: "session",
   };
 
   it("constructs a DockerRunSpec with mail-MCP URL, model proxy URL, and tokens", () => {

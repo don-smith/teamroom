@@ -21,6 +21,7 @@ describe("composeChannels", () => {
       name: "alice", model: "m", imageTag: "img", provider: "anthropic",
       configPath: "/a", agentsMdPath: "/a/AGENTS.md", storePath: "/a/store",
       subscriptions: [], allowedTools: [],
+      lifecycle: "session",
     };
     messaging = composeMessaging({ logger });
     let n = 0;
