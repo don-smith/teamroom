@@ -1,5 +1,5 @@
 name: studio-assistant
-model: google/gemma-4-e4b
+model: openai/gpt-oss-20b
 image_tag: teamroom-agent-studio-assistant:latest
 provider: lm-studio
 subscriptions: []
