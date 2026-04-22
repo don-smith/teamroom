@@ -91,4 +91,92 @@ describe("buildSpec", () => {
     expect(labels["teamroom-agent"]).toBe("true");
     expect(labels["teamroom-agent-id"]).toBe("alice");
   });
+
+  it("mints the proxy token with the model provider, not the harness provider, for deepagents", () => {
+    const tokenRegistry = new TokenRegistry();
+    const archie: AgentConfig = {
+      name: "archie",
+      model: "claude-opus-4-7",
+      imageTag: "teamroom-agent-archie:latest",
+      provider: "deepagents",
+      configPath: "/tmp/x",
+      agentsMdPath: "/tmp/x/AGENTS.md",
+      storePath: "/tmp/x/store",
+      subscriptions: [],
+      allowedTools: [],
+      lifecycle: "persistent",
+    };
+    const spec = buildSpec({
+      agentId: "archie",
+      mcpToken: "mcp-tok",
+      agentConfigs: new Map([["archie", archie]]),
+      tokenRegistry,
+      modelBaseUrl: "http://proxy",
+      mailPort: 9000,
+      codebasePath: null,
+      genId: () => "trace-1",
+    });
+    const proxyToken = spec.env.ANTHROPIC_AUTH_TOKEN!;
+    const entry = tokenRegistry.lookup(proxyToken);
+    expect(entry?.provider).toBe("anthropic");
+    expect(entry?.model).toBe("claude-opus-4-7");
+  });
+
+  it("mints the proxy token with the model provider for hermes (hermes→anthropic)", () => {
+    const tokenRegistry = new TokenRegistry();
+    const devCfg: AgentConfig = {
+      name: "dev",
+      model: "claude-sonnet-4-6",
+      imageTag: "teamroom-agent-dev:latest",
+      provider: "hermes",
+      configPath: "/tmp/x",
+      agentsMdPath: "/tmp/x/AGENTS.md",
+      storePath: "/tmp/x/store",
+      subscriptions: [],
+      allowedTools: [],
+      lifecycle: "persistent",
+    };
+    const spec = buildSpec({
+      agentId: "dev",
+      mcpToken: "mcp-tok",
+      agentConfigs: new Map([["dev", devCfg]]),
+      tokenRegistry,
+      modelBaseUrl: "http://proxy",
+      mailPort: 9000,
+      codebasePath: null,
+      genId: () => "trace-1",
+    });
+    const proxyToken = spec.env.ANTHROPIC_AUTH_TOKEN!;
+    const entry = tokenRegistry.lookup(proxyToken);
+    expect(entry?.provider).toBe("anthropic");
+  });
+
+  it("leaves internal harness providers unchanged (lm-studio → lm-studio)", () => {
+    const tokenRegistry = new TokenRegistry();
+    const studioCfg: AgentConfig = {
+      name: "studio",
+      model: "openai/gpt-oss-20b",
+      imageTag: "teamroom-agent-studio:latest",
+      provider: "lm-studio",
+      configPath: "/tmp/x",
+      agentsMdPath: "/tmp/x/AGENTS.md",
+      storePath: "/tmp/x/store",
+      subscriptions: [],
+      allowedTools: [],
+      lifecycle: "session",
+    };
+    const spec = buildSpec({
+      agentId: "studio",
+      mcpToken: "mcp-tok",
+      agentConfigs: new Map([["studio", studioCfg]]),
+      tokenRegistry,
+      modelBaseUrl: "http://proxy",
+      mailPort: 9000,
+      codebasePath: null,
+      genId: () => "trace-1",
+    });
+    const proxyToken = spec.env.TEAMROOM_MODEL_API_TOKEN!;
+    const entry = tokenRegistry.lookup(proxyToken);
+    expect(entry?.provider).toBe("lm-studio");
+  });
 });
