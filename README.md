@@ -16,6 +16,8 @@ Milestone 4.5 — "AI-native harness." Channel-kind addresses (`channel:cli:*`),
 
 Prerequisites: Node.js 22+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`).
 
+> **Submodules.** Team Room vendors external agent harnesses (DeepAgents, Hermes) under `vendor/`. When cloning fresh, use `git clone --recurse-submodules <url>`. If you already cloned without, run `git submodule update --init --recursive` once. Submodule pointers are bumped in explicit commits (`chore(vendor): bump <harness> to <tag>`); there's no auto-update.
+
 ```bash
 # 1. Dependencies
 npm install
