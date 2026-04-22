@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "install-cli": "node scripts/install-cli.mjs ~/.local/bin --force"
+    "install-cli": "node scripts/install-cli.mjs ~/.local/bin --force",
+    "docker:build:archie": "docker build -t teamroom-agent-archie:latest -f agents/archie/Dockerfile .",
+    "docker:build:dev": "docker build -t teamroom-agent-dev:latest -f agents/dev/Dockerfile ."
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",

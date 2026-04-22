@@ -36,15 +36,17 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
 from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
+from deepagents.backends.filesystem import FilesystemBackend
+from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 
 WAKE_PROMPT = (
-    "A new-mail wake fired. Check your inbox with mail_list (unreadOnly=true). "
-    "For each unread message, use mail_get to read the full thread, do whatever "
+    "A new-mail wake fired. Check your inbox with mail_list (unreadOnly=false). "
+    "For each message, use mail_get to read the full thread, do whatever "
     "reading/editing under /codebase the message asks for, and reply with "
     "mail_reply. If the inbox is empty, do nothing and report 'no mail'."
 )
@@ -57,12 +59,34 @@ def load_system_prompt() -> str:
     return "You are Archie, Team Room's architect."
 
 
-def make_model() -> ChatAnthropic:
-    """Build the LLM instance. No network call — just constructs the client object."""
+def make_model() -> ChatOpenAI:
+    """Build the LLM instance using OpenRouter (OpenAI-compatible endpoint).
+
+    Uses OPENROUTER_API_KEY and OPENROUTER_MODEL from environment (injected by
+    build-spec.ts when present in .env). Falls back to the daemon proxy path
+    for the default configuration.
+    """
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+    openrouter_model = os.environ.get("OPENROUTER_MODEL")
+
+    if openrouter_key and openrouter_model:
+        return ChatOpenAI(
+            model=openrouter_model,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=openrouter_key,
+            http_client=httpx.Client(
+                headers={
+                    "HTTP-Referrer": "https://teamroom.local",
+                    "X-Title": "Team Room Archie",
+                },
+            ),
+        )
+
+    # Fallback: route through the daemon proxy (original behavior).
     anthropic_base = os.environ["ANTHROPIC_BASE_URL"]
     anthropic_token = os.environ["ANTHROPIC_AUTH_TOKEN"]
     model_id = os.environ.get("TEAMROOM_MODEL", "claude-opus-4-7")
-    return ChatAnthropic(
+    return ChatOpenAI(
         model=model_id,
         base_url=anthropic_base,
         api_key=anthropic_token,
@@ -78,19 +102,23 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
     mcp_url = os.environ["TEAMROOM_MCP_URL"]
     mcp_token = os.environ["TEAMROOM_MCP_TOKEN"]
 
-    mcp_client = MultiServerMCPClient({
-        "mail": {
-            "transport": "streamable_http",
-            "url": mcp_url,
-            "headers": {"x-teamroom-mcp-token": mcp_token},
-        },
-    })
+    mcp_client = MultiServerMCPClient(
+        {
+            "mail": {
+                "transport": "streamable_http",
+                "url": mcp_url,
+                "headers": {"x-teamroom-mcp-token": mcp_token},
+            },
+        }
+    )
     try:
         raw_tools = await mcp_client.get_tools()
     except Exception as err:
         # Re-raise with the MCP URL in the message so operators can see what
         # was unreachable. The original exception is chained via `from`.
-        raise RuntimeError(f"failed to connect to mail-MCP at {mcp_url}: {err!r}") from err
+        raise RuntimeError(
+            f"failed to connect to mail-MCP at {mcp_url}: {err!r}"
+        ) from err
 
     def _rename_tool_dots_to_underscores(tool):
         """Anthropic's API requires tool names match `^[a-zA-Z0-9_-]{1,128}$`.
@@ -114,6 +142,13 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
 
     model = make_model()
 
+    # FilesystemBackend gives the agent real filesystem access to /codebase
+    # (the team's shared working tree) and /store (our persistent scratch).
+    # Without this, DeepAgents uses StateBackend which stores files in ephemeral
+    # agent state, not on the actual filesystem.
+    # virtual_mode=False uses the actual filesystem (not virtual path semantics).
+    fs_backend = FilesystemBackend(root_dir="/codebase", virtual_mode=False)
+
     # checkpointer= is a direct kwarg on create_deep_agent (confirmed from
     # vendor/deepagents/libs/deepagents/deepagents/graph.py line 230).
     # system_prompt= is correct; instructions= does not exist in this version.
@@ -122,17 +157,22 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
         tools=mail_tools,
         system_prompt=load_system_prompt(),
         checkpointer=checkpointer,
+        backend=fs_backend,
     )
     return agent
 
 
-async def handle_wake(state: dict, checkpointer: AsyncSqliteSaver, envelope: dict) -> None:
+async def handle_wake(
+    state: dict, checkpointer: AsyncSqliteSaver, envelope: dict
+) -> None:
     # envelope is intentionally unused for M6 — the canned WAKE_PROMPT covers
     # "check your inbox and act on whatever's there"; M6.1 or later may surface
     # event hints (e.g., mail-thread id) into the prompt.
     # Build agent on first wake; cache in state dict for subsequent wakes.
     if state.get("agent") is None:
-        print("[archie] first wake: connecting to MCP and building agent", file=sys.stderr)
+        print(
+            "[archie] first wake: connecting to MCP and building agent", file=sys.stderr
+        )
         state["agent"] = await build_agent(checkpointer)
         print("[archie] first wake: agent ready", file=sys.stderr)
 
@@ -142,10 +182,14 @@ async def handle_wake(state: dict, checkpointer: AsyncSqliteSaver, envelope: dic
     # history across wakes. M6.1 or later can key on mail thread_id.
     thread_id = "archie-main"
     config = {"configurable": {"thread_id": thread_id}}
+    print(f"[archie] invoking agent with prompt: {WAKE_PROMPT}", file=sys.stderr)
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": WAKE_PROMPT}]},
         config=config,
     )
+    # Log full result for debugging
+    print(f"[archie] result keys: {result.keys()}", file=sys.stderr)
+    print(f"[archie] messages: {result.get('messages', [])}", file=sys.stderr)
     # Emit the last AI text to stderr so it shows in daemon logs.
     for message in reversed(result.get("messages", [])):
         if getattr(message, "type", None) == "ai" and getattr(message, "content", None):
@@ -162,7 +206,9 @@ async def main() -> None:
     # from vendor/deepagents/libs/cli/deepagents_cli/sessions.py line 1030).
     # Keep it open for the entire process lifetime so the checkpointer DB
     # connection is available across all wakes.
-    async with AsyncSqliteSaver.from_conn_string("/store/langgraph-checkpoint.db") as checkpointer:
+    async with AsyncSqliteSaver.from_conn_string(
+        "/store/langgraph-checkpoint.db"
+    ) as checkpointer:
         # State dict holds the lazily-initialised agent (None until first wake).
         # Model construction (no network call) happens here; MCP connection is
         # deferred to first wake so the boot path is independent of MCP availability.

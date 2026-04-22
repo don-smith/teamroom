@@ -37,7 +37,7 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
   if (args.codebasePath) {
     mounts.push({ hostPath: args.codebasePath, containerPath: "/codebase", readOnly: false });
   }
-  return {
+  const spec: DockerRunSpec = {
     imageTag: cfg.imageTag,
     name: `teamroom-${args.agentId}-${args.mcpToken.slice(0, 8)}`,
     mounts,
@@ -59,6 +59,13 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
       "teamroom-agent-id": args.agentId,
     },
   };
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  const openrouterModel = process.env.OPENROUTER_MODEL;
+  if (openrouterKey && openrouterModel) {
+    spec.env.OPENROUTER_API_KEY = openrouterKey;
+    spec.env.OPENROUTER_MODEL = openrouterModel;
+  }
+  return spec;
 }
 
 /**
