@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { HumanMessage, AIMessage, type BaseMessage } from "@langchain/core/messages";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
@@ -25,7 +25,7 @@ const RECURSION_LIMIT = 10;
 const MAX_RETRIES = 2;
 
 export interface LangGraphAgentWorkerOpts {
-  model: BaseChatModel;
+  model: LanguageModelLike;
   mcpUrl: string;
   mcpToken: string;
   systemPrompt: string;
@@ -80,7 +80,7 @@ export class LangGraphAgentWorker implements AgentWorker {
     });
 
     return LangGraphAgentWorker.build({
-      model: chat as unknown as BaseChatModel,
+      model: chat,
       mcpUrl,
       mcpToken,
       systemPrompt: "",
@@ -133,9 +133,7 @@ export class LangGraphAgentWorker implements AgentWorker {
         { recursionLimit: RECURSION_LIMIT },
       );
       this.messages = result.messages as BaseMessage[];
-      if (this.messages.length > MAX_MESSAGES) {
-        this.messages = this.messages.slice(-MAX_MESSAGES);
-      }
+      this.trimMessages();
       const last = this.messages[this.messages.length - 1];
       if (
         last instanceof AIMessage &&
@@ -149,10 +147,49 @@ export class LangGraphAgentWorker implements AgentWorker {
     }
   }
 
+  /**
+   * Trim the messages array at HumanMessage boundaries so the retained
+   * segment stays within MAX_MESSAGES.
+   *
+   * Why boundary-aware: LangGraph's ReAct executor emits AIMessages carrying
+   * `tool_calls` fields that must be paired with matching ToolMessage
+   * responses (by `tool_call_id`). A naive `slice(-N)` can cut between an
+   * AIMessage-with-tool_calls and its ToolMessage(s), leaving either an
+   * orphaned ToolMessage or an AIMessage with unfulfilled tool_calls —
+   * shapes OpenAI-compat providers (LM Studio, Ollama) reject with
+   * 400-class errors. Cutting at HumanMessage boundaries drops whole prior
+   * wakes, preserving the tool-call/tool-message invariant.
+   *
+   * Algorithm: walk backward looking for the EARLIEST HumanMessage whose
+   * retained segment is ≤ MAX_MESSAGES; slice from there. If no such
+   * boundary exists (degenerate single-turn > cap), fall back to hard
+   * `slice(-MAX_MESSAGES)`.
+   */
+  private trimMessages(): void {
+    if (this.messages.length <= MAX_MESSAGES) return;
+    let earliest = -1;
+    for (let i = this.messages.length - 1; i >= 0; i -= 1) {
+      const remaining = this.messages.length - i;
+      if (remaining > MAX_MESSAGES) break;
+      if (this.messages[i] instanceof HumanMessage) {
+        earliest = i;
+      }
+    }
+    if (earliest >= 0) {
+      this.messages = this.messages.slice(earliest);
+      return;
+    }
+    // Degenerate: no HumanMessage boundary fits under the cap.
+    this.messages = this.messages.slice(-MAX_MESSAGES);
+  }
+
   toolNamesForTest(): string[] {
     return this.toolNames;
   }
   messageCountForTest(): number {
     return this.messages.length;
+  }
+  messagesForTest(): readonly BaseMessage[] {
+    return this.messages;
   }
 }

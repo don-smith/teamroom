@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { fakeModel } from "@langchain/core/testing";
 import { composeStorage } from "../modules/storage/storage.js";
 import { composeMessaging } from "../modules/messaging/messaging.js";
@@ -118,7 +117,7 @@ describe("LangGraphAgentWorker", () => {
     harness = await startMailHarness();
     const model = fakeModel().respond(new AIMessage("no-op"));
     const worker = await LangGraphAgentWorker.createForTest({
-      model: model as unknown as BaseChatModel,
+      model,
       mcpUrl: harness.mcpUrl,
       mcpToken: harness.mcpToken,
       systemPrompt: "You are a test agent.",
@@ -135,7 +134,7 @@ describe("LangGraphAgentWorker", () => {
     const model = fakeModel().respond(new AIMessage("I have nothing to do this wake."));
     const texts: string[] = [];
     const worker = await LangGraphAgentWorker.createForTest({
-      model: model as unknown as BaseChatModel,
+      model,
       mcpUrl: harness.mcpUrl,
       mcpToken: harness.mcpToken,
       systemPrompt: "You are a test agent.",
@@ -158,7 +157,7 @@ describe("LangGraphAgentWorker", () => {
       model.respond(new AIMessage(`answer-${i}`));
     }
     const worker = await LangGraphAgentWorker.createForTest({
-      model: model as unknown as BaseChatModel,
+      model,
       mcpUrl: harness.mcpUrl,
       mcpToken: harness.mcpToken,
       systemPrompt: "test",
@@ -170,12 +169,75 @@ describe("LangGraphAgentWorker", () => {
     expect(worker.messageCountForTest()).toBe(40);
   });
 
+  it("trim preserves AIMessage-with-tool_calls / ToolMessage pairing", async () => {
+    harness = await startMailHarness();
+    const model = fakeModel();
+    // Script a mix of tool-bearing wakes and plain wakes to force the naive
+    // `slice(-40)` boundary to fall mid-turn. A tool wake produces 4 messages
+    // (Human → AI-with-tool_calls → Tool → AI-final); a plain wake produces 2
+    // (Human → AI). With 10 tool wakes (40 msgs) + 1 plain wake (2 msgs) = 42
+    // total, a naive slice(-40) would start at index 2 — the ToolMessage of
+    // turn 0 — leaving an orphan. Our boundary-aware trim must NOT produce
+    // that shape.
+    const TOOL_WAKES = 10;
+    const PLAIN_WAKES = 1;
+    for (let i = 0; i < TOOL_WAKES; i += 1) {
+      model.respondWithTools([{ name: "mail.list", args: { unreadOnly: true } }]);
+      model.respond(new AIMessage(`final-${i}`));
+    }
+    for (let i = 0; i < PLAIN_WAKES; i += 1) {
+      model.respond(new AIMessage(`plain-${i}`));
+    }
+    const worker = await LangGraphAgentWorker.createForTest({
+      model,
+      mcpUrl: harness.mcpUrl,
+      mcpToken: harness.mcpToken,
+      systemPrompt: "test",
+      agentsMdPath: "/does-not-exist",
+    });
+    for (let i = 0; i < TOOL_WAKES + PLAIN_WAKES; i += 1) {
+      await worker.handleWake({ type: "wake", events: ["mail"] });
+    }
+    // Fetch messages via the last invocation's call-log equivalent: reach
+    // into the worker via the test helper. We'll expose the full array
+    // for this assertion.
+    const messages = worker.messagesForTest();
+    expect(messages.length).toBeLessThanOrEqual(40);
+    expect(messages.length).toBeGreaterThan(0);
+    // Invariant 1: retained array must not START with a ToolMessage —
+    // that shape (orphaned tool result, no preceding tool_calls AIMessage)
+    // is what OpenAI-compat providers reject.
+    expect(messages[0]).not.toBeInstanceOf(ToolMessage);
+    // Invariant 2: every AIMessage.tool_calls[].id in the retained segment
+    // must have a matching ToolMessage.tool_call_id after it.
+    const toolCallIds = new Set<string>();
+    const toolMessageIds = new Set<string>();
+    for (const m of messages) {
+      if (m instanceof AIMessage && Array.isArray(m.tool_calls)) {
+        for (const tc of m.tool_calls) {
+          if (tc.id) toolCallIds.add(tc.id);
+        }
+      }
+      if (m instanceof ToolMessage) {
+        toolMessageIds.add(m.tool_call_id);
+      }
+    }
+    // Each ToolMessage must reference a tool_call we kept.
+    for (const id of toolMessageIds) {
+      expect(toolCallIds.has(id)).toBe(true);
+    }
+    // Each AIMessage.tool_calls.id we kept must have a matching ToolMessage.
+    for (const id of toolCallIds) {
+      expect(toolMessageIds.has(id)).toBe(true);
+    }
+  });
+
   it("graph exceptions are logged but do not crash the worker", async () => {
     harness = await startMailHarness();
     const model = fakeModel().alwaysThrow(new Error("synthetic graph failure"));
     const errs: string[] = [];
     const worker = await LangGraphAgentWorker.createForTest({
-      model: model as unknown as BaseChatModel,
+      model,
       mcpUrl: harness.mcpUrl,
       mcpToken: harness.mcpToken,
       systemPrompt: "test",
