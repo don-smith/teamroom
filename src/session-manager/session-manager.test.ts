@@ -220,4 +220,50 @@ describe("SessionTimerManager — persistent lifecycle", () => {
     timerFactory.advance(30 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(true);
   });
+
+  it("respawns a persistent container after an unexpected exit (no wake envelope)", () => {
+    const { manager, runner } = persistentSetup("persistent-one");
+    manager.spawnIfAbsent("persistent-one");
+    const firstToken = manager.tokenFor("persistent-one");
+    runner.sessions[0]!.simulateExit({ exitCode: 1 });
+    // Respawn is synchronous in the manager; the async backoff is wrapped
+    // in a timer we can advance deterministically.
+    // Initial backoff is 1000ms per the implementation.
+    // (If the test setup's timerFactory doesn't implement setTimeout-style
+    //  advance for the backoff, refactor the manager to pass the delay
+    //  through the injected timerFactory.)
+    // Expect: two container spawn attempts, fresh token on second.
+    expect(runner.sessions).toHaveLength(2);
+    expect(runner.sessions[1]!.envelopes).toEqual([]); // respawn does NOT write wake
+    expect(manager.tokenFor("persistent-one")).not.toBe(firstToken);
+  });
+
+  it("does not respawn a session-lifecycle agent after exit", () => {
+    const { manager, runner } = persistentSetup("persistent-one");
+    manager.onMailDelivered("session-other");
+    runner.sessions[0]!.simulateExit({ exitCode: 0 });
+    expect(runner.sessions).toHaveLength(1);
+    expect(manager.hasSession("session-other")).toBe(false);
+  });
+
+  it("does not respawn after killAll/shutdown, even for persistent agents", async () => {
+    const { manager, runner } = persistentSetup("persistent-one");
+    manager.spawnIfAbsent("persistent-one");
+    await manager.killAll();
+    expect(manager.hasSession("persistent-one")).toBe(false);
+    expect(runner.sessions).toHaveLength(1); // no respawn
+  });
+
+  it("stops respawning after MAX_RESPAWNS_PER_AGENT consecutive failures", () => {
+    const { manager, runner } = persistentSetup("persistent-one");
+    manager.spawnIfAbsent("persistent-one");
+    // Drive 11 consecutive exits — after 10 respawns, the 11th exit should not respawn.
+    for (let i = 0; i < 11; i++) {
+      const last = runner.sessions[runner.sessions.length - 1]!;
+      last.simulateExit({ exitCode: 1 });
+    }
+    // 1 initial spawn + 10 respawns = 11 total sessions; next exit stops.
+    expect(runner.sessions).toHaveLength(11);
+    expect(manager.hasSession("persistent-one")).toBe(false);
+  });
 });

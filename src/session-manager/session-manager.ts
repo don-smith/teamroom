@@ -74,6 +74,9 @@ interface Session {
 export class SessionTimerManager {
   private readonly sessions = new Map<string, Session>();
   private readonly tokens = new Map<string, string>(); // token → agentId
+  private isShuttingDown = false;
+  private respawnCounts = new Map<string, number>();
+  private static readonly MAX_RESPAWNS_PER_AGENT = 10;
 
   constructor(private readonly deps: SessionTimerManagerDeps) {}
 
@@ -136,6 +139,7 @@ export class SessionTimerManager {
   }
 
   async killAll(): Promise<void> {
+    this.isShuttingDown = true;
     const all = [...this.sessions.values()];
     await Promise.all(
       all.map(async (s) => {
@@ -162,6 +166,22 @@ export class SessionTimerManager {
     this.tokens.set(token, agentId);
     rc.onExit(() => {
       this.removeSession(agentId, session);
+      if (this.isShuttingDown) return;
+      const lifecycle = this.deps.lifecycleFor?.(agentId) ?? "session";
+      if (lifecycle === "persistent") {
+        const count = (this.respawnCounts.get(agentId) ?? 0) + 1;
+        this.respawnCounts.set(agentId, count);
+        if (count > SessionTimerManager.MAX_RESPAWNS_PER_AGENT) {
+          this.deps.logger?.warn("session.persistent_respawn_cap_reached", {
+            agentId,
+            count,
+            cap: SessionTimerManager.MAX_RESPAWNS_PER_AGENT,
+          });
+          return;
+        }
+        this.deps.logger?.info("session.persistent_respawn", { agentId, count });
+        this.spawn(agentId);
+      }
     });
     this.deps.logger?.info("session.spawned", { agentId });
     return session;
