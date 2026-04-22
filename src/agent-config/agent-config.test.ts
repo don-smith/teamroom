@@ -121,6 +121,49 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
   });
 });
 
+describe("loadAgentConfig — lifecycle field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "a");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("defaults lifecycle to 'session' when omitted", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.lifecycle).toBe("session");
+  });
+
+  it("parses lifecycle: persistent", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: persistent\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.lifecycle).toBe("persistent");
+  });
+
+  it("rejects unknown lifecycle values", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: forever\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/lifecycle.*'session'.*'persistent'.*got 'forever'/);
+  });
+});
+
 describe("loadAgentConfig — provider field", () => {
   let base: string;
   let agentDir: string;

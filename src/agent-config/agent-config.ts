@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 import YAML from "yaml";
 import type { Provider } from "../types.js";
 
+export type AgentLifecycle = "session" | "persistent";
+
 export interface AgentConfig {
   name: string;
   model: string;
@@ -13,6 +15,7 @@ export interface AgentConfig {
   storePath: string;      // absolute path to store/
   subscriptions: string[];
   allowedTools: string[];
+  lifecycle: AgentLifecycle;
 }
 
 export function loadAgentConfig(agentDir: string): AgentConfig {
@@ -55,7 +58,18 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   }
   const allowedTools = parseStringArray(parsed, "allowed_tools");
 
-  return { name, model, imageTag, provider, configPath, agentsMdPath, storePath, subscriptions, allowedTools };
+  const lifecycleRaw = parsed.lifecycle;
+  let lifecycle: AgentLifecycle = "session";
+  if (lifecycleRaw !== undefined && lifecycleRaw !== null) {
+    if (lifecycleRaw !== "session" && lifecycleRaw !== "persistent") {
+      throw new Error(
+        `agent.yaml 'lifecycle' must be 'session' or 'persistent' (got '${String(lifecycleRaw)}')`,
+      );
+    }
+    lifecycle = lifecycleRaw;
+  }
+
+  return { name, model, imageTag, provider, configPath, agentsMdPath, storePath, subscriptions, allowedTools, lifecycle };
 }
 
 function requireString(parsed: Record<string, unknown>, field: string): string {
