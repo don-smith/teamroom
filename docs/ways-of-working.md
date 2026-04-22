@@ -1,6 +1,6 @@
 # Ways of Working — Building Team Room
 
-*Last reviewed: 2026-04-21. Update the date when this document is revised.*
+*Last reviewed: 2026-04-22. Update the date when this document is revised.*
 
 **Scope of this document.** Ways-of-working holds the **semantic** layer: principles, the knowledge-base model, document inventory, evolution framing, cross-pollination signals, failure modes. The **procedural** layer — the specific rituals we run (epiphany tabling, end-of-artifact checkpoints, retros, as-builts, capturing learnings) — lives in invocable skills under `.claude/skills/`. That split keeps this document navigable and makes each practice callable by name when the moment arrives.
 
@@ -78,6 +78,16 @@ Learnings turn into durable artifacts — skills, runbooks, memory entries, as-b
 **The promotion rule: once is a moment; twice is a pattern.** Don't formalize on first occurrence. Premature formalization has the same cost structure as premature abstraction in code. Wait for the second sighting, then capture.
 
 The mechanics of the end-of-artifact checkpoint, the skill-vs-runbook heuristic, and the proliferation test live in the `capturing-learnings` skill (`.claude/skills/capturing-learnings/`).
+
+## Working with subagents for Team Room delivery
+
+Project-local addenda that sit *around* the upstream `superpowers:writing-plans` and `superpowers:subagent-driven-development` skills — not replacing them. Read alongside those skills whenever a plan is being written or subagents are being dispatched. Each item cites the M4.5 sighting that promoted it.
+
+- **Bundling pass after a plan is written.** Before dispatching subagents, group same-shape, same-review-surface plan tasks into execution groups. Bundling cuts reviewer dispatches without sacrificing rigor when groups are thematically tight. *(M4.5 retro §3 — 38 plan tasks reduced to 24 dispatched groups.)*
+- **Grep the publisher before specifying the subscriber.** When a plan task defines a bus-event subscriber, locate the publisher first and verify the event name + payload shape. Pattern is general: read the producer before specifying the consumer. *(M4.5 retro §2 — Group 13 plan specified a `mail.delivered` subscription; the dispatcher actually publishes `channel.cli.out` for channel recipients.)*
+- **Flag spec assertions about infrastructure as check-before-implementing items.** When a spec claims "this requires X infrastructure change," treat it as a hypothesis to verify during plan writing, not a commitment to implement. Carry it as a check-before-implementing item in the plan. *(M4.5 retro §2 — spec described migration 004 as TS-extended migrator; plan-writing discovered plain SQL + SQLite JSON1 was sufficient.)*
+- **Inline follow-up commits per review.** When a subagent review surfaces Important items, fix them in a follow-up commit *immediately*, before dispatching the next group. Do not accumulate a review backlog. Keeps per-group state clean and as-builts honest. *(M4.5 retro §1 — every group of M4.5.)*
+- **Combined spec + code review once a pattern is well-established.** After several groups have executed the same shape cleanly, combine spec and code reviews into a single subagent dispatch to save a round-trip. Revert to separate reviews if a group introduces a novel pattern or touches unusual surfaces. *(M4.5 retro §3 — Groups 15 onward.)*
 
 ## Evolution — from assistant to team to harness
 

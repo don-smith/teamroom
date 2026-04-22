@@ -4,6 +4,8 @@ Six short-lived subcommands (`serve`, `send`, `chat`, `inbox`, `thread`, `status
 
 **Runs on the host**, as separate short-lived processes. `chat` holds a WebSocket open for interactive use. `serve` is the exception: it spawns the long-running daemon in-process. Commands that need to reach the daemon discover its ports via the `ports/` file convention (see `ports.ts`).
 
+**Dev rebuild.** After editing `src/**/*.ts`, run `npm run build` before exercising the `teamroom` CLI — the `bin` entry in `package.json` points at `dist/cli/main.js` (compiled output) and won't pick up source changes until rebuilt.
+
 ## Files
 
 - `main.ts` — entrypoint; wires the six subcommands via `commander`.
