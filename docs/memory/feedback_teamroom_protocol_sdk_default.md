@@ -25,4 +25,4 @@ User comment at M4 retro (2026-04-21): *"my preference would absolutely be to us
 - **When reviewing a PR that hand-rolls a protocol layer**, ask explicitly: "what does the SDK not provide here?" A clean answer confirms the choice; a vague answer is the signal to reconsider.
 - **Protocol-quirk memory entries are an anti-pattern.** If you find yourself wanting to document "MCP content types are limited to text/image/resource..." as a memory entry, that's evidence you're hand-rolling instead of using the SDK. The SDK is the documentation, enforced.
 
-**Source:** M2 Anthropic SDK use (first sighting, no regret); M4 hand-rolled MCP server reversal (second sighting, documented cost). M4 retro §2 "hand-rolling the MCP server side was false economy"; M4.5 action items in `docs/m4-followups.md §15a`.
+**Source:** M2 Anthropic SDK use (first sighting, no regret); M4 hand-rolled MCP server reversal (second sighting, documented cost). M4 retro §2 "hand-rolling the MCP server side was false economy"; action item executed during M4.5 (MCP SDK retrofit shipped).

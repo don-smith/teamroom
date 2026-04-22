@@ -1,6 +1,6 @@
 # Ways of Working — Building Team Room
 
-*Last reviewed: 2026-04-20. Update the date when this document is revised.*
+*Last reviewed: 2026-04-21. Update the date when this document is revised.*
 
 **Scope of this document.** Ways-of-working holds the **semantic** layer: principles, the knowledge-base model, document inventory, evolution framing, cross-pollination signals, failure modes. The **procedural** layer — the specific rituals we run (epiphany tabling, end-of-artifact checkpoints, retros, as-builts, capturing learnings) — lives in invocable skills under `.claude/skills/`. That split keeps this document navigable and makes each practice callable by name when the moment arrives.
 
@@ -55,6 +55,7 @@ Current set of document categories. Add a row when a new role emerges; merge and
 | `docs/roadmap.md` | Semantic | Living milestone roadmap. Supersedes `team-room-context §7`. Updated at every milestone close. | Update at each milestone close; reorder "Future" rows when learning demands it. |
 | `docs/ways-of-working.md` (this doc) | Procedural | Practices for building Team Room. | Update when practices evolve; note the date at top. |
 | `docs/tabled.md` | Working | Scratch pad for tabled epiphanies. | Always in place; entries added and removed as processed. |
+| `docs/<milestone>-followups.md` | Working | **In-flight** followup items that surface during a milestone. Created as needed; deleted at milestone close. Outstanding items roll into `docs/roadmap.md#backlog`; completed/obsolete items are dropped. Git history preserves the file for anyone wanting the original per-milestone framing. | Live during the milestone; deleted at close. |
 | `docs/specs/YYYY-MM-DD-*-design.md` | Semantic | **In-flight** designs for the active milestone. Purged into the as-built at milestone close; the folder is empty between milestones (retains `.gitkeep`). | Live during design → implementation; removed at close. |
 | `docs/plans/YYYY-MM-DD-*-plan.md` | Semantic | **In-flight** implementation plans. Purged into the as-built at milestone close; the folder is empty between milestones (retains `.gitkeep`). | Live during implementation; removed at close. |
 | `docs/as-built/YYYY-MM-DD-<topic>.md` | Semantic + Episodic | **Permanent** record of shipped work — architecture, decisions with WHY, adaptations, known limitations. Written via the `writing-as-built` skill at the close of any significant piece of work (milestone, major feature, large refactor). Default expectation: one as-built per piece of closed work. | Frozen at commit; never edited. |

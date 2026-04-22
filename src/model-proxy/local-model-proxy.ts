@@ -40,7 +40,7 @@ interface Opts {
    * to response-received," which is what we want. If/when streaming upstream
    * transports arrive (M3+), a slow-drip server could keep the socket alive
    * indefinitely under this setting — at that point we'll want a separate
-   * wall-clock deadline (tracked in docs/m3-followups.md).
+   * wall-clock deadline (tracked in docs/roadmap.md#backlog — streaming model responses).
    */
   upstreamTimeoutMs?: number;
   host?: string; // default "127.0.0.1"

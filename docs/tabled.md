@@ -10,4 +10,4 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ## Open entries
 
-*(none — last cleared at M3 close, 2026-04-20. Both prior entries (runtime subscription changes; M3 architectural wall) were fully captured in [`docs/m3-followups.md §6`](m3-followups.md) and the M3 retro/as-built; dropping them here since the knowledge is durably filed.)*
+*(none — last cleared at M3 close, 2026-04-20. Both prior entries (runtime subscription changes; M3 architectural wall) were fully captured in the M3 retro/as-built and in the M4 thesis (email on an event-bus backbone); both are now shipped. The per-milestone followup files they referenced (`m3-followups.md` etc.) were consolidated into `docs/roadmap.md#backlog` at M4.5 close.)*

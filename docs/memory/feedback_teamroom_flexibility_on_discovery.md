@@ -9,7 +9,7 @@ For Team Room, up-front architectural design at brainstorm and spec time remains
 When implementation nevertheless exposes a gap the design didn't anticipate — as it did during M3 with the reply-routing/runtime-wrapping finding that broke the turn/reply primitive for multi-agent messaging — pivot **gracefully**:
 
 - Narrow scope honestly.
-- Capture the new direction as next-milestone context (e.g., in `docs/m3-followups.md §6`).
+- Capture the new direction as next-milestone context (e.g., in a `docs/<milestone>-followups.md` file, or directly in `docs/roadmap.md#backlog` at milestone close).
 - Keep moving.
 - Do **not** retrofit "we should have known" criticism onto the pivot — that traps future work in scenario-planning paralysis and trades real momentum for theoretical completeness.
 

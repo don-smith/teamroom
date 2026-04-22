@@ -26,4 +26,4 @@ This is a different failure mode from the one `tsconfig.test.json` catches (fixt
 - **Never ship a `// future work` comment in composition code** without either an immediate test that would catch the missing wiring, or a loud `throw new Error("not wired")` at the point of use. A silent `() => null` resolver is the same foot-gun as `TODO`.
 - **At code review time**, if a PR adds wiring to a harness that doesn't appear in `startDaemon` (or vice versa), flag it. Diff both callers together, not separately.
 
-**Source:** M4 manual-test bug surface, 2026-04-20. Commit `39c3b9e` retrofit; M4 retro §2; M4.5 action items in `docs/m4-followups.md §15a` and §15b.
+**Source:** M4 manual-test bug surface, 2026-04-20. Commit `39c3b9e` retrofit; M4 retro §2; action item executed during M4.5 (composition-parity retrofit shipped).
