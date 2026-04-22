@@ -82,7 +82,7 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
         "mail": {
             "transport": "streamable_http",
             "url": mcp_url,
-            "headers": {"Authorization": f"Bearer {mcp_token}"},
+            "headers": {"x-teamroom-mcp-token": mcp_token},
         },
     })
     try:
