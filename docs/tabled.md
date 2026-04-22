@@ -14,4 +14,4 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ## Open entries
 
-_(none — the M4.5-origin "first real agent role" entry rolled into `docs/roadmap.md#agent-personas-and-multi-harness` at M5 close, alongside six additional named personas and the multi-harness direction.)_
+- **Verify studio-assistant ↔ claude-assistant mail round-trip end-to-end.** User flagged during M6 brainstorm: unclear whether studio-assistant (LangGraph runtime, mail-MCP tool surface) can actually send mail *to* and receive replies *from* the claude-assistants in live operation. M5 manual acceptance Scenario 1 was "Claude↔Studio round-trip" so this may be implicitly proven, but worth an explicit re-check before M6 integration work relies on peer-mail-between-heterogeneous-agents as a baseline. Next destination: pre-M6 verification step (either a pre-plan manual sanity check or the first task in the M6 plan's "prep" phase).
