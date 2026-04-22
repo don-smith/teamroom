@@ -29,7 +29,7 @@ const HOP_BY_HOP = new Set([
 
 interface Opts {
   registry: TokenRegistry;
-  adapters: Record<Provider, ProviderAdapter>;
+  adapters: Partial<Record<Provider, ProviderAdapter>>;
   logger: Logger;
   /**
    * Idle timeout for the outbound upstream socket, in milliseconds. Default

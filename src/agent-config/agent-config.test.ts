@@ -221,4 +221,22 @@ describe("loadAgentConfig — provider field", () => {
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.provider).toBe("ollama");
   });
+
+  it("accepts provider: deepagents", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: m\nimage_tag: t\nprovider: deepagents\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("deepagents");
+  });
+
+  it("accepts provider: hermes", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: m\nimage_tag: t\nprovider: hermes\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("hermes");
+  });
 });

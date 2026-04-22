@@ -36,11 +36,19 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
   if (provider === undefined || provider === null) {
-    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', or 'ollama')`);
-  }
-  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama") {
     throw new Error(
-      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', or 'ollama' (got '${String(provider)}')`,
+      `agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', 'deepagents', or 'hermes')`,
+    );
+  }
+  if (
+    provider !== "anthropic" &&
+    provider !== "lm-studio" &&
+    provider !== "ollama" &&
+    provider !== "deepagents" &&
+    provider !== "hermes"
+  ) {
+    throw new Error(
+      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', 'deepagents', or 'hermes' (got '${String(provider)}')`,
     );
   }
 
