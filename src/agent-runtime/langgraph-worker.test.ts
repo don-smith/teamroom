@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { fakeModel } from "@langchain/core/testing";
 import { composeStorage } from "../modules/storage/storage.js";
@@ -107,6 +110,21 @@ async function startMailHarness(): Promise<{
 
 describe("LangGraphAgentWorker", () => {
   let harness: Awaited<ReturnType<typeof startMailHarness>> | undefined;
+  // Shared temp root for the filesystem MCP child — the stdio server requires
+  // at least one existing root to start. Individual tests that need their own
+  // isolated root mkdtemp a fresh one; everyone else reuses this one.
+  let sharedFsRoot: string;
+
+  beforeAll(() => {
+    // realpathSync: on macOS, /var/folders is a symlink into /private/var/folders.
+    // The FS server resolves its roots to real paths when checking access, so
+    // we must hand it the already-resolved form or subsequent path comparisons
+    // fail as "outside allowed directories".
+    sharedFsRoot = realpathSync(mkdtempSync(join(tmpdir(), "tr-fs-shared-")));
+  });
+  afterAll(() => {
+    rmSync(sharedFsRoot, { recursive: true, force: true });
+  });
 
   afterEach(async () => {
     await harness?.stop();
@@ -122,11 +140,85 @@ describe("LangGraphAgentWorker", () => {
       mcpToken: harness.mcpToken,
       systemPrompt: "You are a test agent.",
       agentsMdPath: "/does-not-exist",
+      filesystemRoots: [sharedFsRoot],
     });
     const toolNames = worker.toolNamesForTest();
     expect(toolNames).toEqual(
       expect.arrayContaining(["mail.list", "mail.get", "mail.send", "mail.reply"]),
     );
+  });
+
+  it("discovers both mail and filesystem tools at construction time", async () => {
+    harness = await startMailHarness();
+    const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), "tr-fs-mcp-")));
+    try {
+      const model = fakeModel().respond(new AIMessage("ok"));
+      const worker = await LangGraphAgentWorker.createForTest({
+        model,
+        mcpUrl: harness.mcpUrl,
+        mcpToken: harness.mcpToken,
+        systemPrompt: "You are a test agent.",
+        agentsMdPath: "/does-not-exist",
+        filesystemRoots: [tmpRoot],
+      });
+      const toolNames = worker.toolNamesForTest();
+      // Mail tools (existing)
+      expect(toolNames).toEqual(
+        expect.arrayContaining(["mail.list", "mail.get", "mail.send", "mail.reply"]),
+      );
+      // Filesystem tools (new) — sample of the 13 exposed by the FS server
+      expect(toolNames).toEqual(
+        expect.arrayContaining([
+          "read_text_file",
+          "write_file",
+          "list_directory",
+          "search_files",
+        ]),
+      );
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("filesystem tools round-trip: write then read a file via the MCP stdio server", async () => {
+    harness = await startMailHarness();
+    const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), "tr-fs-rt-")));
+    try {
+      const model = fakeModel().respond(new AIMessage("ok"));
+      const worker = await LangGraphAgentWorker.createForTest({
+        model,
+        mcpUrl: harness.mcpUrl,
+        mcpToken: harness.mcpToken,
+        systemPrompt: "test",
+        agentsMdPath: "/does-not-exist",
+        filesystemRoots: [tmpRoot],
+      });
+      const tools = worker.toolsForTest();
+      const write = tools.find((t) => t.name === "write_file");
+      const read = tools.find((t) => t.name === "read_text_file");
+      if (!write || !read) throw new Error("missing fs tools");
+      const filepath = join(tmpRoot, "greeting.txt");
+      // The FS server returns `{ content: [{ type: "text", text }], structuredContent: { content } }`.
+      // When the LangChain MCP adapter sees a single text block + structuredContent,
+      // it hands back a content-block-shaped object `{ type: "text", text, structuredContent, ... }`
+      // from the tool's `invoke()` (no toolCallId in test → _formatToolOutput returns content directly).
+      // Extract the text via a narrow helper — avoids `any` while tolerating the shape.
+      const asText = (v: unknown): string => {
+        if (typeof v === "string") return v;
+        if (v && typeof v === "object" && "text" in v && typeof (v as { text: unknown }).text === "string") {
+          return (v as { text: string }).text;
+        }
+        return JSON.stringify(v);
+      };
+      const writeText = asText(await write.invoke({ path: filepath, content: "hello from mcp" }));
+      expect(writeText).not.toMatch(/error|fail/i);
+      expect(writeText).toContain("Successfully wrote");
+      expect(readFileSync(filepath, "utf8")).toBe("hello from mcp");
+      const readText = asText(await read.invoke({ path: filepath }));
+      expect(readText).toContain("hello from mcp");
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 
   it("on wake: appends a HumanMessage, invokes graph, emits final AI text via onText", async () => {
@@ -140,6 +232,7 @@ describe("LangGraphAgentWorker", () => {
       systemPrompt: "You are a test agent.",
       agentsMdPath: "/does-not-exist",
       onText: (t) => texts.push(t),
+      filesystemRoots: [sharedFsRoot],
     });
     await worker.handleWake({ type: "wake", events: ["mail"] });
     expect(texts).toEqual(["I have nothing to do this wake."]);
@@ -162,6 +255,7 @@ describe("LangGraphAgentWorker", () => {
       mcpToken: harness.mcpToken,
       systemPrompt: "test",
       agentsMdPath: "/does-not-exist",
+      filesystemRoots: [sharedFsRoot],
     });
     for (let i = 0; i < 41; i++) {
       await worker.handleWake({ type: "wake", events: ["mail"] });
@@ -194,6 +288,7 @@ describe("LangGraphAgentWorker", () => {
       mcpToken: harness.mcpToken,
       systemPrompt: "test",
       agentsMdPath: "/does-not-exist",
+      filesystemRoots: [sharedFsRoot],
     });
     for (let i = 0; i < TOOL_WAKES + PLAIN_WAKES; i += 1) {
       await worker.handleWake({ type: "wake", events: ["mail"] });
@@ -243,6 +338,7 @@ describe("LangGraphAgentWorker", () => {
       systemPrompt: "test",
       agentsMdPath: "/does-not-exist",
       onError: (e) => errs.push(e instanceof Error ? e.message : String(e)),
+      filesystemRoots: [sharedFsRoot],
     });
     await worker.handleWake({ type: "wake", events: ["mail"] });
     expect(errs).toEqual([expect.stringContaining("synthetic graph failure")]);

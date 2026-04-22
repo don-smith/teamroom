@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { HumanMessage, AIMessage, type BaseMessage } from "@langchain/core/messages";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
+import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
@@ -32,7 +33,15 @@ export interface LangGraphAgentWorkerOpts {
   agentsMdPath: string;
   onText?: (text: string) => void;
   onError?: (err: unknown) => void;
+  /**
+   * Allowed filesystem roots for the @modelcontextprotocol/server-filesystem
+   * stdio MCP child. Defaults to ["/codebase", "/store"] in production; tests
+   * inject a temp directory.
+   */
+  filesystemRoots?: readonly string[];
 }
+
+type McpTool = DynamicStructuredTool;
 
 type ReactAgent = ReturnType<typeof createReactAgent>;
 
@@ -40,6 +49,7 @@ export class LangGraphAgentWorker implements AgentWorker {
   private readonly opts: LangGraphAgentWorkerOpts;
   private readonly agent: ReactAgent;
   private readonly mcpClient: MultiServerMCPClient;
+  private readonly tools: McpTool[];
   private readonly toolNames: string[];
   private messages: BaseMessage[] = [];
 
@@ -47,12 +57,13 @@ export class LangGraphAgentWorker implements AgentWorker {
     opts: LangGraphAgentWorkerOpts,
     agent: ReactAgent,
     mcpClient: MultiServerMCPClient,
-    toolNames: string[],
+    tools: McpTool[],
   ) {
     this.opts = opts;
     this.agent = agent;
     this.mcpClient = mcpClient;
-    this.toolNames = toolNames;
+    this.tools = tools;
+    this.toolNames = tools.map((t) => t.name);
   }
 
   /** Production factory — reads env vars. Wires the real ChatOpenAI pointed at the daemon proxy. */
@@ -99,7 +110,14 @@ export class LangGraphAgentWorker implements AgentWorker {
   }
 
   private static async build(opts: LangGraphAgentWorkerOpts): Promise<LangGraphAgentWorker> {
+    const fsRoots = opts.filesystemRoots ?? ["/codebase", "/store"];
     const mcpClient = new MultiServerMCPClient({
+      // Disable the default prefixing behavior so tools come through with
+      // their native names (e.g., "mail.list", "read_text_file"). Prior
+      // production behavior relied on the runtime's inherited defaults; we
+      // pin explicitly now that two servers are in play.
+      prefixToolNameWithServerName: false,
+      additionalToolNamePrefix: "",
       mcpServers: {
         mail: {
           transport: "http",
@@ -107,10 +125,20 @@ export class LangGraphAgentWorker implements AgentWorker {
           headers: { "x-teamroom-mcp-token": opts.mcpToken },
           automaticSSEFallback: false,
         },
+        // Resolved relative to process.cwd(): /app in the container,
+        // the repo root in tests — node_modules/ sits at both locations.
+        filesystem: {
+          transport: "stdio",
+          command: "node",
+          args: [
+            "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+            ...fsRoots,
+          ],
+          stderr: "inherit",
+        },
       },
     });
     const tools = await mcpClient.getTools();
-    const toolNames = tools.map((t) => t.name);
 
     const systemPrompt = existsSync(opts.agentsMdPath)
       ? readFileSync(opts.agentsMdPath, "utf8")
@@ -122,7 +150,7 @@ export class LangGraphAgentWorker implements AgentWorker {
       prompt: systemPrompt,
     });
 
-    return new LangGraphAgentWorker(opts, agent, mcpClient, toolNames);
+    return new LangGraphAgentWorker(opts, agent, mcpClient, tools);
   }
 
   async handleWake(_wake: WakeEnvelope): Promise<void> {
@@ -185,6 +213,10 @@ export class LangGraphAgentWorker implements AgentWorker {
 
   toolNamesForTest(): string[] {
     return this.toolNames;
+  }
+  /** Test-only: exposes the discovered tools so tests can invoke them directly. */
+  toolsForTest(): ReadonlyArray<McpTool> {
+    return this.tools;
   }
   messageCountForTest(): number {
     return this.messages.length;
