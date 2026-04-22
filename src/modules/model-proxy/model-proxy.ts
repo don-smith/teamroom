@@ -47,7 +47,7 @@ export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProx
   }
   const modelProxy = new LocalModelProxy({
     registry: tokenRegistry,
-    adapters: adapters as Record<Provider, ProviderAdapter>,
+    adapters: adapters,
     logger: deps.logger,
   });
   const proxyInfo = await modelProxy.start();
