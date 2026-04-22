@@ -110,6 +110,10 @@ export class SessionTimerManager {
    * Used at daemon boot for persistent-lifecycle agents so their container
    * is already up when the first mail arrives. No-op if a session already
    * exists.
+   *
+   * Kept separate from the mail-driven path (`onMailDelivered`) because the
+   * two have different triggers and contracts: mail always writes a wake and
+   * arms the timer; boot-spawn does neither.
    */
   spawnIfAbsent(agentId: string): void {
     if (this.sessions.has(agentId)) return;
