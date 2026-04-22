@@ -86,7 +86,9 @@ describe("buildSpec", () => {
       codebasePath: null,
       genId: () => "trace-1",
     });
-    expect(spec.labels["teamroom-agent"]).toBe("true");
-    expect(spec.labels["teamroom-agent-id"]).toBe("alice");
+    expect(spec.labels).toBeDefined();
+    const labels = spec.labels!;
+    expect(labels["teamroom-agent"]).toBe("true");
+    expect(labels["teamroom-agent-id"]).toBe("alice");
   });
 });
