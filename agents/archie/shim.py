@@ -85,7 +85,12 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
             "headers": {"Authorization": f"Bearer {mcp_token}"},
         },
     })
-    mail_tools = await mcp_client.get_tools()
+    try:
+        mail_tools = await mcp_client.get_tools()
+    except Exception as err:
+        # Re-raise with the MCP URL in the message so operators can see what
+        # was unreachable. The original exception is chained via `from`.
+        raise RuntimeError(f"failed to connect to mail-MCP at {mcp_url}: {err!r}") from err
 
     model = make_model()
 
@@ -102,6 +107,9 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
 
 
 async def handle_wake(state: dict, checkpointer: AsyncSqliteSaver, envelope: dict) -> None:
+    # envelope is intentionally unused for M6 — the canned WAKE_PROMPT covers
+    # "check your inbox and act on whatever's there"; M6.1 or later may surface
+    # event hints (e.g., mail-thread id) into the prompt.
     # Build agent on first wake; cache in state dict for subsequent wakes.
     if state.get("agent") is None:
         print("[archie] first wake: connecting to MCP and building agent", file=sys.stderr)
@@ -123,6 +131,8 @@ async def handle_wake(state: dict, checkpointer: AsyncSqliteSaver, envelope: dic
         if getattr(message, "type", None) == "ai" and getattr(message, "content", None):
             print(f"[archie] {message.content}", file=sys.stderr)
             return
+    else:
+        print("[archie] wake finished with no AI message", file=sys.stderr)
 
 
 async def main() -> None:
