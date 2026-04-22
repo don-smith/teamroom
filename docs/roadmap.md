@@ -13,10 +13,11 @@
 | M4.5 | AI-native harness — channel architecture + composition refactor + MCP SDK retrofit | Shipped | 2026-04-22 | [As-built](as-built/2026-04-22-teamroom-m4.5.md) |
 | M5 | LangGraph agent runtime — studio-assistant on LangGraph + MCP filesystem | Shipped | 2026-04-22 | [As-built](as-built/2026-04-22-teamroom-m5.md) |
 | **M5.1** | **LangGraph filesystem/shell tooling — hand-rolled `run_shell` + `apk add ripgrep git`** | **Next** | — | Mini-milestone immediately following M5: gives the LangGraph agent a bash/git/rg capability surface the MCP filesystem server alone doesn't cover. Scoped to a single hand-rolled LangChain `tool()` with timeout + output cap + stdin-closed + cwd-pinned safety rails, plus two binaries added to the studio-assistant image. |
-| M6 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4), AI-native harness (M4.5), and the LangGraph runtime (M5). The "first real agent role" consideration (architect? historian? QA?) naturally lands here — memory substrate is the load-bearing dependency for a persistent agent role. |
-| M7 | Scheduling | Future | — | Originally M5. |
-| M8 | Evaluations | Future | — | Originally M6. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer — called out in M5 as-built §5 under known limitations. |
-| M9 | Team ceremonies + self-learning | Future | — | Originally M7. |
+| M6 | Multi-harness agent integrations — DeepAgents + Hermes | Future | — | Demonstrates Team Room's harness-agnostic premise: plug in externally-developed mature agent harnesses alongside our own Claude-Code + LangGraph agents. [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) is the LangChain family's opinionated agent with baked-in capabilities; [Hermes](https://hermes-agent.nousresearch.com/docs) is a recent independent harness (Nous Research). Unlocks mapping mature external harnesses onto team personas (see [Backlog §Agent personas](#agent-personas-and-multi-harness)). |
+| M7 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4), AI-native harness (M4.5), the LangGraph runtime (M5), and multi-harness integrations (M6). Memory substrate is the load-bearing dependency for durable agent personas — once it lands, personas can hold state across containers and the "architect has seen this codebase for weeks" type of role becomes real. |
+| M8 | Scheduling | Future | — | Originally M5 in `team-room-context §7`. |
+| M9 | Evaluations | Future | — | Originally M6 in `team-room-context §7`. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer — called out in M5 as-built §5 under known limitations. |
+| M10 | Team ceremonies + self-learning | Future | — | Originally M7 in `team-room-context §7`. |
 
 ## Why this file exists
 
@@ -55,8 +56,24 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 - **`ccAll` default on reply.** When a thread has multiple participants, `mail.reply` should default `ccAll: true` so secondary participants aren't silently dropped. Trigger: same milestone as cap-warning.
 - **CLI `cc` support.** The `teamroom chat` REPL has no way to set `cc` on a publish, even though the WebSocket protocol accepts `cc: string[]`. A slash-command or header-style syntax needed. Trigger: human-driven multi-party threads.
 - **System prompts for mail-aware agents.** Claude-assistant and other agents need system prompts that explicitly teach inbox-check → reply → peer-mail patterns. Content evolves with use; expect prompt iteration over several milestones.
-- **Model-size vs. tool-surface floor characterization.** Gemma-4-e4b (4B) couldn't reliably drive the 20-tool ReAct surface exposed to studio-assistant (7 mail + 13 filesystem); GPT-OSS-20b handled it cleanly. Somewhere between 4B and 20B there's a reliability floor we haven't characterized. Trigger: next time we add a small-model agent, or when evals (M8) land and we can measure this quantitatively.
+- **Model-size vs. tool-surface floor characterization.** Gemma-4-e4b (4B) couldn't reliably drive the 20-tool ReAct surface exposed to studio-assistant (7 mail + 13 filesystem); GPT-OSS-20b handled it cleanly. Somewhere between 4B and 20B there's a reliability floor we haven't characterized. Trigger: next time we add a small-model agent, or when evals (M9) land and we can measure this quantitatively.
 - **`WAKE_PROMPT` duplication in the in-process messages array.** Every wake pushes the same literal `HumanMessage(WAKE_PROMPT)`. After N wakes the array contains N identical directives. Not observed as a problem in M5 acceptance (GPT-OSS-20b), but a candidate cause if multi-turn small-model flows start failing. Fix candidates: per-wake trace id in the prompt, or fresh messages array per wake. Trigger: observed failure, or adding a smaller model.
+
+### Agent personas and multi-harness
+
+Team Room is premised on being harness-agnostic: different agent implementations (Claude Code, LangGraph, DeepAgents, Hermes, future) fill distinct team roles. Personas are the *what role* layer; harnesses are the *what implementation* layer. The two map many-to-many — a persona can be filled by any capable harness; a harness can fill multiple personas. Personas accrue identity (name, voice, skill set) over time.
+
+Named personas we've identified so far. Each is a slot to fill, not a build task on its own — they land as the surrounding substrate (memory, scheduling) enables them.
+
+- **Archie — the architect.** Holds and tracks the project's architecture, notices smells, suggests improvements over time. Candidate first real agent role; originally tabled during M4.5 retro reflection and preserved here once the multi-harness substrate became M6 and the memory substrate became M7. Likely harness candidates: DeepAgents or LangGraph.
+- **Pam — the product manager.**
+- **Dev — the developer.**
+- **Desi — the designer.**
+- **Doc — the QA / tester.**
+- **Eve — the eavesdropper.**
+- **Hisa — the historian.** Complements the as-built / retro practice; formalizing the memory-from-history role once M7 memory lands.
+
+Multi-harness triggers: M6 lands [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) + [Hermes](https://hermes-agent.nousresearch.com/docs) as the first external-harness proof. Subsequent harness additions are individual mini-milestones or follow-ons once the plug-in pattern is proven.
 
 ### Mail substrate evolution
 
@@ -78,7 +95,7 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 
 ### Future infrastructure
 
-- **Additional MCP servers (memory, scheduling).** M4 shipped mail MCP; M5 added filesystem MCP (in-container stdio child). Subsequent milestones (M6 memory, M7 scheduling) add their own MCP servers using the same patterns — either daemon-hosted HTTP (shared state) or per-container stdio (agent-local). Trigger: each respective milestone.
+- **Additional MCP servers (memory, scheduling).** M4 shipped mail MCP; M5 added filesystem MCP (in-container stdio child). Subsequent milestones (M7 memory, M8 scheduling) add their own MCP servers using the same patterns — either daemon-hosted HTTP (shared state) or per-container stdio (agent-local). Trigger: each respective milestone.
 - **Generic `openai-compat` provider.** After M5, `lm-studio` + `ollama` share `OpenAICompatAdapter`. A generic `openai-compat` provider absorbs any third concrete backend (Codex, hosted OpenAI, vLLM, self-hosted proxy). Trigger: third concrete backend forces the shape; `see_only_as_far_as_needed` bars premature extraction.
 - **`LM_STUDIO_API_TOKEN` optionality.** After M5's `OpenAICompatAdapter` with a `none` auth mode, `LM_STUDIO_API_TOKEN` is only meaningful when LM Studio is token-protected. `src/cli/serve.ts` still requires it. Trigger: onboarding friction, or anyone running LM Studio without the token gate.
 - **Mail-MCP / daemon coupling architectural review.** The mail-MCP HTTP server lives in-process with the daemon (same trust boundary). Running it as a separately-addressable surface (for multi-host deployment, or hosting mail without sessions) is unexplored. Trigger: a deployment scenario needing that separation, or a security review of the in-process trust boundary.

@@ -14,5 +14,4 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ## Open entries
 
-- **First real agent role to consider for Team Room — possibly architect.**
-  Surfaced during M4.5 retro reflection. Today the harness hosts only placeholder/test agents (`studio-assistant`, `claude-assistant`, `claude-researcher`). When deciding which real role to introduce first, the user keeps coming back to "architect" — an agent that holds and tracks the project's architecture, notices smells, suggests improvements over time. Alternative candidate: "doctor" / QA-tester. Less compelling than architect because the assistant + user already cover PM/priority and dev concerns, and the historian role is being filled by as-builts/retros — but the architect role isn't currently held by anyone. Destination: roadmap milestone scoping when M5 (LangGraph multi-agent-family runtime) lands and we have the substrate to give a non-Claude-family agent a real role.
+_(none — the M4.5-origin "first real agent role" entry rolled into `docs/roadmap.md#agent-personas-and-multi-harness` at M5 close, alongside six additional named personas and the multi-harness direction.)_
