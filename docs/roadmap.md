@@ -10,8 +10,8 @@
 | M2 | Model abstraction layer (multi-model credential proxy) | Shipped | 2026-04-19 | [As-built](as-built/2026-04-19-teamroom-m2.md) |
 | M3 | Team substrate (narrowed ship) | Shipped | 2026-04-20 | [As-built](as-built/2026-04-20-teamroom-m3.md) |
 | M4 | Agent mail — email on an event-bus backbone | Shipped | 2026-04-21 | [As-built](as-built/2026-04-21-teamroom-m4.md) |
-| M4.5 | AI-native harness — `chat` / `watch` / `inbox` | Shipped | 2026-04-21 | [As-built](as-built/) (pending write at M4.5 close) |
-| M5 | Multi-agent-family tooling — LangGraph studio + Codex agents | Future | — | Gives the harness non-Claude-only agent support before memory lands. |
+| M4.5 | AI-native harness — channel architecture + composition refactor + MCP SDK retrofit | Shipped | 2026-04-22 | [As-built](as-built/2026-04-22-teamroom-m4.5.md) |
+| **M5** | **Multi-agent-family tooling — LangGraph studio + Codex agents** | **Next** | — | Gives the harness non-Claude-only agent support before memory lands. M4.5 retro flagged size-check at scoping (one milestone per max session). |
 | M6 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4) and the tooling expansion (M5). |
 | M7 | Scheduling | Future | — | Originally M5. |
 | M8 | Evaluations | Future | — | Originally M6. |
