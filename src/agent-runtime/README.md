@@ -1,24 +1,22 @@
 # `agent-runtime/` — what runs inside each container
 
-The shim that reads a single stdin JSON envelope, loads conversation history from `/store/conversation.jsonl`, calls an LLM endpoint via an injected `LlmClient`, streams `type: "reply"` events on stdout, appends the new messages to the conversation file, and exits. `runtime.ts` holds the pure turn function (DI-testable). `main.ts` wires the real SDK — picking either the OpenAI-compatible client (LM Studio) or `AnthropicLlmClient` based on `TEAMROOM_PROVIDER`. `session-store.ts` owns the conversation file.
+The module that drives one worker per agent container. An `AgentWorker` interface defines the shape (`handleWake(envelope)`); a stdin loop in `main.ts` reads wake envelopes one per line and dispatches each to `worker.handleWake()`. Two worker implementations ship today: `AnthropicAgentWorker` (wraps `AnthropicLlmClient` driving `@anthropic-ai/claude-agent-sdk`), and `LangGraphAgentWorker` (a prebuilt `createReactAgent` over `@langchain/mcp-adapters`, holding a bounded in-process `BaseMessage[]` capped at 40 for within-container context persistence).
 
-**Runs inside each agent container**, not on the host. Baked into each agent image at build time via the agent's `Dockerfile` (`COPY dist/agent-runtime /app/agent-runtime`). The daemon treats this code as opaque beyond the stdin/stdout JSONL contract in spec §9 — this module's implementation details never leak to the host side.
-
-M1 deliberately uses a minimal runtime; **LangGraph is the intended long-term replacement** (see spec §9.1 and the `project_teamroom_langgraph_direction` memory entry). The container contract is language-agnostic, so a future agent could use a Python-based runtime instead.
+**Runs inside each agent container**, not on the host. Baked into each agent image at build time via the agent's `Dockerfile` (`COPY dist/agent-runtime /app/agent-runtime`). The daemon treats this code as opaque beyond the stdin/stdout JSONL contract in spec §9 — this module's implementation details never leak to the host side. The container contract is language-agnostic, so a future agent could use a Python-based runtime instead.
 
 ## Files
 
-- `main.ts` — container entry. Reads stdin once, builds an `LlmClient` via a `TEAMROOM_PROVIDER`-driven factory (`anthropic` → `AnthropicLlmClient`, `lm-studio` → inline OpenAI-compatible client), invokes `runTurn`, exits. Reads `TEAMROOM_MODEL_BASE_URL`, `TEAMROOM_MODEL_API_TOKEN`, `TEAMROOM_MODEL` from env. Unknown provider → throws with the offending value.
-- `anthropic-llm-client.ts` — `AnthropicLlmClient` wrapping `@anthropic-ai/sdk`. Mode-agnostic: the daemon-side proxy handles OAuth-vs-API-key; this client just sends to whatever `baseURL` it's pointed at with whatever bearer token it's given.
-- `runtime.ts` — `runTurn(deps)`: pure function with `LlmClient` interface; the testable core.
-- `session-store.ts` — `loadConversation` / `appendMessage` for `conversation.jsonl`.
-- `runtime.test.ts`, `session-store.test.ts`, `anthropic-llm-client.test.ts` — co-located unit tests using in-memory fakes.
+- `main.ts` — container entry. Reads stdin wake envelopes one per line, delegates to `worker.handleWake(envelope)`. Errors per-envelope are logged to stderr; the loop continues.
+- `worker.ts` — `AgentWorker` interface + `WakeEnvelope` type + `buildWorker()` factory keyed on `TEAMROOM_PROVIDER`. Anthropic → `AnthropicAgentWorker`; lm-studio / ollama → `LangGraphAgentWorker`.
+- `anthropic-worker.ts` — wraps `AnthropicLlmClient`; each wake reads AGENTS.md as system prompt, sends a canned `WAKE_PROMPT`, pipes LLM text to stderr. Claude-agent-sdk handles the tool-call loop internally.
+- `anthropic-llm-client.ts` — SDK shim around `@anthropic-ai/claude-agent-sdk`. Proxied via `ANTHROPIC_BASE_URL`; session resume via the sidecar under `/store`.
+- `langgraph-worker.ts` — wraps LangGraph's prebuilt `createReactAgent` + `@langchain/mcp-adapters` MCP client pointed at the daemon's mail MCP. Holds a bounded `messages: BaseMessage[]` (cap 40, trimmed at HumanMessage boundaries) across wakes for within-container context persistence. Uses `ChatOpenAI` pointed at the daemon proxy URL (OpenAI-compat, routes to LM Studio or Ollama per the proxy adapter). `recursionLimit: 10`, `maxRetries: 2`.
 
 ## Related
 
 - **Parent:** [src/README.md](../README.md)
-- **Uses:** `openai` and `@anthropic-ai/sdk` npm packages, Node `fs` (for the writable `/store` mount and `/AGENTS.md`).
+- **Uses:** `@anthropic-ai/claude-agent-sdk`, `@langchain/langgraph`, `@langchain/core`, `@langchain/openai`, `@langchain/mcp-adapters` npm packages, Node `fs` (for the writable `/store` mount and `/AGENTS.md`).
 - **Used by:** the container `ENTRYPOINT` in each agent's `Dockerfile`. Not imported by any other `src/` module — the process boundary is strict.
 - **Host-side counterpart:** [agent-config/README.md](../agent-config/README.md) — the loader that prepares what this runtime needs at spawn time.
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 container contract, §3 language-agnostic contract decision.
-- **Memory:** `project_teamroom_langgraph_direction` — intended M4+ replacement framework.
+- **Memory:** `project_teamroom_langgraph_direction` — LangGraph is now the present shape for non-Anthropic workers, not a future direction.
