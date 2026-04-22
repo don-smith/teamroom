@@ -206,6 +206,7 @@ export async function composeIntegrationHarness(opts: HarnessOpts): Promise<Inte
       labels: { "teamroom-agent": "true", "teamroom-agent-id": agentId },
     }),
     genToken: () => `tok-${++seq}`,
+    agentConfigs: new Map(),
   });
 
   // --- Channels (chat WebSocket) + Mail (query WebSocket)

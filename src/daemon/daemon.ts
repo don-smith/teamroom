@@ -150,6 +150,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
       genId,
     }),
     genToken: () => randomUUID(),
+    agentConfigs,
   });
   resolveMcpToken = (t) => sessionMgmt.sessionManager.resolveToken(t);
 
