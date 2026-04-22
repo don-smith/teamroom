@@ -22,7 +22,18 @@ const WAKE_PROMPT =
   "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
 
 const MAX_MESSAGES = 40;
-const RECURSION_LIMIT = 10;
+/**
+ * Max ReAct graph steps per wake. Each model decision is one step; each tool
+ * response is another. A clean chat-via-mail flow with one filesystem tool
+ * takes ~9 steps (mail.list → mail.get → fs-tool → mail.reply → AI final,
+ * with an interleaved model step after each tool). Small local models
+ * (Gemma-4, small Qwen) typically need 3-5× the headroom of frontier models
+ * because they fumble tool selection. 50 matches LangGraph's own example
+ * default and leaves room for a few fumbles without capping a real flow.
+ * Observed during M5 acceptance: 10 was too tight — a simple "summarise
+ * README" flow hit the cap and the graph returned a WAKE_PROMPT echo.
+ */
+const RECURSION_LIMIT = 50;
 const MAX_RETRIES = 2;
 
 export interface LangGraphAgentWorkerOpts {
