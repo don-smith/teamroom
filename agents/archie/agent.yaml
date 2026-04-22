@@ -1,0 +1,6 @@
+name: archie
+provider: deepagents
+model: claude-opus-4-7
+image_tag: teamroom-agent-archie:latest
+lifecycle: persistent
+subscriptions: []
