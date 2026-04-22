@@ -6,6 +6,7 @@ import type { ContainerRunner } from "../../container/container-runner.js";
 import type { DockerRunSpec } from "../../container/docker-command.js";
 import type { Messaging } from "../messaging/messaging.js";
 import type { Logger } from "../../logger/logger.js";
+import type { AgentConfig } from "../../agent-config/agent-config.js";
 
 export interface SessionManagement {
   sessionManager: SessionTimerManager;
@@ -20,9 +21,19 @@ export interface SessionManagementDeps {
   timerFactory: TimerFactory;
   spec: (agentId: string, mcpToken: string) => DockerRunSpec;
   genToken: () => string;
+  /**
+   * Agent configurations keyed by agent id. Used at init to spawn any
+   * persistent-lifecycle agents and to provide `lifecycleFor` lookups to
+   * the session-manager.
+   */
+  agentConfigs: Map<string, AgentConfig>;
 }
 
 export function composeSessionManagement(deps: SessionManagementDeps): SessionManagement {
+  const lifecycleFor = (agentId: string): "session" | "persistent" => {
+    return deps.agentConfigs.get(agentId)?.lifecycle ?? "session";
+  };
+
   const sessionManager = new SessionTimerManager({
     runner: deps.runner,
     idleMinutes: deps.idleMinutes,
@@ -30,6 +41,7 @@ export function composeSessionManagement(deps: SessionManagementDeps): SessionMa
     spec: deps.spec,
     genToken: deps.genToken,
     logger: deps.logger,
+    lifecycleFor,
   });
 
   // The three bus subscriptions that make M4 actually flow.
@@ -44,6 +56,16 @@ export function composeSessionManagement(deps: SessionManagementDeps): SessionMa
   deps.messaging.eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
     sessionManager.onAgentActivity(p.agentId);
   });
+
+  // Boot-time: bring persistent agents up immediately so they are ready
+  // to receive mail and so Docker's "container is running" observability
+  // reflects the declared team composition.
+  for (const [agentId, cfg] of deps.agentConfigs) {
+    if (cfg.lifecycle === "persistent") {
+      deps.logger.info("session.persistent_boot_spawn", { agentId });
+      sessionManager.spawnIfAbsent(agentId);
+    }
+  }
 
   return {
     sessionManager,
