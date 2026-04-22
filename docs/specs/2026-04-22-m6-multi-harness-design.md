@@ -91,17 +91,19 @@ Enum: `"session" | "persistent"`. Default: `"session"` (all existing agents unch
 
 `persistent` behavior:
 
-- Container spawns once at daemon boot.
-- Stdin pipe kept open for the daemon's lifetime.
+- Container spawns once at daemon boot (see §5.6 — compose-layer init).
+- Stdin pipe kept open for the container's lifetime.
 - No idle timeout (the per-agent idle-timeout backlog item is effectively folded in: `persistent` means "idle-timeout = ∞").
-- On unexpected exit, Docker's `--restart=unless-stopped` respawns the container. The daemon re-establishes the stdin pipe on restart.
-- On daemon shutdown, containers are stopped cleanly.
+- On unexpected container exit, the session-manager's `onExit` handler fires and the manager respawns a fresh container (fresh MCP token, fresh DockerRunSpec). A short backoff (1s initial, doubling to a cap of 30s) prevents tight crash loops.
+- On daemon shutdown (`SessionTimerManager.shutdown()` followed by `killAll()`), persistent containers are stopped cleanly and NOT respawned. A `isShuttingDown` flag gates the respawn path.
 
-Location: `src/modules/session-management/` branches on `cfg.lifecycle`. The shape of this branch — whether via a second concrete session strategy or a flag inside the existing one — is a plan-time call.
+Location: `src/session-manager/session-manager.ts` grows two concepts — a `spawnIfAbsent(agentId)` method for boot-time spawning, and a `lifecycleFor: (agentId) => "session" | "persistent"` dep that `armTimer` and `removeSession` both consult.
 
-### 5.3 Docker restart policy
+### 5.3 Docker lifecycle flags — no change this milestone
 
-`src/container/docker-command.ts` adds `--restart=unless-stopped` to the `docker run` args when `spec.restartPolicy === "unless-stopped"`. The `DockerRunSpec` type grows a `restartPolicy` field. Unit tests in `docker-command.test.ts` cover both branches.
+No Docker `--restart` flag is added. The daemon is always watching via `RunningContainer.onExit`; daemon-managed respawn (§5.2) gives the "auto-restart" property without the `--rm` + `--restart` incompatibility and without the stdin-reattach problem Docker's `--restart` would introduce. Existing `docker run --rm -i` args work for both `session` and `persistent` lifecycles unchanged.
+
+Revisit Docker-level restart policy only if daemon-watching proves insufficient (e.g., the daemon itself crashes frequently and persistent agents should survive its outages). That's a future-milestone concern.
 
 ### 5.4 Provider enum / shape
 
@@ -277,7 +279,7 @@ Manual scenarios, run live at milestone close against real LM Studio / Anthropic
 ### S4 — Persistent-container resilience
 
 - `teamroom serve` restarts cleanly. Both persistent containers come back up and are reachable via mail after restart.
-- If Docker's restart policy fires mid-acceptance (e.g., the harness crashes), the container auto-recovers and mail continues flowing.
+- If a harness crashes mid-acceptance, the session-manager's `onExit` handler respawns the container (§5.2) and mail continues flowing.
 
 ### Git — best-effort, not gated
 
@@ -285,7 +287,7 @@ Both harnesses ship shell + git in their images. Whether `/codebase` is a git re
 
 ## 12. Execution order
 
-1. **Substrate changes (§5).** Small, shared; one PR-sized batch. Lifecycle field + session-manager branch + Docker restart policy + provider-enum extension.
+1. **Substrate changes (§5).** Small, shared; one PR-sized batch. Lifecycle field + session-manager branch (daemon-managed respawn) + provider-enum extension.
 2. **Archie integration (§6.1).** Lower-risk first: LangChain-ecosystem, closest to studio-assistant's plumbing.
 3. **First draft of the runbook (§9).** Written from the Archie experience; tabled items folded in.
 4. **Dev integration (§6.2).** Stresses the runbook; refines it where it falls short.
