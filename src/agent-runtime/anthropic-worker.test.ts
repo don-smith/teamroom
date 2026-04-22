@@ -2,14 +2,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { processWake, type LlmClient } from "./runtime.js";
+import { AnthropicAgentWorker } from "./anthropic-worker.js";
+import type { LlmClient } from "./anthropic-llm-client.js";
 
-describe("processWake", () => {
+describe("AnthropicAgentWorker", () => {
   let dir: string;
   let agentsMd: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "tr-runtime-"));
+    dir = mkdtempSync(join(tmpdir(), "tr-anthropic-worker-"));
     agentsMd = join(dir, "AGENTS.md");
     writeFileSync(agentsMd, "You are claude-assistant. Triage your inbox.");
   });
@@ -25,24 +26,22 @@ describe("processWake", () => {
       },
     };
 
-    await processWake({
-      wake: { type: "wake", events: ["mail"] },
+    const worker = new AnthropicAgentWorker({
       client,
       model: "claude-opus-4-7",
       agentsMdPath: agentsMd,
     });
+    await worker.handleWake({ type: "wake", events: ["mail"] });
 
     expect(calls).toHaveLength(1);
     expect(calls[0]!.system).toContain("claude-assistant");
     expect(calls[0]!.model).toBe("claude-opus-4-7");
-    // Messages carry the canned wake prompt — the LLM's job is to call
-    // mail.* MCP tools based on what's in its inbox.
     expect(calls[0]!.messages).toEqual([
       { role: "user", content: expect.stringContaining("wake") },
     ]);
   });
 
-  it("does not emit {type:\"reply\"} (or any stdout envelope) for LLM text output", async () => {
+  it('does not emit {type:"reply"} (or any stdout envelope) for LLM text', async () => {
     const client: LlmClient = {
       async createMessage() {
         return { text: "I looked at my inbox, nothing actionable." };
@@ -55,13 +54,13 @@ describe("processWake", () => {
       return true;
     }) as typeof process.stdout.write;
 
+    const worker = new AnthropicAgentWorker({
+      client,
+      model: "m",
+      agentsMdPath: agentsMd,
+    });
     try {
-      await processWake({
-        wake: { type: "wake", events: ["mail"] },
-        client,
-        model: "m",
-        agentsMdPath: agentsMd,
-      });
+      await worker.handleWake({ type: "wake", events: ["mail"] });
     } finally {
       process.stdout.write = originalWrite;
     }
@@ -78,13 +77,13 @@ describe("processWake", () => {
       },
     };
     const texts: string[] = [];
-    await processWake({
-      wake: { type: "wake", events: ["mail"] },
+    const worker = new AnthropicAgentWorker({
       client,
       model: "m",
       agentsMdPath: agentsMd,
       onText: (t) => texts.push(t),
     });
+    await worker.handleWake({ type: "wake", events: ["mail"] });
     expect(texts).toEqual(["ok, replied to sender"]);
   });
 
@@ -97,12 +96,8 @@ describe("processWake", () => {
         return { text: "" };
       },
     };
-    await processWake({
-      wake: { type: "wake", events: ["mail"] },
-      client,
-      model: "m",
-      agentsMdPath: agentsMd,
-    });
+    const worker = new AnthropicAgentWorker({ client, model: "m", agentsMdPath: agentsMd });
+    await worker.handleWake({ type: "wake", events: ["mail"] });
     expect(captured.length).toBeGreaterThan(0);
     expect(captured).toMatch(/mail/i);
   });
@@ -115,13 +110,9 @@ describe("processWake", () => {
         return { text: "" };
       },
     };
+    const worker = new AnthropicAgentWorker({ client, model: "m", agentsMdPath: agentsMd });
     for (let i = 0; i < 3; i++) {
-      await processWake({
-        wake: { type: "wake", events: ["mail"] },
-        client,
-        model: "m",
-        agentsMdPath: agentsMd,
-      });
+      await worker.handleWake({ type: "wake", events: ["mail"] });
     }
     expect(seen).toBe(3);
   });

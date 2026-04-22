@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AnthropicLlmClient } from "./anthropic-llm-client.js";
-import type { LlmClient } from "./runtime.js";
+import type { LlmClient } from "./anthropic-llm-client.js";
 
 // The full behavior of this client is exercised by
 // tests/integration/anthropic-oauth-real.test.ts, which runs the actual

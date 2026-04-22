@@ -1,7 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { query, type McpServerConfig, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { LlmClient, LlmCreateArgs, LlmCreateResult } from "./runtime.js";
+
+export type ConversationRole = "user" | "assistant";
+
+export interface ConversationMessage {
+  role: ConversationRole;
+  content: string;
+}
+
+export interface LlmCreateArgs {
+  model: string;
+  system: string;
+  messages: ConversationMessage[];
+}
+
+export interface LlmCreateResult {
+  text: string;
+}
+
+export interface LlmClient {
+  createMessage(args: LlmCreateArgs): Promise<LlmCreateResult>;
+}
 
 /**
  * Anthropic LLM client that runs INSIDE the agent container, talking to
