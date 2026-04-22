@@ -120,7 +120,7 @@ Path: `agents/archie/`.
 | File | Purpose |
 |---|---|
 | `agent.yaml` | `name: archie`, `provider: deepagents`, `model: <plan>`, `image_tag: teamroom-agent-archie:latest`, `lifecycle: persistent`. |
-| `Dockerfile` | Python base — highest version DeepAgents supports; target **3.13** unless DeepAgents docs indicate otherwise at plan time. Debian-slim over Alpine (MCP stdio child processes + `npx` need glibc). Installs `deepagents`, `langchain-mcp-adapters`, a LangGraph checkpointer backend (SQLite). |
+| `Dockerfile` | Python base — highest version DeepAgents supports; target **3.13** unless DeepAgents docs indicate otherwise at plan time. Debian-slim over Alpine (MCP stdio child processes + `npx` need glibc). `COPY`s DeepAgents source from `vendor/deepagents/` (§6.3) and installs from source; adds `langchain-mcp-adapters` and a LangGraph checkpointer backend (SQLite). |
 | `shim.py` | Container entrypoint. Reads stdin wake envelopes. On each wake: calls `create_deep_agent(tools=..., system_prompt=...).invoke({messages: [...]}, config={"configurable": {"thread_id": "<mail-thread>"}})` with a LangGraph SQLite checkpointer backing per-mail-thread persistence. Pipes text/errors to stderr. |
 | `AGENTS.md` | Archie's persona (architect): voice, focus areas, what he notices, how he reports findings. **Pre-claimed persona, not fully onboarded** — voice content is minimum-viable, not the artifact that will eventually live here. |
 | `store/.gitkeep` | Per-agent persistent scratch. Holds the LangGraph checkpointer DB plus any DeepAgents memory-store artifacts. |
@@ -136,7 +136,7 @@ Path: `agents/dev/`.
 | File | Purpose |
 |---|---|
 | `agent.yaml` | `name: dev`, `provider: hermes`, `model: <plan>`, `image_tag: teamroom-agent-dev:latest`, `lifecycle: persistent`. |
-| `Dockerfile` | Extends or mirrors Nous's official Dockerfile — Debian 13.4, Python 3.13, Playwright, Chromium, ripgrep, ffmpeg, non-root `hermes` user. Adds our `shim.py` and any MCP-client-side Python deps not already bundled by Hermes. |
+| `Dockerfile` | Builds from the vendored Hermes source at `vendor/hermes-agent/` (§6.3) — either extending the upstream Dockerfile (Debian 13.4, Python 3.13, Playwright, Chromium, ripgrep, ffmpeg, non-root `hermes` user) or building fresh from source. Choice is a plan-time call (§14). Adds our `shim.py` and any MCP-client-side Python deps not already bundled by Hermes. |
 | `shim.py` | Container entrypoint. Reads stdin wake envelopes. Embeds `AIAgent` directly (`from run_agent import AIAgent`), pushes each wake as a conversation tick. Source read during plan to confirm API shape; fallback is Hermes's ACP stdio adapter with a separate JSON-RPC pipe. |
 | `config.yaml` | Preseeded `~/.hermes/config.yaml` with `mcp_servers.teamroom_mail` (HTTP transport, pointed at `TEAMROOM_MCP_URL`, bearer `TEAMROOM_MCP_TOKEN`), `terminal.backend: local`, `terminal.cwd: /codebase`, and `model.provider` routed to the Team Room proxy. |
 | `SOUL.md` | Dev's persona (developer): voice, focus areas, code-quality stance. **Pre-claimed persona, not fully onboarded.** Hermes's slot-1 system-prompt file. |
@@ -148,6 +148,53 @@ Path: `agents/dev/`.
 **Codebase.** `terminal.backend: local`, `terminal.cwd: /codebase`. The Hermes `terminal.backend: docker` option is explicitly NOT used — Dev is already inside the Team Room container; nesting a Docker-backed terminal inside would be path-translation hell and defeats the purpose of the single mount.
 
 **Cold-start.** Hermes's image is heavy (Playwright + Chromium + ffmpeg). Persistent lifecycle amortizes this across the daemon's uptime, making the boot cost a one-time hit per daemon start — exactly the case the `persistent` lifecycle is designed for.
+
+### 6.3 Source tracking (shared across both agents)
+
+Both harnesses are vendored as **git submodules** at `vendor/<harness>/`, tracked directly against their upstream repositories. No forks — we revisit if a concrete need to diverge arrives.
+
+**Layout:**
+
+```
+vendor/
+├── deepagents/        ← submodule → github.com/langchain-ai/deepagents
+└── hermes-agent/      ← submodule → github.com/NousResearch/hermes-agent
+```
+
+**Dockerfile pattern.** Each agent's Dockerfile `COPY`s its harness source from the corresponding vendored path and installs from source. Reproducibility comes from the submodule's pinned SHA, not from external package-version resolution.
+
+**Why submodules over published packages.** Three reasons:
+
+1. **Browseability during plan execution.** §14 explicitly calls for reading Hermes's `run_agent.py` to confirm the `AIAgent` library-embed shape; having it under `vendor/hermes-agent/` makes grep / IDE navigation native to this repo.
+2. **Reproducibility + offline-tolerant builds.** Submodule SHA pins exact source; Dockerfile `COPY` doesn't require network at build time.
+3. **Asymmetry between harnesses.** DeepAgents has a clean PyPI story; Hermes's install path is a `curl | bash` script. Submodules normalize the two so the runbook has one rule.
+
+**Bump workflow.** Intentionally manual and explicit:
+
+```bash
+cd vendor/<harness>
+git fetch
+git checkout <tag-or-sha>
+cd ../..
+git add vendor/<harness>
+git commit -m "chore(vendor): bump <harness> to <tag>"
+```
+
+Each bump is its own commit, surfacing intent (bug-fix vs minor feature vs breaking change) and making rollback trivial. Cadence is owner-driven, not automatic.
+
+**Onboarding friction.** First-time contributors need one extra step:
+
+```bash
+git submodule update --init --recursive    # or: git clone --recurse-submodules ...
+```
+
+`README.md` gets a note. The new `docs/runbooks/onboarding-an-agent-harness.md` covers the submodule pattern as part of the six-item contract (either as a new item or folded into the Dockerfile item — plan-time call).
+
+**Switching to a fork later.** If we identify a need to diverge, the switch is a single-line remote change (`git remote set-url origin <fork-url>`) and a new push. No re-architect. Deferred until the need arrives.
+
+**Reflection loop.** Submodules are not the user's normal working style — adopted here because they fit this scenario (external harnesses we want pinned, browseable, and bump-controlled). Friction gets captured via the tabled-items workflow (§9.3) and reflected on at M6 retro; we may discover a better pattern and switch in a later milestone.
+
+**Future harnesses.** This layout also answers the next-harness question (roadmap backlog: "Subsequent harness additions are individual mini-milestones"): each new harness adds its own `vendor/<name>/` submodule following the same pattern.
 
 ## 7. Model credential routing
 
@@ -265,6 +312,8 @@ Deliberately deferred from spec to plan — each is small, empirical, and easier
 4. **Provider enum extension vs broader refactor.** Inspect the code; decide.
 5. **Whether to add a minimal shell adapter for Archie.** Needed only if S1 requires shell/git for Archie specifically; otherwise DeepAgents FS tools suffice for M6.
 6. **Session-manager branch shape.** Concrete second session strategy or flag inside the existing one. Code-inspection call during planning.
+7. **Exact install commands per harness** (§6.3). `pip install .`, `pip install -e .`, `pip install /path/`, or harness-specific (e.g., Hermes's `uv`-based install). Driven by what each harness's own packaging supports.
+8. **Dev image — extend upstream Dockerfile or build fresh from source?** Extending inherits Nous's non-root user, `/opt/data` volume, `ENTRYPOINT` conventions. Building fresh from `vendor/hermes-agent/` is cleaner but duplicates their setup work. Decision at plan time after inspecting the upstream Dockerfile.
 
 ## 15. Related
 
