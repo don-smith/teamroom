@@ -30,7 +30,7 @@ const MAIL_TOOL_DESCRIPTORS = [
   {
     name: "mail.list",
     description:
-      "List your inbox. Filter by unread_only, threadId, includeArchived, and limit.",
+      "List your inbox. Filter by unreadOnly, threadId, includeArchived, and limit.",
     inputSchema: {
       type: "object",
       properties: {

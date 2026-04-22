@@ -16,7 +16,7 @@ const DEFAULT_SYSTEM_PROMPT =
   "You are an agent running inside the Team Room harness. On wake, check your inbox via the mail.* MCP tools and respond to any unread mail. Reply in-thread with mail.reply; start fresh threads with mail.send.";
 
 const WAKE_PROMPT =
-  "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unread_only=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+  "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
 
 export interface AnthropicAgentWorkerOpts {
   client: LlmClient;
