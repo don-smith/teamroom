@@ -204,7 +204,9 @@ describe("LangGraphAgentWorker", () => {
     // No filesystem tools — the server was skipped
     expect(toolNames).not.toEqual(expect.arrayContaining(["read_text_file"]));
     expect(toolNames).not.toEqual(expect.arrayContaining(["write_file"]));
-    // Operator visibility: the skip was reported
+    // Operator visibility: the skip was reported with a [boot] prefix so it
+    // doesn't read as an in-turn graph exception.
+    expect(errs.some((e) => e.startsWith("[boot]"))).toBe(true);
     expect(errs.some((e) => e.includes("filesystem MCP roots not present"))).toBe(true);
     expect(errs.some((e) => e.includes("/definitely-not-a-real-path-xyz"))).toBe(true);
   });

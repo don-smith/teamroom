@@ -4,7 +4,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { MultiServerMCPClient, type Connection } from "@langchain/mcp-adapters";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
 
 /**
@@ -121,14 +121,17 @@ export class LangGraphAgentWorker implements AgentWorker {
     const fsRoots = requestedRoots.filter((r) => existsSync(r));
     const skippedRoots = requestedRoots.filter((r) => !existsSync(r));
     if (skippedRoots.length > 0 && opts.onError) {
+      // Prefix with [boot] so operators tailing stderr (which also carries
+      // runtime [graph-error] lines via onError) can distinguish boot-time
+      // soft warnings from in-turn graph exceptions.
       opts.onError(
         new Error(
-          `filesystem MCP roots not present, skipping: ${skippedRoots.join(", ")}`,
+          `[boot] filesystem MCP roots not present, skipping: ${skippedRoots.join(", ")}`,
         ),
       );
     }
 
-    const mcpServers: Record<string, unknown> = {
+    const mcpServers: Record<string, Connection> = {
       mail: {
         transport: "http",
         url: opts.mcpUrl,
@@ -137,8 +140,10 @@ export class LangGraphAgentWorker implements AgentWorker {
       },
     };
     if (fsRoots.length > 0) {
-      // Resolved relative to process.cwd(): /app in the container,
-      // the repo root in tests — node_modules/ sits at both locations.
+      // `command` is resolved relative to process.cwd():
+      //   - /app in the container (Dockerfile sets WORKDIR /app; npm ci installs /app/node_modules)
+      //   - the repo root in tests (vitest runs from there; node_modules sits there too)
+      // Don't "improve" this to an absolute path without re-auditing both environments.
       mcpServers.filesystem = {
         transport: "stdio",
         command: "node",
@@ -157,7 +162,7 @@ export class LangGraphAgentWorker implements AgentWorker {
       // pin explicitly now that two servers are in play.
       prefixToolNameWithServerName: false,
       additionalToolNamePrefix: "",
-      mcpServers: mcpServers as never,
+      mcpServers,
     });
     const tools = await mcpClient.getTools();
 
