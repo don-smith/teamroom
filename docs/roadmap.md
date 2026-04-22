@@ -29,7 +29,7 @@ At every milestone close:
 - Mark the completed milestone's status (Shipped) and link its as-built.
 - Re-examine the "Future" order in light of what the milestone taught us.
 - If the order changes, note why (a one-liner in the rationale column is enough; deeper rationale goes in the milestone's retro).
-- Roll outstanding items from the closing milestone's followup file into the Backlog below; delete the followup file (git history preserves it).
+- Process [`docs/tabled.md`](tabled.md): outstanding items worth keeping roll into the Backlog below; completed/obsolete items are dropped; the file ends the milestone empty (or near-empty).
 
 ## Backlog
 

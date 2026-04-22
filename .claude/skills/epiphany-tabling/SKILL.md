@@ -1,13 +1,15 @@
 ---
 name: epiphany-tabling
-description: Use when an unexpected realization, pattern, or fork in the road surfaces mid-task — table it to docs/tabled.md instead of derailing the current work
+description: Use when an unexpected realization, pattern, follow-up item, or fork in the road surfaces mid-task — table it to docs/tabled.md instead of derailing the current work
 ---
 
 # Epiphany Tabling
 
 ## Overview
 
-When something unexpected surfaces mid-work — a realization, a fork in the road, a pattern we almost missed — we do not stop and redesign. We **table it**: add a short entry to `docs/tabled.md` with enough context to reconstruct later, then keep going.
+When something unexpected surfaces mid-work — a realization, a fork in the road, a follow-up item, a pattern we almost missed — we do not stop and redesign. We **table it**: add a short entry to `docs/tabled.md` with enough context to reconstruct later, then keep going.
+
+`docs/tabled.md` is the single working-memory location for both epiphanies and tabled follow-up work. (Per-milestone followup files were retired at M4.5 close in favor of this unified location.)
 
 **Announce at start:** "I'm using the epiphany-tabling skill to table `<topic>` — will process it at the next checkpoint."
 
@@ -51,9 +53,10 @@ Tabled entries are processed at:
 
 - An **end-of-artifact checkpoint** (after an approved spec, plan, or major commit set).
 - A **milestone retro** (processed alongside keep-doing / stop-or-change).
+- A **milestone close** — outstanding items worth keeping roll into [`docs/roadmap.md#backlog`](../../docs/roadmap.md#backlog); completed/obsolete items are dropped. The file ends each milestone empty (or near-empty).
 - **Ad-hoc**, if the working file grows past a screen of content — that is a signal to process, not to let it sprawl.
 
-Each entry is processed into its probable destination (spec amendment, runbook, skill, memory entry, as-built adaptation, or conscious drop) and then **removed** from `docs/tabled.md`. `tabled.md` stays small; entries arrive, get processed, and leave.
+Each entry is processed into its probable destination (roadmap Backlog, spec amendment, runbook, skill, memory entry, as-built adaptation, or conscious drop) and then **removed** from `docs/tabled.md`. `tabled.md` stays small; entries arrive, get processed, and leave.
 
 ## Related practices
 

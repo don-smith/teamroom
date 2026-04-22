@@ -1,8 +1,12 @@
 # Tabled — working-memory scratch pad
 
-This file is always in place. Add an epiphany as a short bullet with enough context to reconstruct later; remove it once it has been processed (either acted on, rolled into another document, or consciously dropped). Keep this file small. If it grows past a screen of content, that's a signal to process, not to let it sprawl.
+This file is the single working-memory location for anything noticed mid-task that we don't want to chase right now: epiphanies, follow-up items, design questions, technical-debt observations, ideas for later. Add an entry as a short bullet with enough context to reconstruct cold; remove it once it's processed (acted on, rolled into another document, or consciously dropped).
 
-Format for each entry: a one-line title, a 2–4 line description, and (when known) where its next destination probably is (spec, runbook, skill, memory, retro, drop).
+Keep this file small. If it grows past a screen of content, that's a signal to process, not to let it sprawl.
+
+**Format for each entry:** a one-line title, a 2–4 line description, and (when known) where its next destination probably is — `docs/roadmap.md#backlog` is the most common destination at milestone close for items still relevant; other destinations include spec, runbook, skill, memory, retro, or drop.
+
+**Milestone-close processing:** at the end of each milestone, sweep this file. Outstanding items worth keeping roll into [`docs/roadmap.md#backlog`](roadmap.md#backlog); completed/obsolete items are dropped. The file ends each milestone empty (or near-empty).
 
 Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
@@ -10,4 +14,4 @@ Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
 
 ## Open entries
 
-*(none — last cleared at M3 close, 2026-04-20. Both prior entries (runtime subscription changes; M3 architectural wall) were fully captured in the M3 retro/as-built and in the M4 thesis (email on an event-bus backbone); both are now shipped. The per-milestone followup files they referenced (`m3-followups.md` etc.) were consolidated into `docs/roadmap.md#backlog` at M4.5 close.)*
+*(none — last cleared at M4.5 close, 2026-04-22. M4.5's surfaced items were rolled into [`docs/roadmap.md#backlog`](roadmap.md#backlog). Per-milestone followup files (`m3-followups.md`, `m4-followups.md`, `m4.5-followups.md`) were also consolidated into the Backlog at the same close, and that pattern is now retired in favor of using this file for both kinds of capture.)*
