@@ -8,6 +8,7 @@ function cfg(name: string, subs: string[]): AgentConfig {
     model: "m",
     imageTag: "t",
     provider: "anthropic",
+    runtime: "anthropic",
     configPath: "/x",
     agentsMdPath: "/x/AGENTS.md",
     storePath: "/x/store",

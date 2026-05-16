@@ -9,6 +9,7 @@ describe("buildSpec", () => {
     model: "claude-opus-4-7",
     imageTag: "teamroom-agent-alice:latest",
     provider: "anthropic",
+    runtime: "anthropic",
     configPath: "/agents/alice",
     agentsMdPath: "/agents/alice/AGENTS.md",
     storePath: "/agents/alice/store",
@@ -85,7 +86,7 @@ describe("buildSpec", () => {
       codebasePath: null,
       genId: () => "trace-1",
     });
-    expect(spec.labels["teamroom-agent"]).toBe("true");
-    expect(spec.labels["teamroom-agent-id"]).toBe("alice");
+    expect(spec.labels?.["teamroom-agent"]).toBe("true");
+    expect(spec.labels?.["teamroom-agent-id"]).toBe("alice");
   });
 });

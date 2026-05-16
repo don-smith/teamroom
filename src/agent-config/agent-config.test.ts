@@ -179,3 +179,59 @@ describe("loadAgentConfig — provider field", () => {
     expect(cfg.provider).toBe("ollama");
   });
 });
+
+describe("loadAgentConfig — runtime field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "runtime-agent");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("infers runtime from provider when runtime is omitted", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("anthropic");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: lm-studio\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: ollama\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+  });
+
+  it("accepts explicit runtime: pi with an existing model provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: pi-coder\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-pi-coder:latest\nruntime: pi\nprovider: anthropic\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.runtime).toBe("pi");
+    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.model).toBe("claude-opus-4-7");
+  });
+
+  it("rejects unknown runtime values", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: anthropic\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi/);
+  });
+});

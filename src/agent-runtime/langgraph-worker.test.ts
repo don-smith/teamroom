@@ -46,6 +46,7 @@ async function startMailHarness(): Promise<{
   const baseCfg: Omit<AgentConfig, "name" | "provider" | "configPath" | "agentsMdPath" | "storePath"> = {
     model: "m",
     imageTag: "t",
+    runtime: "langgraph",
     subscriptions: [],
     allowedTools: [],
   };
