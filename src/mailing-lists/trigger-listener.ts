@@ -1,11 +1,15 @@
 import type { EventBus } from "../bus/event-bus.js";
 import type { MailingListRegistry } from "./registry.js";
-import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import type { SendMailInput, SendMailResult } from "../mail-dispatcher/mail-dispatcher.js";
+
+export interface TriggerMailDispatcher {
+  sendMail(input: SendMailInput): SendMailResult;
+}
 
 export interface TriggerListenerDeps {
   bus: EventBus;
   registry: MailingListRegistry;
-  dispatcher: MailDispatcher;
+  dispatcher: TriggerMailDispatcher;
   /** Formats an event payload into a human-readable mail body. */
   formatBody: (eventType: string, payload: unknown) => string;
   /**

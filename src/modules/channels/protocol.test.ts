@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseClientMessage, type ServerMessage } from "./protocol.js";
+import { parseClientMessage, type ClientMessage, type ServerMessage } from "./protocol.js";
 
 describe("chat WebSocket protocol", () => {
   it("parses register message", () => {
@@ -19,7 +19,13 @@ describe("chat WebSocket protocol", () => {
   });
 
   it("parses publish message with threadId and cc", () => {
-    const msg = { type: "publish", to: ["agent:a"], body: "hi", threadId: "T1", cc: ["agent:b"] };
+    const msg: Extract<ClientMessage, { type: "publish" }> = {
+      type: "publish",
+      to: ["agent:a"],
+      body: "hi",
+      threadId: "T1",
+      cc: ["agent:b"],
+    };
     expect(parseClientMessage(JSON.stringify(msg))).toEqual(msg);
   });
 

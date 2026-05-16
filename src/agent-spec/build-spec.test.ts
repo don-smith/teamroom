@@ -85,7 +85,10 @@ describe("buildSpec", () => {
       codebasePath: null,
       genId: () => "trace-1",
     });
-    expect(spec.labels["teamroom-agent"]).toBe("true");
-    expect(spec.labels["teamroom-agent-id"]).toBe("alice");
+    const { labels } = spec;
+    expect(labels).toBeDefined();
+    if (!labels) throw new Error("expected buildSpec to set docker labels");
+    expect(labels["teamroom-agent"]).toBe("true");
+    expect(labels["teamroom-agent-id"]).toBe("alice");
   });
 });
