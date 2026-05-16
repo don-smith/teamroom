@@ -133,13 +133,17 @@ resolve_thread_id() {
 thread_has_outbound_marker() {
   local thread_id="$1"
   local marker="$2"
-  bun src/cli/main.ts thread "$thread_id" 2>/dev/null | MARKER="$marker" bun --eval '
+  local expected_from="${3:-}"
+  bun src/cli/main.ts thread "$thread_id" 2>/dev/null | MARKER="$marker" EXPECTED_FROM="$expected_from" bun --eval '
     const marker = process.env.MARKER ?? "";
+    const expectedFrom = process.env.EXPECTED_FROM ?? "";
     const input = await Bun.stdin.text();
     for (const line of input.split("\n")) {
       if (line.trim() === "") continue;
-      const row = JSON.parse(line) as { direction?: string; body?: unknown };
-      if (row.direction === "out" && typeof row.body === "string" && row.body.includes(marker)) {
+      const row = JSON.parse(line) as { direction?: string; body?: unknown; from?: unknown };
+      const body = typeof row.body === "string" ? row.body.trim() : null;
+      const fromMatches = expectedFrom === "" || row.from === expectedFrom;
+      if (row.direction === "out" && body === marker && fromMatches) {
         process.exit(0);
       }
     }
@@ -179,7 +183,7 @@ run_agent() {
   fi
   echo "==> Waiting for $agent outbound reply on thread $thread_id (up to 60s)"
   for _ in $(seq 1 120); do
-    if thread_has_outbound_marker "$thread_id" "$marker"; then
+    if thread_has_outbound_marker "$thread_id" "$marker" "agent:$agent"; then
       echo "==> $agent OK (thread $thread_id)"
       return 0
     fi

@@ -63,7 +63,7 @@ Exercise the CLI by hand with a real daemon, real Docker, and real LM Studio. Us
 ## Troubleshooting
 
 - **`teamroom: command not found`.** The install dir isn't on your PATH or you haven't run `bun scripts/install-cli.ts ~/bin --force`. Verify with `which teamroom` and `echo $PATH`.
-- **`teamroom send` warns "daemon not detected."** `send` queues the inbound row regardless, but without the daemon it will sit pending. Start the daemon.
+- **`teamroom send` exits with `chat port file not found — is the daemon running?`** `send` refuses to start when the daemon's chat port file is missing. Start the daemon first.
 - **`teamroom thread "$THREAD_ID"` shows only your sent row.** The reply hasn't landed yet, or the container errored. Re-run the command after a short delay, then inspect `data/logs/teamroom-*.jsonl` for the inbound row's `trace_id`.
 - **Container errors with `connect ECONNREFUSED`.** The agent-runtime inside the container tries to reach `host.docker.internal:1234`. LM Studio must be running and bound such that the host is reachable from the container.
 - **Data looks stale.** Multiple turns accrete in `data/teamroom.db` across runs. If you want a clean slate: stop the daemon, `rm -rf data`, restart.

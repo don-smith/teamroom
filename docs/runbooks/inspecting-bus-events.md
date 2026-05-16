@@ -54,11 +54,12 @@ The current bus is the in-process `EventBus` described in [`src/bus/README.md`](
    tail -n 20 "$LOG" | jq .
    ```
 
-8. **Check the full thread alongside the daemon log:**
+8. **Inspect the stored thread rows after the daemon has shut down:**
    ```bash
    THREAD_ID=$(sqlite3 data/teamroom.db "SELECT thread_id FROM messages WHERE direction='in' ORDER BY created_at DESC LIMIT 1")
-   teamroom thread "$THREAD_ID"
+   sqlite3 -json data/teamroom.db "SELECT id, direction, \"from\", body, thread_id, created_at FROM messages WHERE thread_id = '$THREAD_ID' AND deleted_at IS NULL ORDER BY created_at ASC"
    ```
+   If the daemon is still running and you want the CLI view instead of direct SQLite inspection, `teamroom thread "$THREAD_ID"` shows the same conversation through the mail query server.
 
 ## Verifying success
 
@@ -69,7 +70,7 @@ A typical CLI-to-agent exchange produces at least:
 - One `model.call.completed` span when the proxy finishes the upstream call.
 - Often one `mail.sent` log entry if the agent sends a mail reply to another agent.
 
-Not every bus notification carries a `traceId`. For end-to-end correlation, start from the inbound message row's `trace_id` in SQLite, then grep the daemon log for that `traceId`. For the actual reply body, use `teamroom thread <threadId>` or `teamroom chat`; the internal `channel.cli.out` notification is not mirrored into the log.
+Not every bus notification carries a `traceId`. For end-to-end correlation, start from the inbound message row's `trace_id` in SQLite, then grep the daemon log for that `traceId`. For the actual reply body, inspect the thread rows in SQLite after shutdown or use `teamroom thread <threadId>` / `teamroom chat` while the daemon is still up; the internal `channel.cli.out` notification is not mirrored into the log.
 
 ## Troubleshooting
 
