@@ -1,5 +1,6 @@
 export type MessageDirection = "in" | "out";
-export type Provider = "anthropic" | "lm-studio" | "ollama";
+export type Provider = "anthropic" | "lm-studio" | "ollama" | "openai";
+export type AgentRuntime = "anthropic" | "langgraph" | "pi";
 
 export interface Agent {
   id: string;

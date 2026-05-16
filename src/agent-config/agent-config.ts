@@ -1,13 +1,14 @@
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import YAML from "yaml";
-import type { Provider } from "../types.js";
+import type { AgentRuntime, Provider } from "../types.js";
 
 export interface AgentConfig {
   name: string;
   model: string;
   imageTag: string;
   provider: Provider;
+  runtime: AgentRuntime;
   configPath: string;     // absolute path to the agent folder
   agentsMdPath: string;   // absolute path to AGENTS.md inside the folder
   storePath: string;      // absolute path to store/
@@ -33,13 +34,16 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
   if (provider === undefined || provider === null) {
-    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', or 'ollama')`);
+    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', or 'openai')`);
   }
-  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama") {
+  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai") {
     throw new Error(
-      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', or 'ollama' (got '${String(provider)}')`,
+      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', or 'openai' (got '${String(provider)}')`,
     );
   }
+
+  const runtime = parseRuntime(parsed.runtime, provider);
+  validateRuntimeProvider(runtime, provider);
 
   const subscriptions = parseStringArray(parsed, "subscriptions");
   // M4: subscriptions are strictly list:<name>. The MailingListRegistry
@@ -55,7 +59,49 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   }
   const allowedTools = parseStringArray(parsed, "allowed_tools");
 
-  return { name, model, imageTag, provider, configPath, agentsMdPath, storePath, subscriptions, allowedTools };
+  return { name, model, imageTag, provider, runtime, configPath, agentsMdPath, storePath, subscriptions, allowedTools };
+}
+
+function inferRuntime(provider: Provider): AgentRuntime {
+  switch (provider) {
+    case "anthropic":
+      return "anthropic";
+    case "lm-studio":
+    case "ollama":
+    case "openai":
+      return "langgraph";
+  }
+}
+
+function parseRuntime(value: unknown, provider: Provider): AgentRuntime {
+  if (value === undefined || value === null) return inferRuntime(provider);
+  if (value !== "anthropic" && value !== "langgraph" && value !== "pi") {
+    throw new Error(
+      `agent.yaml 'runtime' must be 'anthropic', 'langgraph', or 'pi' (got '${String(value)}')`,
+    );
+  }
+  return value;
+}
+
+function validateRuntimeProvider(runtime: AgentRuntime, provider: Provider): void {
+  switch (runtime) {
+    case "anthropic":
+      if (provider !== "anthropic") {
+        throw new Error(
+          `agent.yaml runtime/provider mismatch: runtime '${runtime}' requires provider 'anthropic' (got '${provider}')`,
+        );
+      }
+      return;
+    case "langgraph":
+      if (provider === "anthropic") {
+        throw new Error(
+          `agent.yaml runtime/provider mismatch: runtime '${runtime}' does not support provider '${provider}'`,
+        );
+      }
+      return;
+    case "pi":
+      return;
+  }
 }
 
 function requireString(parsed: Record<string, unknown>, field: string): string {

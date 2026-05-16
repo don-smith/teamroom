@@ -24,6 +24,7 @@ describe("teamroom chat (interactive REPL)", () => {
       model: "m",
       imageTag: "img",
       provider: "anthropic",
+      runtime: "anthropic",
       configPath: "/a",
       agentsMdPath: "/a/AGENTS.md",
       storePath: "/a/store",

@@ -42,6 +42,7 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
     env: {
       TEAMROOM_TRACE_ID: args.genId(),
       TEAMROOM_AGENT_NAME: args.agentId,
+      TEAMROOM_RUNTIME: cfg.runtime,
       TEAMROOM_PROVIDER: cfg.provider,
       TEAMROOM_MODEL: cfg.model,
       TEAMROOM_MODEL_BASE_URL: args.modelBaseUrl,
