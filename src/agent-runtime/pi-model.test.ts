@@ -20,7 +20,7 @@ describe("buildPiModelConfig", () => {
     });
   });
 
-  it("maps lm-studio and ollama to OpenAI-compatible Pi providers through Team Room proxy", () => {
+  it("maps lm-studio and ollama to OpenAI-compatible chat-completions providers through Team Room proxy", () => {
     for (const provider of ["lm-studio", "ollama"] as const) {
       const cfg = buildPiModelConfig({
         provider,
@@ -36,5 +36,24 @@ describe("buildPiModelConfig", () => {
         models: [{ id: "openai/gpt-oss-20b" }],
       });
     }
+  });
+
+  it("maps provider openai to OpenAI chat completions and strips the provider prefix from the API model id", () => {
+    const cfg = buildPiModelConfig({
+      provider: "openai",
+      model: "openai/gpt-5.5",
+      baseUrl: "http://host.docker.internal:9000",
+      apiToken: "route-token",
+    });
+
+    expect(cfg.providerId).toBe("openai");
+    expect(cfg.modelId).toBe("gpt-5.5");
+    expect(cfg.modelsJson.providers.openai).toMatchObject({
+      baseUrl: "http://host.docker.internal:9000/v1",
+      api: "openai-completions",
+      apiKey: "route-token",
+      authHeader: true,
+      models: [{ id: "gpt-5.5" }],
+    });
   });
 });

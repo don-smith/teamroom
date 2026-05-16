@@ -60,8 +60,8 @@ describe("loadAgentConfig", () => {
     expect(cfg).toMatchObject({
       name: "pi-coder",
       runtime: "pi",
-      provider: "anthropic",
-      model: "claude-opus-4-7",
+      provider: "openai",
+      model: "openai/gpt-5.5",
     });
   });
 });
@@ -167,7 +167,7 @@ describe("loadAgentConfig — provider field", () => {
   it("throws when provider is not in the allowed set", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
@@ -175,9 +175,9 @@ describe("loadAgentConfig — provider field", () => {
   it("echoes the offending provider value in the error message", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'openai'/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'bespoke'/);
   });
 
   it("accepts provider: ollama", () => {
@@ -187,6 +187,16 @@ describe("loadAgentConfig — provider field", () => {
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.provider).toBe("ollama");
+  });
+
+  it("accepts provider: openai", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: openai/gpt-5.5\nimage_tag: t\nprovider: openai\nruntime: pi\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openai");
+    expect(cfg.runtime).toBe("pi");
   });
 });
 
@@ -222,6 +232,12 @@ describe("loadAgentConfig — runtime field", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
       "name: x\nmodel: y\nimage_tag: z\nprovider: ollama\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
     );
     expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
   });

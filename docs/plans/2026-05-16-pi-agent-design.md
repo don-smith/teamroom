@@ -27,8 +27,8 @@ Add an optional `runtime` field to `agent.yaml`:
 ```yaml
 name: pi-coder
 runtime: pi
-provider: anthropic
-model: claude-opus-4-7
+provider: openai
+model: openai/gpt-5.5
 image_tag: teamroom-agent-pi-coder:latest
 subscriptions: []
 allowed_tools:
@@ -74,7 +74,7 @@ Each wake prompts the Pi session with a short Team Room wake instruction: check 
 
 ## 4. Model routing and credentials
 
-Team Room remains the model-routing authority. `buildSpec()` continues minting a `TokenRegistry` routing token keyed by `provider` and `model`. For `pi-coder`, `provider` is the upstream provider (`anthropic` initially), not `pi`.
+Team Room remains the model-routing authority. `buildSpec()` continues minting a `TokenRegistry` routing token keyed by `provider` and `model`. For `pi-coder`, `provider` is the upstream provider (`openai` for the initial GPT-5.5 configuration), not `pi`.
 
 Inside `PiAgentWorker`, create Pi model configuration that targets the daemon proxy:
 
@@ -145,4 +145,4 @@ Manual acceptance:
 - Pi-native self-selection of model/provider from its own settings. Useful later, but first integration keeps Team Room's current config and credential-control model.
 - Specialized Pi personas. Once `pi-coder` works, additional Pi agents should mostly be new `agents/<name>/AGENTS.md` + `agent.yaml` entries.
 - Streaming Pi output into Team Room observability. First slice only needs final assistant text / mail replies; richer event capture can follow.
-- General `openai` hosted provider in Team Room. The existing roadmap already defers a generic OpenAI-compatible provider until the third concrete backend forces the shape.
+- Additional hosted providers beyond OpenAI. OpenAI is now the third OpenAI-compatible backend and is included in this slice.

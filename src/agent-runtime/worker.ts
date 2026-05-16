@@ -29,6 +29,7 @@ function runtimeFromEnv(): { runtime: string; source: "TEAMROOM_RUNTIME" | "TEAM
       return { runtime: "anthropic", source: "TEAMROOM_PROVIDER" };
     case "lm-studio":
     case "ollama":
+    case "openai":
       return { runtime: "langgraph", source: "TEAMROOM_PROVIDER" };
     default:
       throw new Error(`unknown TEAMROOM_PROVIDER: '${provider}'`);

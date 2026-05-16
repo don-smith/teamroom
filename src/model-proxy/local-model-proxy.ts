@@ -29,7 +29,7 @@ const HOP_BY_HOP = new Set([
 
 interface Opts {
   registry: TokenRegistry;
-  adapters: Record<Provider, ProviderAdapter>;
+  adapters: Partial<Record<Provider, ProviderAdapter>>;
   logger: Logger;
   /**
    * Idle timeout for the outbound upstream socket, in milliseconds. Default
@@ -313,6 +313,7 @@ export class LocalModelProxy implements ModelProxy {
     }
     outHeaders.host = upstreamUrl.host;
     outHeaders["content-length"] = String(requestBody.length);
+    outHeaders["accept-encoding"] = "identity";
 
     try {
       await adapter.resolveAuth(outHeaders);
@@ -423,6 +424,8 @@ export class LocalModelProxy implements ModelProxy {
             ? "timeout"
             : `${errCode || "network"}_${entry.provider}`,
           latencyMs: Date.now() - startedAt,
+          method: req.method,
+          path: req.url,
           message,
         },
       }));
@@ -484,8 +487,8 @@ export class LocalModelProxy implements ModelProxy {
     // tcpdump.
     const looksLikeError =
       isOk && usage.inputTokens === undefined && usage.outputTokens === undefined;
-    const bodyPreview = looksLikeError
-      ? upstreamResp.body.toString("utf8").slice(0, 200)
+    const bodyPreview = (looksLikeError || !isOk)
+      ? upstreamResp.body.toString("utf8").slice(0, 500)
       : undefined;
 
     emit(this.opts.logger, isOk ? "info" : "error", buildSpan({
@@ -501,6 +504,8 @@ export class LocalModelProxy implements ModelProxy {
         httpStatus: upstreamResp.status,
         ...(isOk ? {} : { errorClass: `${upstreamResp.status}_${entry.provider}` }),
         latencyMs: Date.now() - startedAt,
+        method: req.method,
+        path: req.url,
         ...(retried ? { retried: true } : {}),
         ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
         ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),

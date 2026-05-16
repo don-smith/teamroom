@@ -11,7 +11,7 @@ This README is **for repo readers** (humans / AI assistants working on Team Room
 | [`studio-assistant/`](studio-assistant/) | `langgraph` (inferred) | `lm-studio` | LangGraph (`@langchain/langgraph` + `@langchain/mcp-adapters`) over `ChatOpenAI` | Local GPT-OSS-20b via the LM Studio proxy. Ollama-ready — same runtime, swap the provider. |
 | [`claude-assistant/`](claude-assistant/) | `anthropic` (inferred) | `anthropic` | `@anthropic-ai/claude-agent-sdk` (spawns Claude Code CLI as a subprocess) | Coding-focused teammate. OAuth via the daemon proxy. |
 | [`claude-researcher/`](claude-researcher/) | `anthropic` (inferred) | `anthropic` | `@anthropic-ai/claude-agent-sdk` | Research-focused teammate — reads deeply, reasons carefully, surfaces patterns. Consulted in-thread by other agents. |
-| [`pi-coder/`](pi-coder/) | `pi` | `anthropic` | `@earendil-works/pi-coding-agent` SDK | General coding teammate. Uses Team Room's proxy for model credentials, Pi coding tools for `/codebase`, and Pi-native wrappers around Team Room mail tools. |
+| [`pi-coder/`](pi-coder/) | `pi` | `openai` | `@earendil-works/pi-coding-agent` SDK | General coding teammate on `openai/gpt-5.5`. Uses Team Room's proxy for model credentials, Pi coding tools for `/codebase`, and Pi-native wrappers around Team Room mail tools. |
 
 ## Per-agent folder shape
 

@@ -66,7 +66,8 @@ describe("buildSpec", () => {
       ...cfg,
       name: "pi-coder",
       runtime: "pi",
-      provider: "anthropic",
+      provider: "openai",
+      model: "openai/gpt-5.5",
       imageTag: "teamroom-agent-pi-coder:latest",
     };
     const spec = buildSpec({
@@ -81,12 +82,12 @@ describe("buildSpec", () => {
     });
 
     expect(spec.env.TEAMROOM_RUNTIME).toBe("pi");
-    expect(spec.env.TEAMROOM_PROVIDER).toBe("anthropic");
-    expect(spec.env.TEAMROOM_MODEL).toBe("claude-opus-4-7");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("openai");
+    expect(spec.env.TEAMROOM_MODEL).toBe("openai/gpt-5.5");
     expect(tokenRegistry.lookup("proxy-token")).toMatchObject({
       agentId: "pi-coder",
-      provider: "anthropic",
-      model: "claude-opus-4-7",
+      provider: "openai",
+      model: "openai/gpt-5.5",
     });
   });
 

@@ -24,6 +24,7 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
       anthropic: null,
     });
     const pidFile = join(dataDir, "teamroom.pid");
@@ -37,6 +38,7 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
       anthropic: null,
     });
     await daemon.stop();
@@ -48,6 +50,7 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
       anthropic: null,
     });
     unlinkSync(join(dataDir, "teamroom.pid"));
@@ -73,6 +76,7 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
       anthropic: null,
     });
 
@@ -89,6 +93,7 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
       anthropic: null,
     });
     const portFile = join(dataDir, "ports", "mail-mcp.port");

@@ -18,7 +18,7 @@ export interface PiModelConfig {
 }
 
 export function buildPiModelConfig(args: BuildPiModelConfigArgs): PiModelConfig {
-  const providerId = `teamroom-${args.provider}`;
+  const providerId = args.provider === "openai" ? "openai" : `teamroom-${args.provider}`;
   const cleanBase = args.baseUrl.replace(/\/$/, "");
 
   if (args.provider === "anthropic") {
@@ -38,9 +38,13 @@ export function buildPiModelConfig(args: BuildPiModelConfigArgs): PiModelConfig 
     };
   }
 
+  const modelId = args.provider === "openai"
+    ? args.model.replace(/^openai\//, "")
+    : args.model;
+
   return {
     providerId,
-    modelId: args.model,
+    modelId,
     modelsJson: {
       providers: {
         [providerId]: {
@@ -52,7 +56,7 @@ export function buildPiModelConfig(args: BuildPiModelConfigArgs): PiModelConfig 
             supportsDeveloperRole: false,
             supportsReasoningEffort: false,
           },
-          models: [{ id: args.model }],
+          models: [{ id: modelId }],
         },
       },
     },

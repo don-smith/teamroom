@@ -1,7 +1,7 @@
 name: pi-coder
 runtime: pi
-provider: anthropic
-model: claude-opus-4-7
+provider: openai
+model: openai/gpt-5.5
 image_tag: teamroom-agent-pi-coder:latest
 subscriptions: []
 allowed_tools:

@@ -157,7 +157,7 @@ function requireEnv(name: string): string {
 
 function requireProvider(): Provider {
   const value = requireEnv("TEAMROOM_PROVIDER");
-  if (value !== "anthropic" && value !== "lm-studio" && value !== "ollama") {
+  if (value !== "anthropic" && value !== "lm-studio" && value !== "ollama" && value !== "openai") {
     throw new Error(`unsupported TEAMROOM_PROVIDER for PiAgentWorker: ${value}`);
   }
   return value;

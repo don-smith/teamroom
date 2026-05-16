@@ -4,7 +4,7 @@
 
 **Goal:** Add a first-class Pi SDK based general coding teammate (`pi-coder`) that uses Team Room's mail substrate, codebase mount, and centralized model proxy.
 
-**Architecture:** Split agent `runtime` from model `provider`; existing configs infer runtime from provider, while `pi-coder` declares `runtime: pi` and `provider: anthropic`. Add a `PiAgentWorker` that creates a long-lived Pi SDK session in the container, points Pi's model configuration at the Team Room proxy using the routing token, and registers Team Room mail tools as Pi extension tools.
+**Architecture:** Split agent `runtime` from model `provider`; existing configs infer runtime from provider, while `pi-coder` declares `runtime: pi` and `provider: openai` with `model: openai/gpt-5.5`. Add a `PiAgentWorker` that creates a long-lived Pi SDK session in the container, points Pi's model configuration at the Team Room proxy using the routing token, and registers Team Room mail tools as Pi extension tools.
 
 **Tech Stack:** TypeScript strict mode, Vitest, Docker, Team Room daemon/model-proxy/mail-MCP, `@earendil-works/pi-coding-agent` SDK, `typebox` for Pi tool schemas.
 
@@ -797,8 +797,8 @@ git commit -m "feat(agent-runtime): add pi agent worker"
 ```yaml
 name: pi-coder
 runtime: pi
-provider: anthropic
-model: claude-opus-4-7
+provider: openai
+model: openai/gpt-5.5
 image_tag: teamroom-agent-pi-coder:latest
 subscriptions: []
 allowed_tools:
@@ -1011,7 +1011,7 @@ LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
 grep '"agentId":"pi-coder"' "$LOG" | grep '"model.call.completed"' | tail -5
 ```
 
-Expected: model spans exist for `pi-coder` with provider `anthropic` (or configured provider). No direct upstream credential appears in `docker inspect` env output.
+Expected: model spans exist for `pi-coder` with provider `openai` (or configured provider). No direct upstream credential appears in `docker inspect` env output.
 
 **Step 9: Commit fixes if needed**
 
