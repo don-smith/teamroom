@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { Db } from "./database.js";
 
-const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "migrations");
+const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
 
 export interface AppliedMigration {
   name: string;

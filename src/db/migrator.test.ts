@@ -1,8 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createDatabase } from "./database.js";
 import { runMigrations, getAppliedMigrations } from "./migrator.js";
 
 describe("migrator", () => {
+  it("reads source-tree migrations when running TypeScript directly", () => {
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+
+    const sourceMigrationDir = fileURLToPath(new URL("./migrations/", import.meta.url));
+    const sourceMigrationFiles = readdirSync(sourceMigrationDir)
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+    const applied = getAppliedMigrations(db).map((migration) => migration.name);
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all() as { name: string }[];
+
+    expect(applied).toEqual(sourceMigrationFiles);
+    expect(tables.map((table) => table.name)).toContain("messages");
+  });
+
   it("creates the schema on a fresh in-memory DB", () => {
     const db = createDatabase(":memory:");
     runMigrations(db);
@@ -91,14 +110,22 @@ describe("migration 004 — channel address scheme", () => {
     `;
     db.exec(sql);
 
-    const row = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as any;
+    const row = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as {
+      from: string;
+      to: string;
+      cc: string;
+    };
     expect(row.from).toBe("channel:cli:don");
     expect(JSON.parse(row.to)).toEqual(["agent:a", "channel:cli:don"]);
     expect(JSON.parse(row.cc)).toEqual(["channel:cli:other"]);
 
     // Second run: idempotent — no double-prefix.
     db.exec(sql);
-    const row2 = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as any;
+    const row2 = db.prepare(`SELECT "from", "to", cc FROM messages WHERE id='m1'`).get() as {
+      from: string;
+      to: string;
+      cc: string;
+    };
     expect(row2.from).toBe("channel:cli:don");
     expect(JSON.parse(row2.to)).toEqual(["agent:a", "channel:cli:don"]);
     expect(JSON.parse(row2.cc)).toEqual(["channel:cli:other"]);
