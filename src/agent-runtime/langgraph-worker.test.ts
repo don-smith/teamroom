@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
@@ -248,6 +248,36 @@ describe("LangGraphAgentWorker", () => {
       const readText = asText(await read.invoke({ path: filepath }));
       expect(readText).toContain("hello from mcp");
     } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("boots the filesystem MCP server when PATH exposes bun but not node", async () => {
+    harness = await startMailHarness();
+    const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), "tr-fs-bun-only-")));
+    const binDir = mkdtempSync(join(tmpdir(), "tr-bun-bin-"));
+    const prevPath = process.env.PATH;
+    try {
+      symlinkSync(process.execPath, join(binDir, "bun"));
+      process.env.PATH = binDir;
+
+      const model = fakeModel().respond(new AIMessage("ok"));
+      const worker = await LangGraphAgentWorker.createForTest({
+        model,
+        mcpUrl: harness.mcpUrl,
+        mcpToken: harness.mcpToken,
+        systemPrompt: "test",
+        agentsMdPath: "/does-not-exist",
+        filesystemRoots: [tmpRoot],
+      });
+
+      expect(worker.toolNamesForTest()).toEqual(
+        expect.arrayContaining(["read_text_file", "write_file"]),
+      );
+    } finally {
+      if (prevPath === undefined) delete process.env.PATH;
+      else process.env.PATH = prevPath;
+      rmSync(binDir, { recursive: true, force: true });
       rmSync(tmpRoot, { recursive: true, force: true });
     }
   });

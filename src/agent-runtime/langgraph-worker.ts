@@ -164,7 +164,7 @@ export class LangGraphAgentWorker implements AgentWorker {
       ].join("/");
       mcpServers.filesystem = {
         transport: "stdio",
-        command: "node",
+        command: "bun",
         args: [
           filesystemServerEntrypoint,
           ...fsRoots,
