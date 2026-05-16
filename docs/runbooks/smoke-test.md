@@ -1,6 +1,6 @@
 # Smoke test
 
-End-to-end verification that the full stack — daemon, in-process model proxy, CLI, real Docker, real LM Studio, and the real Anthropic API — talks to itself correctly. Runs `scripts/smoke-test.sh`. Use this before shipping a change that touches the container contract, the daemon orchestrator, the model proxy, the CLI, or any build step. Do not use for normal unit-test iteration — that is `npm test` (see `running-tests.md`).
+End-to-end verification that the full stack — daemon, in-process model proxy, CLI, real Docker, real LM Studio, and the real Anthropic API — talks to itself correctly. Runs `scripts/smoke-test.sh`. Use this before shipping a change that touches the container contract, the daemon orchestrator, the model proxy, the CLI, or any build step. Do not use for normal unit-test iteration — that is `bun test` (see `running-tests.md`).
 
 ## Preconditions
 
@@ -8,7 +8,7 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 - **Docker Desktop running.** The smoke test builds two agent images and runs containers that reach back to the host via `host.docker.internal`.
 - **`.env` file** at repo root containing `LM_STUDIO_API_TOKEN=<value>` matching your LM Studio instance.
 - **Anthropic credentials discoverable.** Either `CLAUDE_CODE_OAUTH_TOKEN=<token>` or `ANTHROPIC_API_KEY=<key>` in `.env`, OR `~/.claude/.credentials.json` from a prior `claude` login. See `docs/runbooks/anthropic-auth.md` for discovery order.
-- **Node.js 22+**; `npm install` has run.
+- **Bun 1.3+ installed**; `bun install` has run.
 - **Branch in the state you want to test.** The smoke test deletes `data/` at startup.
 
 ## Steps
@@ -21,11 +21,10 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 2. The script will:
    - Confirm LM Studio is reachable.
    - Confirm Anthropic credentials are present.
-   - Run `npm run build`.
+   - Run `bun run typecheck`.
    - Build both agent images (`teamroom-agent-studio-assistant:latest`, `teamroom-agent-claude-assistant:latest`).
-   - Wipe `data/`, start the daemon (which boots the in-process `LocalModelProxy`), wait for `data/teamroom.pid`.
-   - Start `teamroom tail` redirected to `/tmp/teamroom-smoke-output.txt`.
-   - For each agent in turn: send a message asking for an exact marker reply, poll the tail for up to 60 s.
+   - Wipe `data/`, start the daemon via `bun src/cli/main.ts serve` (which boots the in-process `LocalModelProxy`), wait for `data/teamroom.pid`.
+   - For each agent in turn: send a message asking for an exact marker reply, poll `bun src/cli/main.ts inbox <agent>` for up to 60 s.
    - Grep the daemon's JSONL log for `model.call.completed` spans from both providers (`anthropic` and `lm-studio`).
    - Report `SMOKE PASS` and shut down the daemon.
 
@@ -34,7 +33,7 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 - Final line prints `==> SMOKE PASS — both agents responded; both providers' spans present`.
 - `data/logs/teamroom-YYYY-MM-DD.jsonl` contains at least one record with `"event":"model.call.completed"` and `"provider":"anthropic"`, and at least one with `"provider":"lm-studio"`.
 - In OAuth mode, you should also see one `"event":"oauth.exchange.completed"` per temp-key TTL window (typically once per smoke-test run).
-- The daemon exits cleanly (no zombie process in `ps | grep dist/cli/main.js`).
+- The daemon exits cleanly (no zombie `bun src/cli/main.ts serve` process).
 - `data/teamroom.db` has both agents, two inbound messages, two outbound messages, two `done` turns.
 
 ## Interpreting the log
@@ -58,13 +57,13 @@ grep '"traceId":"<the trace id>"' "$LOG" | jq .
 - **`LM Studio not reachable at http://localhost:1234`.** LM Studio isn't running, or is bound to a different host. Set `LM_STUDIO_HOST_URL=http://...` and re-run, or start LM Studio and load a model.
 - **`Anthropic credentials not found`.** Add `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` to `.env`, or run `claude` once locally so `~/.claude/.credentials.json` exists. See `docs/runbooks/anthropic-auth.md`.
 - **`.env file required (with LM_STUDIO_API_TOKEN)`.** Copy `.env.example` to `.env` and fill in the token.
-- **`no available models` in tail output.** LM Studio is running but no model is loaded. Load the model referenced in `agents/studio-assistant/agent.yaml`.
+- **`no available models` in the daemon log.** LM Studio is running but no model is loaded. Load the model referenced in `agents/studio-assistant/agent.yaml`.
 - **401 / auth error from LM Studio.** `LM_STUDIO_API_TOKEN` in `.env` does not match LM Studio's expected token.
 - **401 from Anthropic on first call.** OAuth-token expired, or the OAuth-exchange endpoint rejected the token. Check `oauth.exchange.completed` span; if absent, the proxy never reached the exchange. If present and the next `model.call.completed` is 401, the token's actually invalid — re-login with `claude` or paste a fresh `CLAUDE_CODE_OAUTH_TOKEN`.
 - **`Cannot connect to the Docker daemon`.** Docker Desktop is not running.
 - **Container cannot reach the host.** On macOS/Windows `host.docker.internal` is supplied by Docker Desktop. On Linux you may need `--add-host=host.docker.internal:host-gateway`. The smoke test currently assumes Docker Desktop.
 - **`daemon failed to start`.** Check `data/logs/teamroom-*.jsonl` and stderr for the daemon's last few lines; usually a port/file-permission issue.
-- **Timeout waiting for `studio-ok` / `claude-ok`.** The model replied but not with the expected literal. Look at `/tmp/teamroom-smoke-output.txt` — if the model gave a paraphrase, the smoke test's exact-match assertion is too strict for that model; switch models or adjust the prompt. If there's no reply at all, inspect `data/bus/events.jsonl` for `turn.errored` and the daemon log for the relevant traceId.
+- **Timeout waiting for `studio-ok` / `claude-ok`.** The model replied but not with the expected literal, or never replied. The script already dumps the agent inbox, the last 40 daemon log lines, and recent `teamroom-*` containers on failure. If the model paraphrased, the smoke test's exact-match assertion is too strict for that model; switch models or adjust the prompt. If there's no reply at all, inspect `data/bus/events.jsonl` for `turn.errored` and the daemon log for the relevant traceId.
 - **No `"provider":"anthropic"` span in the log.** The Anthropic agent never reached the proxy — usually because credentials were missing at boot (the daemon will log `agent.unhealthy` once on startup) or the agent's `agent.yaml` model id is wrong.
 
 ## Related

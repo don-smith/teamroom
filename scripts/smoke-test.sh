@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # M4.5 smoke test — exercises serve → send → inbox for one agent per provider.
-# Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running with a model
-#   loaded; Docker running; Anthropic credentials discoverable (CLAUDE_CODE_OAUTH_TOKEN
-#   or ANTHROPIC_API_KEY in .env, or ~/.claude/.credentials.json, or — on
-#   macOS — the system Keychain entry "Claude Code-credentials").
+# Requires: Bun installed; .env with LM_STUDIO_API_TOKEN; LM Studio running
+#   with a model loaded; Docker running; Anthropic credentials discoverable
+#   (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .env, or
+#   ~/.claude/.credentials.json, or — on macOS — the system Keychain entry
+#   "Claude Code-credentials").
 #
 # TODO(manual-acceptance): multi-turn memory check and multi-agent mail
 #   round-trip are covered by the seven-scenario manual acceptance pass
@@ -48,8 +49,8 @@ if ! curl -sS -m 3 -o /dev/null "${LM_STUDIO_HOST_URL}/v1/models"; then
   exit 1
 fi
 
-echo "==> Building TypeScript"
-npm run build
+echo "==> Typechecking"
+bun run typecheck
 
 echo "==> Building agent images"
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
@@ -80,7 +81,7 @@ dump_failure_diagnostics() {
   local agent="$1"
   echo "" >&2
   echo "==> Inbox contents for $agent:" >&2
-  node dist/cli/main.js inbox "$agent" 2>&1 || true
+  bun src/cli/main.ts inbox "$agent" 2>&1 || true
   echo "" >&2
   echo "==> Last 40 daemon log entries (most recent JSONL file):" >&2
   local log_file
@@ -97,7 +98,7 @@ dump_failure_diagnostics() {
 
 echo "==> Starting daemon in background"
 rm -rf data
-node dist/cli/main.js serve &
+bun src/cli/main.ts serve &
 DAEMON_PID=$!
 
 # Wait for the daemon to signal it's up (pid file).
@@ -115,10 +116,10 @@ run_agent() {
   local agent="$1"
   local marker="$2"
   echo "==> Sending to $agent (expect: $marker)"
-  node dist/cli/main.js send "$agent" "Hello from the smoke test — reply with exactly: $marker"
+  bun src/cli/main.ts send "$agent" "Hello from the smoke test — reply with exactly: $marker"
   echo "==> Waiting for $agent reply in inbox (up to 60s)"
   for _ in $(seq 1 120); do
-    if node dist/cli/main.js inbox "$agent" 2>/dev/null | grep -q "$marker"; then
+    if bun src/cli/main.ts inbox "$agent" 2>/dev/null | grep -q "$marker"; then
       echo "==> $agent OK"
       return 0
     fi
