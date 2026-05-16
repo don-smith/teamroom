@@ -4,13 +4,14 @@ Each subdirectory is one Team Room agent. The daemon discovers agents at startup
 
 This README is **for repo readers** (humans / AI assistants working on Team Room itself) — it documents inventory, conventions, and the per-agent file-structure differences. It is **not mounted into any container** and the agents themselves don't see it.
 
-## Agent inventory (M5)
+## Agent inventory (M5 + Pi runtime work)
 
-| Agent | Provider | Runtime SDK in container | Notes |
-|---|---|---|---|
-| [`studio-assistant/`](studio-assistant/) | `lm-studio` | LangGraph (`@langchain/langgraph` + `@langchain/mcp-adapters`) over `ChatOpenAI` | Local Gemma-4 via the LM Studio proxy. Ollama-ready — same runtime, swap the provider. |
-| [`claude-assistant/`](claude-assistant/) | `anthropic` | `@anthropic-ai/claude-agent-sdk` (spawns Claude Code CLI as a subprocess) | Coding-focused teammate. OAuth via the daemon proxy. |
-| [`claude-researcher/`](claude-researcher/) | `anthropic` | `@anthropic-ai/claude-agent-sdk` | Research-focused teammate — reads deeply, reasons carefully, surfaces patterns. Consulted in-thread by other agents. |
+| Agent | Runtime | Provider | Runtime SDK in container | Notes |
+|---|---|---|---|---|
+| [`studio-assistant/`](studio-assistant/) | `langgraph` (inferred) | `lm-studio` | LangGraph (`@langchain/langgraph` + `@langchain/mcp-adapters`) over `ChatOpenAI` | Local GPT-OSS-20b via the LM Studio proxy. Ollama-ready — same runtime, swap the provider. |
+| [`claude-assistant/`](claude-assistant/) | `anthropic` (inferred) | `anthropic` | `@anthropic-ai/claude-agent-sdk` (spawns Claude Code CLI as a subprocess) | Coding-focused teammate. OAuth via the daemon proxy. |
+| [`claude-researcher/`](claude-researcher/) | `anthropic` (inferred) | `anthropic` | `@anthropic-ai/claude-agent-sdk` | Research-focused teammate — reads deeply, reasons carefully, surfaces patterns. Consulted in-thread by other agents. |
+| [`pi-coder/`](pi-coder/) | `pi` | `anthropic` | `@earendil-works/pi-coding-agent` SDK | General coding teammate. Uses Team Room's proxy for model credentials, Pi coding tools for `/codebase`, and Pi-native wrappers around Team Room mail tools. |
 
 ## Per-agent folder shape
 
@@ -18,7 +19,7 @@ Common to every agent (loaded by `src/agent-config/`):
 
 ```
 agents/<name>/
-├── agent.yaml          # name, provider, model, image_tag — required
+├── agent.yaml          # name, provider, model, image_tag; optional runtime (inferred for older agents)
 ├── AGENTS.md           # mounted writable as /AGENTS.md inside the container
 ├── Dockerfile          # how to build the agent's image
 └── store/              # mounted writable as /store inside the container
@@ -45,7 +46,8 @@ Concretely, after a few turns you'll see (in `claude-assistant/store/`):
 ## Tools / read-write access
 
 - **claude-assistant / claude-researcher:** `Read`, `Edit`, `Write`, `Bash`, `Glob`, `Grep` via the claude-agent-sdk's `allowedTools`, plus the mail-MCP tools (`mcp__mail__mail.*`) wired in via the daemon's mail MCP server.
-- **studio-assistant:** mail-MCP tools auto-wired by `@langchain/mcp-adapters`. No filesystem tools — not needed for the M5 scope.
+- **studio-assistant:** mail-MCP + filesystem MCP tools auto-wired by `@langchain/mcp-adapters`.
+- **pi-coder:** Pi built-in coding tools (`read`, `write`, `edit`, `bash`) plus Pi-native Team Room mail tools (`mail_list`, `mail_get`, `mail_send`, `mail_reply`, `mail_mark_read`, `mail_archive`, `mail_delete`).
 
 ## Shared codebase
 

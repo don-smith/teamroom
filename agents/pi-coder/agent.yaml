@@ -1,0 +1,11 @@
+name: pi-coder
+runtime: pi
+provider: anthropic
+model: claude-opus-4-7
+image_tag: teamroom-agent-pi-coder:latest
+subscriptions: []
+allowed_tools:
+  - read
+  - write
+  - edit
+  - bash
