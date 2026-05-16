@@ -24,17 +24,18 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
    - Run `bun run typecheck`.
    - Build both agent images (`teamroom-agent-studio-assistant:latest`, `teamroom-agent-claude-assistant:latest`).
    - Wipe `data/`, start the daemon via `bun src/cli/main.ts serve` (which boots the in-process `LocalModelProxy`), wait for `data/teamroom.pid`.
-   - For each agent in turn: send a message asking for an exact marker reply, poll `bun src/cli/main.ts inbox <agent>` for up to 60 s.
+   - For each agent in turn: send a message asking for an exact marker reply, resolve the new inbound row's `thread_id` from `data/teamroom.db`, then poll `bun src/cli/main.ts thread <threadId>` for up to 60 s until an outbound row contains the marker.
    - Grep the daemon's JSONL log for `model.call.completed` spans from both providers (`anthropic` and `lm-studio`).
    - Report `SMOKE PASS` and shut down the daemon.
 
 ## Verifying success
 
 - Final line prints `==> SMOKE PASS — both agents responded; both providers' spans present`.
+- Each smoke-tested thread contains the inbound prompt row plus an outbound reply row whose body contains the expected marker.
 - `data/logs/teamroom-YYYY-MM-DD.jsonl` contains at least one record with `"event":"model.call.completed"` and `"provider":"anthropic"`, and at least one with `"provider":"lm-studio"`.
 - In OAuth mode, you should also see one `"event":"oauth.exchange.completed"` per temp-key TTL window (typically once per smoke-test run).
 - The daemon exits cleanly (no zombie `bun src/cli/main.ts serve` process).
-- `data/teamroom.db` has both agents, two inbound messages, two outbound messages, two `done` turns.
+- `data/teamroom.db` has at least one inbound message row per smoke-tested agent and at least one outbound reply row in each smoke-tested thread.
 
 ## Interpreting the log
 
@@ -63,7 +64,7 @@ grep '"traceId":"<the trace id>"' "$LOG" | jq .
 - **`Cannot connect to the Docker daemon`.** Docker Desktop is not running.
 - **Container cannot reach the host.** On macOS/Windows `host.docker.internal` is supplied by Docker Desktop. On Linux you may need `--add-host=host.docker.internal:host-gateway`. The smoke test currently assumes Docker Desktop.
 - **`daemon failed to start`.** Check `data/logs/teamroom-*.jsonl` and stderr for the daemon's last few lines; usually a port/file-permission issue.
-- **Timeout waiting for `studio-ok` / `claude-ok`.** The model replied but not with the expected literal, or never replied. The script already dumps the agent inbox, the last 40 daemon log lines, and recent `teamroom-*` containers on failure. If the model paraphrased, the smoke test's exact-match assertion is too strict for that model; switch models or adjust the prompt. If there's no reply at all, inspect `data/bus/events.jsonl` for `turn.errored` and the daemon log for the relevant traceId.
+- **Timeout waiting for `studio-ok` / `claude-ok`.** The model replied but not with the expected literal, or never replied. The script already dumps the agent inbox, the full smoke-test thread (once resolved), the last 40 daemon log lines, and recent `teamroom-*` containers on failure. If the model paraphrased, the smoke test's exact-match assertion is too strict for that model; switch models or adjust the prompt. If there's no reply at all, inspect the daemon log and the thread contents together.
 - **No `"provider":"anthropic"` span in the log.** The Anthropic agent never reached the proxy — usually because credentials were missing at boot (the daemon will log `agent.unhealthy` once on startup) or the agent's `agent.yaml` model id is wrong.
 
 ## Related

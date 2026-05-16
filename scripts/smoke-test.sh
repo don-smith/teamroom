@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M4.5 smoke test — exercises serve → send → inbox for one agent per provider.
+# M4.5 smoke test — exercises serve → send → thread for one agent per provider.
 # Requires: Bun installed; .env with LM_STUDIO_API_TOKEN; LM Studio running
 #   with a model loaded; Docker running; Anthropic credentials discoverable
 #   (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .env, or
@@ -79,9 +79,15 @@ trap cleanup EXIT
 
 dump_failure_diagnostics() {
   local agent="$1"
+  local thread_id="${2:-}"
   echo "" >&2
   echo "==> Inbox contents for $agent:" >&2
   bun src/cli/main.ts inbox "$agent" 2>&1 || true
+  if [[ -n "$thread_id" ]]; then
+    echo "" >&2
+    echo "==> Thread contents for $agent (thread $thread_id):" >&2
+    bun src/cli/main.ts thread "$thread_id" 2>&1 || true
+  fi
   echo "" >&2
   echo "==> Last 40 daemon log entries (most recent JSONL file):" >&2
   local log_file
@@ -94,6 +100,51 @@ dump_failure_diagnostics() {
   echo "" >&2
   echo "==> Recent docker containers (--filter name=teamroom-, last 5):" >&2
   docker ps -a --filter "name=^teamroom-" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>&1 | head -6 >&2 || true
+}
+
+resolve_thread_id() {
+  local agent="$1"
+  local body="$2"
+  local thread_id=""
+  for _ in $(seq 1 20); do
+    thread_id=$(
+      AGENT="$agent" BODY="$body" bun --eval '
+        import { Database } from "bun:sqlite";
+        const db = new Database("data/teamroom.db", { readonly: true });
+        try {
+          const row = db
+            .query(`SELECT thread_id FROM messages WHERE agent_id = ?1 AND direction = ?2 AND body = ?3 ORDER BY created_at DESC LIMIT 1`)
+            .get(process.env.AGENT, "in", process.env.BODY) as { thread_id: string | null } | null;
+          if (row?.thread_id) process.stdout.write(row.thread_id);
+        } finally {
+          db.close();
+        }
+      '
+    )
+    if [[ -n "$thread_id" ]]; then
+      printf '%s\n' "$thread_id"
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+thread_has_outbound_marker() {
+  local thread_id="$1"
+  local marker="$2"
+  bun src/cli/main.ts thread "$thread_id" 2>/dev/null | MARKER="$marker" bun --eval '
+    const marker = process.env.MARKER ?? "";
+    const input = await Bun.stdin.text();
+    for (const line of input.split("\n")) {
+      if (line.trim() === "") continue;
+      const row = JSON.parse(line) as { direction?: string; body?: unknown };
+      if (row.direction === "out" && typeof row.body === "string" && row.body.includes(marker)) {
+        process.exit(0);
+      }
+    }
+    process.exit(1);
+  '
 }
 
 echo "==> Starting daemon in background"
@@ -111,22 +162,31 @@ if [[ ! -f data/teamroom.pid ]]; then
   exit 1
 fi
 
-# Send a message to an agent, then poll inbox until the marker appears.
+# Send a message to an agent, resolve the new thread id, then poll the full
+# thread until an outbound reply row contains the marker.
 run_agent() {
   local agent="$1"
   local marker="$2"
+  local prompt="Hello from the smoke test — reply with exactly: $marker"
+  local thread_id=""
   echo "==> Sending to $agent (expect: $marker)"
-  bun src/cli/main.ts send "$agent" "Hello from the smoke test — reply with exactly: $marker"
-  echo "==> Waiting for $agent reply in inbox (up to 60s)"
+  bun src/cli/main.ts send "$agent" "$prompt"
+  echo "==> Resolving thread id for $agent"
+  if ! thread_id=$(resolve_thread_id "$agent" "$prompt"); then
+    echo "==> FAIL: could not resolve thread id for $agent send" >&2
+    dump_failure_diagnostics "$agent"
+    return 1
+  fi
+  echo "==> Waiting for $agent outbound reply on thread $thread_id (up to 60s)"
   for _ in $(seq 1 120); do
-    if bun src/cli/main.ts inbox "$agent" 2>/dev/null | grep -q "$marker"; then
-      echo "==> $agent OK"
+    if thread_has_outbound_marker "$thread_id" "$marker"; then
+      echo "==> $agent OK (thread $thread_id)"
       return 0
     fi
     sleep 0.5
   done
-  echo "==> FAIL: $agent did not reply with '$marker'" >&2
-  dump_failure_diagnostics "$agent"
+  echo "==> FAIL: $agent did not produce an outbound reply with '$marker' on thread $thread_id" >&2
+  dump_failure_diagnostics "$agent" "$thread_id"
   return 1
 }
 

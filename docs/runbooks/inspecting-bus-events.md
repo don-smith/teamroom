@@ -1,74 +1,85 @@
 # Inspecting bus events
 
-The `FileNotifyBus` in production appends one JSON line per event to `data/bus/events.jsonl`. Subscribers (like `teamroom tail`) poll the file via chokidar. Because the file is append-only and human-readable, you can tail and filter it with standard tools to answer questions like "what did the daemon emit during this turn?" or "did `turn.completed` fire?"
+The current bus is the in-process `EventBus` described in [`src/bus/README.md`](../../src/bus/README.md). It is not durable and it does not write a separate `data/bus/events.jsonl` file. The operator-visible surface is the daemon JSONL log in `data/logs/`: `startDaemon()` mirrors the key bus notifications (`mail.delivered`, `mail.sent`, `tool.call`) into that log, and the model proxy writes span-shaped entries there as well (`model.call.completed`, `model.call.rejected`, `oauth.exchange.completed`).
 
 ## Preconditions
 
-- A daemon has run (or is running) in this repo, so `data/bus/events.jsonl` exists.
+- A daemon has run (or is running) in this repo, so `data/logs/teamroom-YYYY-MM-DD.jsonl` exists.
 - `jq` installed (`brew install jq` on macOS; `apt install jq` on Debian-family). Not strictly required but unlocks most of the filters below.
 
 ## Steps
 
-1. **Live tail:**
+1. **Locate the newest daemon log:**
    ```bash
-   tail -f data/bus/events.jsonl
+   LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
    ```
 
-2. **Filter by event type:**
+2. **Live tail:**
    ```bash
-   jq -c 'select(.type == "turn.errored")' data/bus/events.jsonl
-   jq -c 'select(.type == "message.outbound")' data/bus/events.jsonl
-   jq -c 'select(.type | startswith("turn."))' data/bus/events.jsonl
+   tail -f "$LOG"
    ```
 
-3. **Filter by trace ID:**
+3. **Filter mirrored bus notifications by log message:**
    ```bash
-   jq -c 'select(.traceId == "01HKPR...")' data/bus/events.jsonl
+   jq -c 'select(.msg == "mail.delivered")' "$LOG"
+   jq -c 'select(.msg == "mail.sent")' "$LOG"
+   jq -c 'select(.msg == "tool.call")' "$LOG"
    ```
-   Or follow a trace across both bus and DB in one invocation:
+
+4. **Filter model-proxy spans:**
    ```bash
+   jq -c 'select(.event == "model.call.completed")' "$LOG"
+   jq -c 'select(.event == "model.call.rejected")' "$LOG"
+   jq -c 'select(.event == "oauth.exchange.completed")' "$LOG"
+   ```
+
+5. **Filter by trace ID:**
+   ```bash
+   jq -c 'select(.traceId == "01HKPR...")' "$LOG"
+   ```
+   Or follow a trace across the DB and the daemon log in one invocation:
+   ```bash
+   LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
    TRACE=$(sqlite3 data/teamroom.db "SELECT trace_id FROM messages WHERE direction='in' ORDER BY created_at DESC LIMIT 1")
-   jq -c --arg t "$TRACE" 'select(.traceId == $t)' data/bus/events.jsonl
-   sqlite3 data/teamroom.db "SELECT id, status, error FROM turns WHERE trace_id = '$TRACE'"
+   jq -c --arg t "$TRACE" 'select(.traceId == $t)' "$LOG"
    ```
 
-4. **Count events by type over a run:**
+6. **Count entries by event/message name over a run:**
    ```bash
-   jq -r '.type' data/bus/events.jsonl | sort | uniq -c
+   jq -r '.event // .msg' "$LOG" | sort | uniq -c
    ```
 
-5. **Pretty-print the most recent N events:**
+7. **Pretty-print the most recent N entries:**
    ```bash
-   tail -n 20 data/bus/events.jsonl | jq .
+   tail -n 20 "$LOG" | jq .
    ```
 
-6. **Correlate a DB turn to its bus lifecycle:**
+8. **Check the full thread alongside the daemon log:**
    ```bash
-   sqlite3 data/teamroom.db "SELECT trace_id FROM turns WHERE id = 'TURN_ID'"
-   # → some-uuid
-   jq -c --arg t "some-uuid" 'select(.traceId == $t)' data/bus/events.jsonl
+   THREAD_ID=$(sqlite3 data/teamroom.db "SELECT thread_id FROM messages WHERE direction='in' ORDER BY created_at DESC LIMIT 1")
+   teamroom thread "$THREAD_ID"
    ```
 
 ## Verifying success
 
-A single turn produces at least:
+A typical CLI-to-agent exchange produces at least:
 
-- One `turn.started` event at the moment `processTurn` begins.
-- One or more `message.outbound` events per `type: "reply"` from the container.
-- One terminal event: `turn.completed` (happy path) or `turn.errored` (anything that went wrong).
+- One `mail.delivered` log entry when the inbound message lands in the agent's inbox.
+- One or more `tool.call` log entries if the agent uses the mail MCP tools.
+- One `model.call.completed` span when the proxy finishes the upstream call.
+- Often one `mail.sent` log entry if the agent sends a mail reply to another agent.
 
-All three carry the same `traceId`. The outbound `messageId` in a `message.outbound` event matches a `messages.id` row in SQLite with `direction='out'`.
+Not every bus notification carries a `traceId`. For end-to-end correlation, start from the inbound message row's `trace_id` in SQLite, then grep the daemon log for that `traceId`. For the actual reply body, use `teamroom thread <threadId>` or `teamroom chat`; the internal `channel.cli.out` notification is not mirrored into the log.
 
 ## Troubleshooting
 
-- **`events.jsonl` is missing.** The daemon hasn't started, or its data directory is different. Check `teamroom status` and `ls data/bus/`.
-- **`tail -f` shows no new events but the daemon is running.** Either no turn is active (send a message) or the subscriber path is broken — check daemon logs at `data/logs/teamroom-*.jsonl` for errors from `FileNotifyBus`.
-- **`jq` prints nothing for a `select(...)` filter.** Your predicate is too strict. Start with `jq -c '.type' data/bus/events.jsonl | head` to see what types actually exist, then narrow.
-- **`turn.started` without a matching terminal event.** The daemon crashed or was killed mid-turn. On next boot, reconcile moves orphaned `running` turns to `error='daemon_restart'`. (Known debt: `pending` turns with live containers are missed — see `docs/as-built/2026-04-18-teamroom-m1.md` §5.)
-- **File is huge.** It's append-only by design. Rotate or truncate during development (`> data/bus/events.jsonl`); do not do that while the daemon is running — subscribers can miss events across a truncation.
+- **No log file under `data/logs/`.** The daemon has not started, or it died before observability booted. Check `teamroom status` and start the daemon in the foreground to see startup errors.
+- **`jq` prints nothing for a `select(...)` filter.** Your predicate is too strict. Start with `jq -c '.event // .msg' "$LOG" | head` to see what the current run actually emitted, then narrow.
+- **You need the actual reply body, not just lifecycle signals.** Use `teamroom thread <threadId>` or `teamroom chat`; the daemon log shows control-flow and proxy spans, not the CLI-delivered reply envelope.
+- **The log is huge.** It is append-only by design. Rotate or remove old `data/logs/teamroom-*.jsonl` files between runs if you want a clean view.
 
 ## Related
 
-- `src/bus/README.md` — the `NotifyBus` interface and its two implementations.
-- `docs/runbooks/manual-cli-testing.md` — how to generate events to inspect.
-- `docs/as-built/2026-04-18-teamroom-m1.md` — §2 event bus.
+- `src/bus/README.md` — current in-process `EventBus` contract.
+- `docs/runbooks/manual-cli-testing.md` — how to generate live mail/thread traffic to inspect.
+- `docs/as-built/2026-04-22-teamroom-m4.5.md` — the M4.5 removal of `FileNotifyBus`, `teamroom tail`, and the legacy turn subsystem.
