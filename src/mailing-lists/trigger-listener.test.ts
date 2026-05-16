@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { MailingListTriggerListener } from "./trigger-listener.js";
 import { MailingListRegistry } from "./registry.js";
 import { EventBus } from "../bus/event-bus.js";

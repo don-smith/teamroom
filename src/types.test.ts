@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import type { Agent, Message, BusEvent } from "./types.js";
 
 describe("shared types", () => {

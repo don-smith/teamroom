@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { send } from "./send.js";
 import { composeStorage, type Storage } from "../modules/storage/storage.js";
 import { composeMessaging, type Messaging } from "../modules/messaging/messaging.js";

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { killStaleTeamroomContainers, type DockerExec } from "./kill-stale.js";
 
 describe("killStaleTeamroomContainers", () => {

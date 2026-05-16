@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { MailDispatcher } from "./mail-dispatcher.js";
 import { EventBus } from "../bus/event-bus.js";
 import { createDatabase } from "../db/database.js";

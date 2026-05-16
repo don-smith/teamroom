@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { PassThrough } from "node:stream";
 import { runChat } from "./chat.js";
 import { composeStorage, type Storage } from "../modules/storage/storage.js";

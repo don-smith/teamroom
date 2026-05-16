@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { buildSpec } from "./build-spec.js";
 import { TokenRegistry } from "../model-proxy/token-registry.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";

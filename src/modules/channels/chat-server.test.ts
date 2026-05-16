@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { WebSocket } from "ws";
 import { ChannelRegistry } from "./channel-registry.js";
 import { ChatServer } from "./chat-server.js";

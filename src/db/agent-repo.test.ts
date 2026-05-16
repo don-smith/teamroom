@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { createDatabase, type Db } from "./database.js";
 import { runMigrations } from "./migrator.js";
 import { AgentRepo } from "./agent-repo.js";

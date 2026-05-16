@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { JsonLinesLogger } from "../../logger/logger.js";
 import { SystemClock } from "../../clock/clock.js";
 import { composeMessaging } from "./messaging.js";

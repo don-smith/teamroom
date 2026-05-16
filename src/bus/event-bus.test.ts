@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { EventBus } from "./event-bus.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { ControllableClock } from "../clock/clock.js";

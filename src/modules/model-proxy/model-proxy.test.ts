@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { composeModelProxy } from "./model-proxy.js";
 import { JsonLinesLogger } from "../../logger/logger.js";
 import { ControllableClock } from "../../clock/clock.js";
