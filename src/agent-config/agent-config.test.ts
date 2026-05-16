@@ -54,6 +54,16 @@ describe("loadAgentConfig", () => {
     writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
   });
+
+  it("loads the real pi-coder agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/pi-coder"));
+    expect(cfg).toMatchObject({
+      name: "pi-coder",
+      runtime: "pi",
+      provider: "anthropic",
+      model: "claude-opus-4-7",
+    });
+  });
 });
 
 describe("loadAgentConfig — subscriptions and allowed_tools", () => {
