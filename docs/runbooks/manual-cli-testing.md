@@ -4,7 +4,7 @@ Exercise the CLI by hand with a real daemon, real Docker, and real LM Studio. Us
 
 ## Preconditions
 
-- `teamroom` installed on your PATH (`npm run install-cli -- ~/bin`; see README).
+- `teamroom` installed on your PATH (`bun scripts/install-cli.ts ~/bin --force`; see README).
 - `.env` populated with `LM_STUDIO_API_TOKEN`.
 - LM Studio running and the model in `agents/studio-assistant/agent.yaml` loaded.
 - Docker Desktop running; `teamroom-agent-studio-assistant:latest` built (`docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .`).
@@ -18,25 +18,22 @@ Exercise the CLI by hand with a real daemon, real Docker, and real LM Studio. Us
    ```
    Leave it running. Logs stream to stdout as JSON lines.
 
-2. **Terminal B — tail outbound replies.**
+2. **Terminal B — send a message.**
    ```bash
-   teamroom tail
-   # or:  teamroom tail --verbose      # include trace/turn IDs
-   # or:  teamroom tail --json         # raw JSON events
+   teamroom send studio-assistant "What is the capital of France?"
    ```
 
-3. **Terminal C — send a message.**
+3. **Terminal C — inspect the agent's inbox.**
    ```bash
-   teamroom send "What is the capital of France?"
+   teamroom inbox studio-assistant
    ```
-   The daemon in Terminal A picks up the inbound row, spawns a container, and the reply surfaces in Terminal B within a few seconds (latency is mostly the LLM call).
+   Re-run `teamroom inbox studio-assistant` until the reply appears. The daemon in Terminal A picks up the inbound row, spawns a container, and the reply typically lands within a few seconds (latency is mostly the LLM call).
 
 4. **Inspect state with the DB directly.**
    ```bash
    sqlite3 data/teamroom.db
    sqlite> .tables
-   sqlite> SELECT id, direction, substr(body, 1, 50), turn_id FROM messages ORDER BY created_at;
-   sqlite> SELECT id, status, error, started_at, finished_at FROM turns ORDER BY created_at;
+   sqlite> SELECT id, channel, direction, substr(body, 1, 50), thread_id FROM messages ORDER BY created_at;
    ```
 
 5. **Correlate events by trace ID.** Every message carries a `trace_id`; every turn carries the same `trace_id`; every bus event carries it too.
@@ -58,18 +55,16 @@ Exercise the CLI by hand with a real daemon, real Docker, and real LM Studio. Us
 ## Verifying success
 
 - Your sent message appears as a `direction='in'` row in `messages`.
-- A turn row transitions `pending → running → done`.
-- One or more `direction='out'` rows appear with the same `turn_id`.
-- Terminal B prints the reply.
+- One or more `direction='out'` rows appear with the same `thread_id`.
+- `teamroom inbox studio-assistant` shows the reply.
 - `data/bus/events.jsonl` contains `turn.started` and `turn.completed` events for that trace.
 
 ## Troubleshooting
 
-- **`teamroom: command not found`.** The install dir isn't on your PATH or you haven't run `npm run install-cli`. Verify with `which teamroom` and `echo $PATH`.
+- **`teamroom: command not found`.** The install dir isn't on your PATH or you haven't run `bun scripts/install-cli.ts ~/bin --force`. Verify with `which teamroom` and `echo $PATH`.
 - **`teamroom send` warns "daemon not detected."** `send` queues the inbound row regardless, but without the daemon it will sit pending. Start the daemon.
-- **`teamroom tail` prints nothing.** Messages land after the turn completes. Either the turn is still running (check `teamroom status`) or the container errored (check `data/bus/events.jsonl` for `turn.errored`).
+- **`teamroom inbox studio-assistant` prints nothing yet.** Messages land after the turn completes. Either the turn is still running (check `teamroom status`) or the container errored (check `data/bus/events.jsonl` for `turn.errored`).
 - **Container errors with `connect ECONNREFUSED`.** The agent-runtime inside the container tries to reach `host.docker.internal:1234`. LM Studio must be running and bound such that the host is reachable from the container.
-- **Reply arrives but stdout in Terminal B is garbled.** Default output is plain lines. Try `teamroom tail --json` to see the raw event stream.
 - **Data looks stale.** Multiple turns accrete in `data/teamroom.db` across runs. If you want a clean slate: stop the daemon, `rm -rf data`, restart.
 
 ## Related

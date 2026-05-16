@@ -14,27 +14,24 @@ Milestone 4.5 — "AI-native harness." Channel-kind addresses (`channel:cli:*`),
 
 ## Install the CLI
 
-Prerequisites: Node.js 22+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`).
+Prerequisites: Bun 1.3+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`).
 
 ```bash
 # 1. Dependencies
-npm install
+bun install
 
 # 2. Configure secrets
 cp .env.example .env
 # edit .env and set LM_STUDIO_API_TOKEN to your LM Studio token
 
-# 3. Build the CLI
-npm run build
-
-# 4. Install the teamroom binary into a PATH directory you choose.
+# 3. Install the teamroom binary into a PATH directory you choose.
 #    The script only writes into that directory — it does NOT modify your shell
 #    config or PATH. Make sure the directory is already on your PATH.
-npm run install-cli -- ~/bin
+bun scripts/install-cli.ts ~/bin --force
 #    (use --force if ~/bin/teamroom already exists and you want to overwrite it)
 
-# 5. Verify
-teamroom status
+# 4. Verify
+teamroom --help
 ```
 
 ## Day-to-day use
@@ -53,7 +50,7 @@ teamroom inbox studio-assistant                         # read agent's inbox
 teamroom status                                         # daemon liveness
 ```
 
-If the CLI code changes, rerun `npm run build` — the symlink points at `dist/cli/main.js` so rebuilds take effect without re-running `install-cli`.
+If the CLI code changes, no rebuild is needed — the installed symlink points at `src/cli/main.ts`, so Bun executes the current source directly.
 
 ## Smoke test
 

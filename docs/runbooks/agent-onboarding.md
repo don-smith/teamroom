@@ -33,7 +33,6 @@
 5. **Build the agent's image:**
 
    ```bash
-   npm run build
    docker build -t teamroom-agent-<name>:latest -f agents/<name>/Dockerfile .
    ```
 
@@ -42,8 +41,8 @@
 7. **Send a first message:**
 
    ```bash
-   teamroom send --agent <name> "hello"
-   teamroom tail
+   teamroom send <name> "hello"
+   teamroom inbox <name>
    ```
 
 8. **Verify in the log** at `data/logs/teamroom-YYYY-MM-DD.jsonl`:

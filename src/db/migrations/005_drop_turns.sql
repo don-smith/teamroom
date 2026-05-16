@@ -3,7 +3,7 @@
 -- The Orchestrator that wrote to this table was removed in Plan Task 34.
 -- Nothing live writes turns any more; the table is vestigial.
 --
--- SQLite ≥ 3.35 (shipped with better-sqlite3) supports DROP COLUMN.
+-- SQLite ≥ 3.35 (including Bun's embedded SQLite) supports DROP COLUMN.
 -- If this migration ever runs on an older SQLite the DROP COLUMN statement
 -- will error; in that case the column can safely be left as a nullable tombstone.
 
