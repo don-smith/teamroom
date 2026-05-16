@@ -195,110 +195,121 @@ export class LocalModelProxy implements ModelProxy {
         state.upstreamReq.destroy(new Error("client_disconnected"));
       }
     };
+    const handleRequestClose = () => {
+      if (req.aborted) handleClientGone();
+    };
+    const cleanupRequestLifecycle = () => {
+      res.removeListener("close", handleClientGone);
+      req.removeListener("aborted", handleClientGone);
+      req.removeListener("close", handleRequestClose);
+      req.socket.removeListener("close", handleClientGone);
+    };
     res.on("close", handleClientGone);
     req.on("aborted", handleClientGone);
-    req.on("close", () => {
-      if (req.aborted) handleClientGone();
-    });
+    req.on("close", handleRequestClose);
     req.socket.on("close", handleClientGone);
 
-    // The Anthropic SDK sends the routing token as `x-api-key`; the OpenAI SDK
-    // sends it as `Authorization: Bearer <token>`. Accept either so both
-    // container-side SDKs work without per-SDK proxy plumbing.
-    const apiKeyHeader = req.headers["x-api-key"];
-    const apiKeyValue = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-    let token: string | undefined = apiKeyValue;
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-      if (authValue && authValue.startsWith("Bearer ")) {
-        token = authValue.slice("Bearer ".length).trim() || undefined;
-      }
-    }
-
-    if (!token) {
-      // Downgraded to debug: the Claude Code CLI (spawned by
-      // claude-agent-sdk) makes an unauthenticated probe on startup that
-      // lands here. It's harmless — the real LLM call that follows carries
-      // our routing token — but at warn level it grabs attention every
-      // time an agent session spawns.
-      emit(this.opts.logger, "debug", buildSpan({
-        event: "model.call.rejected",
-        traceId,
-        spanId,
-        extra: { errorClass: "missing_token", status: "rejected" },
-      }));
-      safeRespond(res, 401, JSON.stringify({ error: "missing routing token" }));
-      return;
-    }
-
-    const entry = this.opts.registry.lookup(token);
-    if (!entry) {
-      emit(this.opts.logger, "warn", buildSpan({
-        event: "model.call.rejected",
-        traceId,
-        spanId,
-        extra: {
-          errorClass: "unknown_token",
-          status: "rejected",
-          tokenPrefix: token.slice(0, 8),
-        },
-      }));
-      safeRespond(res, 401, JSON.stringify({ error: "unknown routing token" }));
-      return;
-    }
-
-    const adapter = this.opts.adapters[entry.provider];
-    if (!adapter) {
-      emit(this.opts.logger, "error", buildSpan({
-        event: "model.call.rejected",
-        traceId: entry.traceId,
-        spanId,
-        agentId: entry.agentId,
-        turnId: entry.turnId,
-        extra: { errorClass: "no_adapter", provider: entry.provider, status: "rejected" },
-      }));
-      safeRespond(res, 500, JSON.stringify({ error: "no adapter for provider" }));
-      return;
-    }
-
-    // Buffer the request body so we can replay on retry. Capped at
-    // `maxBodyBytes` to bound per-request memory.
-    let requestBody: Buffer;
     try {
-      requestBody = await readBody(req, this.opts.maxBodyBytes);
-    } catch (err) {
-      if (err instanceof PayloadTooLargeError) {
+      // The Anthropic SDK sends the routing token as `x-api-key`; the OpenAI SDK
+      // sends it as `Authorization: Bearer <token>`. Accept either so both
+      // container-side SDKs work without per-SDK proxy plumbing.
+      const apiKeyHeader = req.headers["x-api-key"];
+      const apiKeyValue = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
+      let token: string | undefined = apiKeyValue;
+      if (!token) {
+        const authHeader = req.headers.authorization;
+        const authValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+        if (authValue && authValue.startsWith("Bearer ")) {
+          token = authValue.slice("Bearer ".length).trim() || undefined;
+        }
+      }
+
+      if (!token) {
+        // Downgraded to debug: the Claude Code CLI (spawned by
+        // claude-agent-sdk) makes an unauthenticated probe on startup that
+        // lands here. It's harmless — the real LLM call that follows carries
+        // our routing token — but at warn level it grabs attention every
+        // time an agent session spawns.
+        emit(this.opts.logger, "debug", buildSpan({
+          event: "model.call.rejected",
+          traceId,
+          spanId,
+          extra: { errorClass: "missing_token", status: "rejected" },
+        }));
+        safeRespond(res, 401, JSON.stringify({ error: "missing routing token" }));
+        return;
+      }
+
+      const entry = this.opts.registry.lookup(token);
+      if (!entry) {
         emit(this.opts.logger, "warn", buildSpan({
+          event: "model.call.rejected",
+          traceId,
+          spanId,
+          extra: {
+            errorClass: "unknown_token",
+            status: "rejected",
+            tokenPrefix: token.slice(0, 8),
+          },
+        }));
+        safeRespond(res, 401, JSON.stringify({ error: "unknown routing token" }));
+        return;
+      }
+
+      const adapter = this.opts.adapters[entry.provider];
+      if (!adapter) {
+        emit(this.opts.logger, "error", buildSpan({
           event: "model.call.rejected",
           traceId: entry.traceId,
           spanId,
           agentId: entry.agentId,
           turnId: entry.turnId,
-          extra: {
-            provider: entry.provider,
-            status: "rejected",
-            errorClass: "payload_too_large",
-            maxBodyBytes: this.opts.maxBodyBytes,
-          },
+          extra: { errorClass: "no_adapter", provider: entry.provider, status: "rejected" },
         }));
-        safeRespond(res, 413, JSON.stringify({ error: "payload too large" }));
+        safeRespond(res, 500, JSON.stringify({ error: "no adapter for provider" }));
         return;
       }
-      throw err;
-    }
 
-    await this.forward({
-      req,
-      res,
-      requestBody,
-      entry,
-      adapter,
-      spanId,
-      startedAt,
-      retried: false,
-      state,
-    });
+      // Buffer the request body so we can replay on retry. Capped at
+      // `maxBodyBytes` to bound per-request memory.
+      let requestBody: Buffer;
+      try {
+        requestBody = await readBody(req, this.opts.maxBodyBytes);
+      } catch (err) {
+        if (err instanceof PayloadTooLargeError) {
+          emit(this.opts.logger, "warn", buildSpan({
+            event: "model.call.rejected",
+            traceId: entry.traceId,
+            spanId,
+            agentId: entry.agentId,
+            turnId: entry.turnId,
+            extra: {
+              provider: entry.provider,
+              status: "rejected",
+              errorClass: "payload_too_large",
+              maxBodyBytes: this.opts.maxBodyBytes,
+            },
+          }));
+          safeRespond(res, 413, JSON.stringify({ error: "payload too large" }));
+          return;
+        }
+        throw err;
+      }
+
+      await this.forward({
+        req,
+        res,
+        requestBody,
+        entry,
+        adapter,
+        spanId,
+        startedAt,
+        retried: false,
+        state,
+      });
+    } finally {
+      cleanupRequestLifecycle();
+    }
   }
 
   private async forward(args: {

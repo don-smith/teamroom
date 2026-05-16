@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { createServer, request as httpRequest } from "node:http";
+import { Agent, createServer, request as httpRequest } from "node:http";
+import { EventEmitter } from "node:events";
 import type { AddressInfo } from "node:net";
 import { LocalModelProxy } from "./local-model-proxy.js";
 import { TokenRegistry } from "./token-registry.js";
@@ -71,10 +72,12 @@ function postToProxy(
   path: string,
   headers: Record<string, string>,
   body: string,
+  agent?: Agent,
 ): Promise<{ status: number; body: string; headers: Record<string, string | string[] | undefined> }> {
   return new Promise((resolve, reject) => {
     const req = httpRequest(
       {
+        agent,
         host: "127.0.0.1",
         port,
         path,
@@ -404,5 +407,65 @@ describe("LocalModelProxy", () => {
 
     await proxy.stop();
     await upstream.close();
+  });
+
+  it("cleans up request-scoped socket close listeners on keep-alive connections", async () => {
+    const upstream = await startFakeUpstream(() => ({
+      status: 200,
+      body: JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+    }));
+    const registry = new TokenRegistry();
+    const adapter = new OpenAICompatAdapter({ id: "lm-studio", upstreamUrl: upstream.url, auth: { mode: "bearer", key: "lm-real" } });
+    const proxy = new LocalModelProxy({
+      registry,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adapters: { anthropic: adapter as any, "lm-studio": adapter, ollama: adapter },
+      logger,
+    });
+    const { port } = await proxy.start();
+    const tok = registry.mint({
+      agentId: "a",
+      turnId: "t",
+      traceId: "tr",
+      provider: "lm-studio",
+      model: "x",
+    });
+
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    const emitterProto = EventEmitter.prototype as typeof EventEmitter.prototype & {
+      on: typeof EventEmitter.prototype.on;
+      removeListener: typeof EventEmitter.prototype.removeListener;
+    };
+    const originalOn = emitterProto.on;
+    const originalRemoveListener = emitterProto.removeListener;
+    let added = 0;
+    let removed = 0;
+
+    emitterProto.on = function patchedOn(eventName, listener) {
+      if (eventName === "close" && typeof listener === "function" && listener.name === "handleClientGone") {
+        added += 1;
+      }
+      return originalOn.call(this, eventName, listener);
+    };
+    emitterProto.removeListener = function patchedRemoveListener(eventName, listener) {
+      if (eventName === "close" && typeof listener === "function" && listener.name === "handleClientGone") {
+        removed += 1;
+      }
+      return originalRemoveListener.call(this, eventName, listener);
+    };
+
+    try {
+      await postToProxy(port, "/v1/chat/completions", { authorization: `Bearer ${tok}` }, "{}", agent);
+      await postToProxy(port, "/v1/chat/completions", { authorization: `Bearer ${tok}` }, "{}", agent);
+
+      expect(added).toBeGreaterThan(0);
+      expect(removed).toBe(added);
+    } finally {
+      emitterProto.on = originalOn;
+      emitterProto.removeListener = originalRemoveListener;
+      agent.destroy();
+      await proxy.stop();
+      await upstream.close();
+    }
   });
 });
