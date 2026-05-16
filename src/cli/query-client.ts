@@ -15,9 +15,16 @@ export interface RunQueryArgs {
  */
 export async function runQuery(args: RunQueryArgs): Promise<void> {
   const ws = new WebSocket(`ws://127.0.0.1:${args.port}/`);
+  const normalizeError = (err: unknown): Error =>
+    err instanceof Error ? err : new Error(String(err));
+
+  // Bun can surface follow-on socket errors during failed connects. Keep a
+  // baseline listener attached so they don't become unhandled EventEmitter
+  // errors after a one-shot rejection path has already fired.
+  ws.on("error", () => {});
   await new Promise<void>((ok, fail) => {
     ws.once("open", () => ok());
-    ws.once("error", (err) => fail(err));
+    ws.once("error", (err) => fail(normalizeError(err)));
   });
   try {
     ws.send(JSON.stringify(args.query));
@@ -34,12 +41,19 @@ export async function runQuery(args: RunQueryArgs): Promise<void> {
           }
           ok();
         } catch (err) {
-          fail(err as Error);
+          fail(normalizeError(err));
         }
       });
-      ws.once("error", (err) => fail(err));
+      ws.once("error", (err) => fail(normalizeError(err)));
     });
   } finally {
-    ws.close();
+    await new Promise<void>((resolve) => {
+      if (ws.readyState === ws.CLOSED) {
+        resolve();
+        return;
+      }
+      ws.once("close", () => resolve());
+      ws.close();
+    });
   }
 }

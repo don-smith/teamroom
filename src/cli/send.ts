@@ -37,6 +37,13 @@ export async function send(args: SendArgs): Promise<void> {
     // The chat protocol has no ack; 30ms is enough for local loopback.
     await new Promise((r) => setTimeout(r, 30));
   } finally {
-    ws.close();
+    await new Promise<void>((resolve) => {
+      if (ws.readyState === ws.CLOSED) {
+        resolve();
+        return;
+      }
+      ws.once("close", () => resolve());
+      ws.close();
+    });
   }
 }

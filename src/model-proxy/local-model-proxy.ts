@@ -32,15 +32,10 @@ interface Opts {
   adapters: Record<Provider, ProviderAdapter>;
   logger: Logger;
   /**
-   * Idle timeout for the outbound upstream socket, in milliseconds. Default
-   * 60_000. Semantics: this is Node's `ClientRequest.setTimeout`, which resets
-   * every time bytes flow — it is NOT a wall-clock deadline. For M2's
-   * non-streaming workload (Anthropic and LM Studio both return the whole
-   * response in one chunk at the end) the effect is "time from request-sent
-   * to response-received," which is what we want. If/when streaming upstream
-   * transports arrive (M3+), a slow-drip server could keep the socket alive
-   * indefinitely under this setting — at that point we'll want a separate
-   * wall-clock deadline (tracked in docs/roadmap.md#backlog — streaming model responses).
+   * Wall-clock timeout for the outbound upstream request, in milliseconds.
+   * Default 60_000. This is enforced explicitly rather than via
+   * `ClientRequest.setTimeout` so the behavior stays consistent under Bun's
+   * Node-compat layer too.
    */
   upstreamTimeoutMs?: number;
   host?: string; // default "127.0.0.1"
@@ -85,6 +80,7 @@ function emit(
 interface RequestState {
   clientGone: boolean;
   upstreamReq: ClientRequest | null;
+  upstreamAbortReason: "client_disconnected" | "upstream_timeout" | null;
 }
 
 /**
@@ -99,6 +95,12 @@ function safeRespond(res: ServerResponse, status: number, body: string): void {
     res.writeHead(status, { "content-type": "application/json" });
   }
   res.end(body);
+}
+
+function clientResponseGone(res: ServerResponse, state: RequestState): boolean {
+  return state.clientGone
+    || (res as ServerResponse & { destroyed?: boolean }).destroyed === true
+    || res.socket?.destroyed === true;
 }
 
 export class LocalModelProxy implements ModelProxy {
@@ -178,16 +180,27 @@ export class LocalModelProxy implements ModelProxy {
     // misfire on every happy path. The response's close event only fires
     // when the connection terminates; `writableFinished` distinguishes
     // "fully flushed to socket" (normal) from "client gave up" (abort).
-    const state: RequestState = { clientGone: false, upstreamReq: null };
-    res.on("close", () => {
+    const state: RequestState = {
+      clientGone: false,
+      upstreamReq: null,
+      upstreamAbortReason: null,
+    };
+    const handleClientGone = () => {
       if (res.writableFinished) return;
       state.clientGone = true;
       // Abort the in-flight upstream call, if any — no point finishing a
       // request whose response will be discarded.
       if (state.upstreamReq) {
+        state.upstreamAbortReason = "client_disconnected";
         state.upstreamReq.destroy(new Error("client_disconnected"));
       }
+    };
+    res.on("close", handleClientGone);
+    req.on("aborted", handleClientGone);
+    req.on("close", () => {
+      if (req.aborted) handleClientGone();
     });
+    req.socket.on("close", handleClientGone);
 
     // The Anthropic SDK sends the routing token as `x-api-key`; the OpenAI SDK
     // sends it as `Authorization: Bearer <token>`. Accept either so both
@@ -348,6 +361,18 @@ export class LocalModelProxy implements ModelProxy {
       headers: IncomingMessage["headers"];
       body: Buffer;
     }>((resolve, reject) => {
+      let settled = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        state.upstreamReq = null;
+        fn();
+      };
       const upstreamReq = reqFn(
         {
           protocol: upstreamUrl.protocol,
@@ -361,22 +386,31 @@ export class LocalModelProxy implements ModelProxy {
           const chunks: Buffer[] = [];
           upstreamRes.on("data", (c) => chunks.push(c));
           upstreamRes.on("end", () => {
-            resolve({
-              status: upstreamRes.statusCode ?? 0,
-              headers: upstreamRes.headers,
-              body: Buffer.concat(chunks),
+            settle(() => {
+              resolve({
+                status: upstreamRes.statusCode ?? 0,
+                headers: upstreamRes.headers,
+                body: Buffer.concat(chunks),
+              });
             });
           });
-          upstreamRes.on("error", reject);
+          upstreamRes.on("error", (err) => settle(() => reject(err)));
         },
       );
       // Share the upstream request so the `req.on("close")` listener can
       // destroy it if the client disconnects mid-flight.
       state.upstreamReq = upstreamReq;
-      upstreamReq.setTimeout(this.opts.upstreamTimeoutMs, () => {
+      timeoutId = setTimeout(() => {
+        state.upstreamAbortReason = "upstream_timeout";
         upstreamReq.destroy(new Error("upstream_timeout"));
+      }, this.opts.upstreamTimeoutMs);
+      upstreamReq.on("error", (err) => settle(() => reject(err)));
+      upstreamReq.on("close", () => {
+        if (!state.upstreamAbortReason) return;
+        const reason = state.upstreamAbortReason;
+        state.upstreamAbortReason = null;
+        settle(() => reject(new Error(reason)));
       });
-      upstreamReq.on("error", reject);
       upstreamReq.write(requestBody);
       upstreamReq.end();
     });
@@ -388,7 +422,7 @@ export class LocalModelProxy implements ModelProxy {
       // If the error is a result of the client disconnecting, that's its own
       // terminal status — not an upstream error. The response is already
       // un-sendable, so just emit the span and return.
-      if (state.clientGone) {
+      if (clientResponseGone(res, state)) {
         emit(this.opts.logger, "warn", buildSpan({
           event: "model.call.completed",
           traceId: entry.traceId,
@@ -434,7 +468,7 @@ export class LocalModelProxy implements ModelProxy {
     // Upstream completed successfully but the client went away before we got
     // here (race: upstream resolved between req-close and now). Discard the
     // response, emit a client_disconnected span, do not write to the socket.
-    if (state.clientGone) {
+    if (clientResponseGone(res, state)) {
       emit(this.opts.logger, "warn", buildSpan({
         event: "model.call.completed",
         traceId: entry.traceId,

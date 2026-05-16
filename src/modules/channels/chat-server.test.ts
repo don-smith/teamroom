@@ -9,6 +9,17 @@ import { JsonLinesLogger } from "../../logger/logger.js";
 import { ControllableClock } from "../../clock/clock.js";
 import type { AgentConfig } from "../../agent-config/agent-config.js";
 
+async function closeWebSocket(ws: WebSocket): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (ws.readyState === ws.CLOSED) {
+      resolve();
+      return;
+    }
+    ws.once("close", () => resolve());
+    ws.close();
+  });
+}
+
 describe("ChatServer", () => {
   let storage: Storage;
   let messaging: Messaging;
@@ -94,7 +105,7 @@ describe("ChatServer", () => {
     expect(msg.body).toBe("hi don");
     expect(msg.from).toBe("agent:alice");
     expect(msg.to).toContain("channel:cli:don");
-    ws.close();
+    await closeWebSocket(ws);
   });
 
   it("publishes inbound mail through the dispatcher (writes to recipient's inbox)", async () => {
@@ -117,7 +128,7 @@ describe("ChatServer", () => {
     expect(inbox.length).toBe(1);
     expect(inbox[0]?.body).toBe("hello alice");
     expect(inbox[0]?.from).toBe("channel:cli:don");
-    ws.close();
+    await closeWebSocket(ws);
   });
 
   it("rejects publish from unregistered connection with a structured error", async () => {
@@ -138,7 +149,7 @@ describe("ChatServer", () => {
     const err = await errorMsg;
     expect(err.type).toBe("error");
     expect(err.code).toBe("not_registered");
-    ws.close();
+    await closeWebSocket(ws);
   });
 
   it("rejects register for unknown channel with a structured error", async () => {
@@ -151,7 +162,7 @@ describe("ChatServer", () => {
     const err = await errorMsg;
     expect(err.type).toBe("error");
     expect(err.code).toBe("unknown_channel");
-    ws.close();
+    await closeWebSocket(ws);
   });
 
   it("disconnect removes the connection from the active set (no further deliveries)", async () => {
@@ -159,10 +170,7 @@ describe("ChatServer", () => {
     await new Promise<void>((ok) => ws.on("open", () => ok()));
     ws.send(JSON.stringify({ type: "register", channel: "cli", externalId: "don" }));
     await new Promise((r) => setTimeout(r, 20));
-    await new Promise<void>((ok) => {
-      ws.on("close", () => ok());
-      ws.close();
-    });
+    await closeWebSocket(ws);
     // After disconnect, sending mail to channel:cli:don should NOT throw inside ChatServer
     // (no destination connection to deliver to; mail still lands in the DB row but no socket to forward to).
     // We just verify no exception bubbles up.
