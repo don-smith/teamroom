@@ -45,13 +45,23 @@ try {
       console.error(`  bun scripts/install-cli.ts ${requestedDir} --force`);
       process.exit(1);
     }
-  } else if (!force) {
-    console.error(`error: ${linkPath} already exists and is not a symlink`);
+    rmSync(linkPath, { force: true });
+  } else if (existing.isFile()) {
+    if (!force) {
+      console.error(`error: ${linkPath} already exists and is not a symlink`);
+      console.error("remove or rename it manually, or choose a different target directory");
+      process.exit(1);
+    }
+    rmSync(linkPath, { force: true });
+  } else if (existing.isDirectory()) {
+    console.error(`error: ${linkPath} already exists and is a directory`);
+    console.error("remove or rename that directory manually, or choose a different target directory");
+    process.exit(1);
+  } else {
+    console.error(`error: ${linkPath} already exists and is not a removable file or symlink`);
     console.error("remove or rename it manually, or choose a different target directory");
     process.exit(1);
   }
-
-  rmSync(linkPath, { force: true, recursive: existing.isDirectory() });
 } catch (err) {
   if (!(err instanceof Error) || !("code" in err) || err.code !== "ENOENT") {
     throw err;
