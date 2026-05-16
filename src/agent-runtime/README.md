@@ -2,7 +2,7 @@
 
 The module that drives one worker per agent container. An `AgentWorker` interface defines the shape (`handleWake(envelope)`); a stdin loop in `main.ts` reads wake envelopes one per line and dispatches each to `worker.handleWake()`. Two worker implementations ship today: `AnthropicAgentWorker` (wraps `AnthropicLlmClient` driving `@anthropic-ai/claude-agent-sdk`), and `LangGraphAgentWorker` (a prebuilt `createReactAgent` over `@langchain/mcp-adapters`, holding a bounded in-process `BaseMessage[]` capped at 40 for within-container context persistence).
 
-**Runs inside each agent container**, not on the host. Baked into each agent image at build time via the agent's `Dockerfile` (`COPY dist/agent-runtime /app/agent-runtime`). The daemon treats this code as opaque beyond the stdin/stdout JSONL contract in spec §9 — this module's implementation details never leak to the host side. The container contract is language-agnostic, so a future agent could use a Python-based runtime instead.
+**Runs inside each agent container**, not on the host. Baked into each agent image at build time via the agent's `Dockerfile` (`COPY src /app/src`) and executed directly by Bun from source (`bun /app/src/agent-runtime/main.ts`). The daemon treats this code as opaque beyond the stdin/stdout JSONL contract in spec §9 — this module's implementation details never leak to the host side. The container contract is language-agnostic, so a future agent could use a Python-based runtime instead.
 
 ## Files
 
@@ -15,7 +15,7 @@ The module that drives one worker per agent container. An `AgentWorker` interfac
 ## Related
 
 - **Parent:** [src/README.md](../README.md)
-- **Uses:** `@anthropic-ai/claude-agent-sdk`, `@langchain/langgraph`, `@langchain/core`, `@langchain/openai`, `@langchain/mcp-adapters` npm packages, Node `fs` (for the writable `/store` mount and `/AGENTS.md`).
+- **Uses:** Bun runtime with Node-compatible built-ins such as `node:fs` (for the writable `/store` mount and `/AGENTS.md`), plus the `@anthropic-ai/claude-agent-sdk`, `@langchain/langgraph`, `@langchain/core`, `@langchain/openai`, and `@langchain/mcp-adapters` packages.
 - **Used by:** the container `ENTRYPOINT` in each agent's `Dockerfile`. Not imported by any other `src/` module — the process boundary is strict.
 - **Host-side counterpart:** [agent-config/README.md](../agent-config/README.md) — the loader that prepares what this runtime needs at spawn time.
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §2 container contract, §3 language-agnostic contract decision.

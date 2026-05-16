@@ -1,13 +1,11 @@
-FROM node:22-alpine
+FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-# Install production deps for the agent runtime (must match repo package.json).
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Install production deps for the agent runtime directly from the Bun lockfile.
+COPY package.json bun.lock ./
+RUN bun install --production --frozen-lockfile
 
-# Copy the compiled agent-runtime from dist/.
-COPY dist/agent-runtime /app/agent-runtime
-COPY dist/types.js /app/types.js
+COPY src /app/src
 
-ENTRYPOINT ["node", "/app/agent-runtime/main.js"]
+ENTRYPOINT ["bun", "/app/src/agent-runtime/main.ts"]
