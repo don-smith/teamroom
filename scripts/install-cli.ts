@@ -39,11 +39,6 @@ try {
   const existing = lstatSync(linkPath);
   if (existing.isSymbolicLink()) {
     const currentTarget = readlinkSync(linkPath);
-    const resolvedTarget = resolve(targetDir, currentTarget);
-    if (resolvedTarget === cliEntry) {
-      console.log(`teamroom is already installed at ${linkPath} (points at ${cliEntry}). nothing to do.`);
-      process.exit(0);
-    }
     if (!force) {
       console.error(`error: ${linkPath} already exists as a symlink pointing at ${currentTarget}`);
       console.error("re-run with --force to overwrite:");
