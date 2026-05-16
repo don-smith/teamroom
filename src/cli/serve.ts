@@ -18,6 +18,12 @@ export async function serve(): Promise<void> {
     process.exit(1);
   }
 
+  const openaiToken = process.env.OPENAI_TOKEN;
+  if (!openaiToken) {
+    process.stderr.write("OPENAI_TOKEN missing from .env\n");
+    process.exit(1);
+  }
+
   const anthropic = discoverAnthropic();
 
   const daemon = await startDaemon({
@@ -34,6 +40,10 @@ export async function serve(): Promise<void> {
       // Same host-side reasoning as LM Studio above — proxy runs on host, so
       // Ollama is reached at localhost. Ollama has no auth by default.
       upstreamUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
+    },
+    openai: {
+      upstreamUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com",
+      realKey: openaiToken,
     },
     anthropic,
   });

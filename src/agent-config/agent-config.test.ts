@@ -54,6 +54,16 @@ describe("loadAgentConfig", () => {
     writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
   });
+
+  it("loads the real pi-coder agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/pi-coder"));
+    expect(cfg).toMatchObject({
+      name: "pi-coder",
+      runtime: "pi",
+      provider: "openai",
+      model: "openai/gpt-5.5",
+    });
+  });
 });
 
 describe("loadAgentConfig — subscriptions and allowed_tools", () => {
@@ -157,7 +167,7 @@ describe("loadAgentConfig — provider field", () => {
   it("throws when provider is not in the allowed set", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
@@ -165,9 +175,9 @@ describe("loadAgentConfig — provider field", () => {
   it("echoes the offending provider value in the error message", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'openai'/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'bespoke'/);
   });
 
   it("accepts provider: ollama", () => {
@@ -177,5 +187,77 @@ describe("loadAgentConfig — provider field", () => {
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.provider).toBe("ollama");
+  });
+
+  it("accepts provider: openai", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: openai/gpt-5.5\nimage_tag: t\nprovider: openai\nruntime: pi\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openai");
+    expect(cfg.runtime).toBe("pi");
+  });
+});
+
+describe("loadAgentConfig — runtime field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "runtime-agent");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("infers runtime from provider when runtime is omitted", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("anthropic");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: lm-studio\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: ollama\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+  });
+
+  it("accepts explicit runtime: pi with an existing model provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: pi-coder\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-pi-coder:latest\nruntime: pi\nprovider: anthropic\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.runtime).toBe("pi");
+    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.model).toBe("claude-opus-4-7");
+  });
+
+  it("rejects unknown runtime values", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: anthropic\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi/);
   });
 });

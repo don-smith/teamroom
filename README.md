@@ -6,9 +6,9 @@ A multi-agent harness modeled after a software delivery team.
 
 ## Current state
 
-Milestone 4.5 — "AI-native harness." Channel-kind addresses (`channel:cli:*`), a compose-pattern refactor of the daemon, and an MCP SDK retrofit of the mail-MCP server. Two agents run concurrently: `studio-assistant` (LM Studio, local) and `claude-assistant` (Anthropic, real API via Claude Code OAuth or API key). Containers communicate exclusively via the mail substrate (dispatcher → session-management → MCP tools). The `tail` command is gone; `chat`, `inbox`, and `thread` replace it. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
+Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, filesystem MCP access, and LM Studio/Ollama adapter consolidation. This worktree is adding a Pi SDK based general coding teammate, `pi-coder`, while preserving Team Room's central model-proxy credential routing. Agents communicate through the mail substrate (dispatcher → session-management → MCP/tools); `chat`, `send`, `inbox`, and `thread` are the main CLI surfaces. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
 
-- As-built: [`docs/as-built/2026-04-21-teamroom-m4.md`](docs/as-built/2026-04-21-teamroom-m4.md) — M4 shipped state. M4.5 as-built lands at milestone close.
+- Latest as-built: [`docs/as-built/2026-04-22-teamroom-m5.md`](docs/as-built/2026-04-22-teamroom-m5.md).
 - Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
 - Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md) (M1)
 
@@ -43,11 +43,13 @@ teamroom status
 # One-time per model/agent change: rebuild each agent's image
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
+docker build -t teamroom-agent-pi-coder:latest -f agents/pi-coder/Dockerfile .
 
 # Three terminals
 teamroom serve                                          # daemon (foreground — Ctrl+C to stop)
 teamroom chat studio-assistant                          # interactive REPL with local LM Studio agent
 teamroom chat claude-assistant                          # interactive REPL with real Anthropic agent
+teamroom chat pi-coder                                  # interactive REPL with Pi SDK coding agent
 teamroom send studio-assistant "hello"                  # fire-and-forget send
 teamroom inbox studio-assistant                         # read agent's inbox
 teamroom status                                         # daemon liveness
