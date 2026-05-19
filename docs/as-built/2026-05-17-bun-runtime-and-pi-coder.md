@@ -1,4 +1,4 @@
-# Bun Runtime + Pi Coder — As Built
+# Bun Runtime + Pi Coder Bun Port — As Built
 
 *Date: 2026-05-17. Frozen at commit. Future changes happen in a new as-built, not here.*
 
@@ -7,14 +7,16 @@
 This branch closes two tightly-coupled pieces of work into one shipped shape:
 
 - Team Room's host CLI, test suite, install flow, and agent containers now run on Bun directly from source rather than a Node build/dist pipeline.
-- `pi-coder` is now part of that Bun-based runtime tree as a first-class `runtime: pi` agent, integrated through the same Team Room mail substrate, container contract, and model-proxy credential boundary as the existing agents.
+- the already-landed `pi-coder` work from local `main` is now ported into that Bun-based runtime tree, preserving its Team Room mail, container, and model-proxy boundaries.
+
+This document is intentionally a later episode than [2026-05-16-pi-coder-openai.md](2026-05-16-pi-coder-openai.md), not a replacement for it. The 2026-05-16 as-built remains the frozen record of the original Pi/OpenAI landing. This 2026-05-17 as-built records the later merge-and-port work that brought that capability onto the Bun runtime branch.
 
 The resulting branch shape is:
 
 - `bun test` and `bun run typecheck` are the default verification commands.
 - `teamroom` executes `src/cli/main.ts` directly via Bun.
 - agent images run `bun /app/src/agent-runtime/main.ts` rather than a compiled `dist/` entrypoint.
-- `studio-assistant` remains on LM Studio, `claude-assistant` remains on Anthropic, and `pi-coder` uses the hosted OpenAI provider through Team Room's proxy.
+- `studio-assistant` remains on LM Studio, `claude-assistant` remains on Anthropic, and `pi-coder` still uses the hosted OpenAI provider through Team Room's proxy.
 
 Live acceptance succeeded against the real environment at close-out:
 
@@ -44,7 +46,7 @@ This keeps host and container execution paths aligned: the same source tree runs
 
 ### Runtime is separate from provider
 
-The merged tree now makes the runtime/provider distinction explicit:
+The merged tree now carries forward the runtime/provider distinction introduced by the earlier Pi work:
 
 - `Provider = "anthropic" | "lm-studio" | "ollama" | "openai"`
 - `AgentRuntime = "anthropic" | "langgraph" | "pi"`
@@ -62,7 +64,7 @@ This split is now enforced rather than being purely descriptive. Invalid pairing
 
 ### Pi runtime integration
 
-`src/agent-runtime/pi-worker.ts` introduces the Pi SDK worker path under the Bun runtime tree.
+`src/agent-runtime/pi-worker.ts` is now part of the Bun runtime tree rather than a separate Node/dist path.
 
 At boot it:
 
@@ -91,9 +93,8 @@ That preserves existing LM Studio + Anthropic workflows while still supporting `
 
 - **Use the real LM Studio model that actually survives the live mail loop.**
   Earlier local-model attempts proved that passing the direct proxy integration test is not enough; the live agent wake/tool/reply path is the real acceptance boundary. At close-out, `openai/gpt-oss-20b` in LM Studio completed the real smoke flow successfully.
-
-- **Replace the premature Pi as-built rather than preserve a wrong frozen artifact.**
-  The merged `docs/as-built/2026-05-16-pi-coder-openai.md` described the pre-Bun Node/dist landing and claimed close-out that had not happened on this branch. It was removed and replaced with this as-built so the permanent record matches the shipped branch shape.
+- **Preserve the earlier Pi as-built and record the Bun port as a separate episode.**
+  The 2026-05-16 Pi/OpenAI as-built remains frozen as the record of that original landing. This document records the later Bun-branch merge and port, even where the resulting implementation shape differs from the earlier Node/dist container path.
 
 ## 4. Verification
 
@@ -134,5 +135,6 @@ The `docs/plans/` folder is back to its between-milestones resting shape.
 ## 7. Related
 
 - [M5 as-built](2026-04-22-teamroom-m5.md) — predecessor runtime shape that this branch extends and operationalizes on Bun.
+- [Pi Coder + OpenAI Provider as-built](2026-05-16-pi-coder-openai.md) — earlier frozen record of the original Pi/OpenAI landing before this Bun port.
 - [docs/roadmap.md](../roadmap.md) — still-current milestone ordering.
 - [README.md](../../README.md) — updated host/operator-facing entrypoint for the closed branch shape.

@@ -9,6 +9,7 @@ A multi-agent harness modeled after a software delivery team.
 Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, filesystem MCP access, and LM Studio/Ollama adapter consolidation. This branch extends that shape with a Bun-first runtime/tooling path and a Pi SDK based general coding teammate, `pi-coder`, while preserving Team Room's central model-proxy credential routing. Agents communicate through the mail substrate (dispatcher -> session-management -> MCP/tools); `chat`, `send`, `inbox`, and `thread` are the main CLI surfaces. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
 
 - Latest as-built: [`docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md`](docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md).
+- Prior Pi/OpenAI landing: [`docs/as-built/2026-05-16-pi-coder-openai.md`](docs/as-built/2026-05-16-pi-coder-openai.md).
 - Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
 - Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md) (M1)
 
