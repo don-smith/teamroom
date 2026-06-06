@@ -88,6 +88,25 @@ describe("daemon shutdown", () => {
     }
   });
 
+  it("requires a codebase mount for deepagents runtime agents", async () => {
+    const agentDir = join(agentsDir, "archie");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# Archie");
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: archie\nruntime: deepagents\nprovider: anthropic\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-archie:latest\nlifecycle: persistent\n",
+    );
+
+    await expect(startDaemon({
+      dataDir, agentsDir,
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      anthropic: null,
+    })).rejects.toThrow(/TEAMROOM_CODEBASE_PATH.*deepagents.*archie/);
+  });
+
   it("writes the mail-server port to data/ports/mail-mcp.port and clears it on stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,

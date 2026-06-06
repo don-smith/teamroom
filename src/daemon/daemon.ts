@@ -111,7 +111,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     maxMailsPerThread,
   });
 
-  // --- 7. Model proxy ---
+  // --- 7. Codebase-mount resolution ---
+  const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
+  validateCodebaseRequiredRuntimes(agentConfigs, codebasePath);
+
+  // --- 8. Model proxy ---
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
     lmStudio: opts.lmStudio,
@@ -119,9 +123,6 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     openai: opts.openai,
     anthropic: opts.anthropic,
   });
-
-  // --- 8. Codebase-mount resolution ---
-  const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
 
   // --- 9. Mail MCP server (with late-bound token resolver) ---
   let resolveMcpToken: (t: string) => string | null = () => null;
@@ -247,6 +248,17 @@ function discoverAgentConfigs(
     logger.info("agent registered", { agentName: cfg.name });
   }
   return agentConfigs;
+}
+
+function validateCodebaseRequiredRuntimes(agentConfigs: Map<string, AgentConfig>, codebasePath: string | null): void {
+  if (codebasePath !== null) return;
+  const requiringCodebase = Array.from(agentConfigs.values())
+    .filter((cfg) => cfg.runtime === "deepagents")
+    .map((cfg) => cfg.name);
+  if (requiringCodebase.length === 0) return;
+  throw new Error(
+    `TEAMROOM_CODEBASE_PATH is required for runtime: deepagents agents (${requiringCodebase.join(", ")})`,
+  );
 }
 
 function resolveCodebasePath(dataDir: string, logger: Logger): string | null {
