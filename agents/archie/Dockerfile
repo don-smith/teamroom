@@ -24,6 +24,7 @@ COPY vendor/deepagents/ /opt/deepagents/
 RUN pip install --no-cache-dir \
         /opt/deepagents/libs/deepagents \
         langchain-mcp-adapters \
+        langchain-anthropic \
         langchain-openai \
         httpx \
         langgraph-checkpoint-sqlite

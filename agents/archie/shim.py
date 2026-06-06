@@ -39,6 +39,7 @@ from pathlib import Path
 import httpx
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -82,12 +83,15 @@ def make_model() -> ChatOpenAI:
             ),
         )
 
-    # Fallback: route through the daemon proxy (original behavior).
+    # Fallback: route through the daemon's Anthropic-shape proxy.
+    # This must use ChatAnthropic, not ChatOpenAI: Team Room's Anthropic
+    # adapter forwards Anthropic `/v1/messages` requests, not OpenAI
+    # `/chat/completions` requests.
     anthropic_base = os.environ["ANTHROPIC_BASE_URL"]
     anthropic_token = os.environ["ANTHROPIC_AUTH_TOKEN"]
     model_id = os.environ.get("TEAMROOM_MODEL", "claude-opus-4-7")
-    return ChatOpenAI(
-        model=model_id,
+    return ChatAnthropic(
+        model_name=model_id,
         base_url=anthropic_base,
         api_key=anthropic_token,
     )
