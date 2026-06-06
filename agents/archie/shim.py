@@ -16,7 +16,7 @@ Environment (injected by Team Room's build-spec.ts):
   TEAMROOM_MODEL_API_TOKEN — proxy-minted token for OpenAI-compatible providers
   ANTHROPIC_BASE_URL      — daemon proxy URL (Anthropic-shape)
   ANTHROPIC_AUTH_TOKEN    — proxy-minted token for Anthropic
-  TEAMROOM_MODEL          — e.g. "google/gemma-4-26b-a4b-qat"
+  TEAMROOM_MODEL          — e.g. "qwen/qwen3.6-27b"
 
 API notes (verified against vendor/deepagents/libs/deepagents/deepagents/graph.py):
   - create_deep_agent accepts system_prompt= (not instructions=)

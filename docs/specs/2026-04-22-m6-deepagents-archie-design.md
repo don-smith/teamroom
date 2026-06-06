@@ -61,7 +61,7 @@ Archie uses the post-`main` split:
 name: archie
 runtime: deepagents
 provider: lm-studio
-model: google/gemma-4-26b-a4b-qat
+model: qwen/qwen3.6-27b
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []

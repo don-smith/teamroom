@@ -85,7 +85,7 @@ bun run docker:build:archie
 docker run --rm -i \
   -e TEAMROOM_AGENT_NAME=archie \
   -e TEAMROOM_PROVIDER=lm-studio \
-  -e TEAMROOM_MODEL=google/gemma-4-26b-a4b-qat \
+  -e TEAMROOM_MODEL=qwen/qwen3.6-27b \
   -v "$PWD/agents/archie/AGENTS.md:/AGENTS.md" \
   -v "$PWD/agents/archie/store:/store" \
   -v "$PWD:/codebase" \

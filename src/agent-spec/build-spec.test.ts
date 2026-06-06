@@ -97,7 +97,7 @@ describe("buildSpec", () => {
     const archie: AgentConfig = {
       ...cfg,
       name: "archie",
-      model: "google/gemma-4-26b-a4b-qat",
+      model: "qwen/qwen3.6-27b",
       imageTag: "teamroom-agent-archie:latest",
       provider: "lm-studio",
       runtime: "deepagents",
@@ -120,7 +120,7 @@ describe("buildSpec", () => {
     expect(tokenRegistry.lookup("archie-proxy-token")).toMatchObject({
       agentId: "archie",
       provider: "lm-studio",
-      model: "google/gemma-4-26b-a4b-qat",
+      model: "qwen/qwen3.6-27b",
     });
   });
 

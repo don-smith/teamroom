@@ -73,7 +73,7 @@ describe("loadAgentConfig", () => {
       name: "archie",
       runtime: "deepagents",
       provider: "lm-studio",
-      model: "google/gemma-4-26b-a4b-qat",
+      model: "qwen/qwen3.6-27b",
       lifecycle: "persistent",
     });
   });
@@ -312,7 +312,7 @@ describe("loadAgentConfig — runtime field", () => {
   it("accepts explicit runtime: deepagents with an existing model provider", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: archie\nmodel: google/gemma-4-26b-a4b-qat\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: lm-studio\nlifecycle: persistent\n",
+      "name: archie\nmodel: qwen/qwen3.6-27b\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: lm-studio\nlifecycle: persistent\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.runtime).toBe("deepagents");
