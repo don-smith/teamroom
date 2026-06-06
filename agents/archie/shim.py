@@ -166,8 +166,8 @@ async def handle_wake(
     state: dict, checkpointer: AsyncSqliteSaver, envelope: dict
 ) -> None:
     # envelope is intentionally unused for M6 — the canned WAKE_PROMPT covers
-    # "check your inbox and act on whatever's there"; M6.1 or later may surface
-    # event hints (e.g., mail-thread id) into the prompt.
+    # "check your inbox and act on whatever's there"; a later milestone may
+    # surface event hints (e.g., mail-thread id) into the prompt.
     # Build agent on first wake; cache in state dict for subsequent wakes.
     if state.get("agent") is None:
         print(
@@ -179,7 +179,7 @@ async def handle_wake(
     agent = state["agent"]
 
     # Single thread id for all M6 wakes — lets the checkpointer accumulate
-    # history across wakes. M6.1 or later can key on mail thread_id.
+    # history across wakes. A later milestone can key on mail thread_id.
     thread_id = "archie-main"
     config = {"configurable": {"thread_id": thread_id}}
     print(f"[archie] invoking agent with prompt: {WAKE_PROMPT}", file=sys.stderr)
