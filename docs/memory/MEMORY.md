@@ -33,4 +33,4 @@
 ## Project
 - [Team Room — LangGraph is the intended per-agent runtime](project_teamroom_langgraph_direction.md) — agents will run LangGraph workflows eventually; M1 keeps the runtime simple but the container contract is language-agnostic to accommodate it
 - [Team Room — NanoClaw is the design reference for container + credential patterns](project_teamroom_nanoclaw_reference.md) — qwibitai/nanoclaw on GitHub; M2's OAuth pivot was modeled directly on it
-- [Team Room — Anthropic auth defaults to OAuth via Claude Code subscription](project_teamroom_anthropic_oauth_default.md) — claude-agent-sdk in container, host proxy substitution; API key is fallback only
+- [Team Room — prefer OpenAI/Codex and LM Studio for non-Claude agents](project_teamroom_model_provider_preference.md) — current provider preference is OpenAI/Codex or local LM Studio for non-Claude agents; Anthropic remains primarily for Claude-specific flows

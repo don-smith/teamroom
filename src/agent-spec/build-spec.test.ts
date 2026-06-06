@@ -97,9 +97,9 @@ describe("buildSpec", () => {
     const archie: AgentConfig = {
       ...cfg,
       name: "archie",
-      model: "claude-opus-4-7",
+      model: "google/gemma-4-26b-a4b-qat",
       imageTag: "teamroom-agent-archie:latest",
-      provider: "anthropic",
+      provider: "lm-studio",
       runtime: "deepagents",
       lifecycle: "persistent",
     };
@@ -115,12 +115,12 @@ describe("buildSpec", () => {
     });
 
     expect(spec.env.TEAMROOM_RUNTIME).toBe("deepagents");
-    expect(spec.env.TEAMROOM_PROVIDER).toBe("anthropic");
-    expect(spec.env.ANTHROPIC_AUTH_TOKEN).toBe("archie-proxy-token");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("lm-studio");
+    expect(spec.env.TEAMROOM_MODEL_API_TOKEN).toBe("archie-proxy-token");
     expect(tokenRegistry.lookup("archie-proxy-token")).toMatchObject({
       agentId: "archie",
-      provider: "anthropic",
-      model: "claude-opus-4-7",
+      provider: "lm-studio",
+      model: "google/gemma-4-26b-a4b-qat",
     });
   });
 

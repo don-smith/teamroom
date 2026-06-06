@@ -1,7 +1,7 @@
 name: archie
 runtime: deepagents
-provider: anthropic
-model: claude-opus-4-7
+provider: lm-studio
+model: google/gemma-4-26b-a4b-qat
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []

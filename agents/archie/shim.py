@@ -11,10 +11,12 @@ Environment (injected by Team Room's build-spec.ts):
   TEAMROOM_AGENT_NAME     — "archie"
   TEAMROOM_MCP_URL        — http://host.docker.internal:<port>/mcp
   TEAMROOM_MCP_TOKEN      — bearer for mail-MCP
-  TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compat)
+  TEAMROOM_PROVIDER       — model provider (lm-studio, openai, ollama, anthropic)
+  TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compatible for local/openai providers)
+  TEAMROOM_MODEL_API_TOKEN — proxy-minted token for OpenAI-compatible providers
   ANTHROPIC_BASE_URL      — daemon proxy URL (Anthropic-shape)
-  ANTHROPIC_AUTH_TOKEN    — proxy-minted token
-  TEAMROOM_MODEL          — e.g. "claude-opus-4-7"
+  ANTHROPIC_AUTH_TOKEN    — proxy-minted token for Anthropic
+  TEAMROOM_MODEL          — e.g. "google/gemma-4-26b-a4b-qat"
 
 API notes (verified against vendor/deepagents/libs/deepagents/deepagents/graph.py):
   - create_deep_agent accepts system_prompt= (not instructions=)
@@ -36,20 +38,40 @@ import os
 import sys
 from pathlib import Path
 
-import httpx
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.profiles import _HarnessProfile, _register_harness_profile
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 
+LOCAL_MODEL_DEEPAGENTS_PROMPT = """You are a DeepAgents-based Team Room agent.
+Use available tools when needed, then answer concisely. For mail wakes, inspect
+mail, read requested codebase files before making architectural claims, and
+reply in-thread. Cite file paths when relevant."""
+
+
+# The default DeepAgents harness prompt and subagent/todo tools are too large
+# for some locally-loaded LM Studio models. Archie only needs mail + filesystem
+# for M6 acceptance, so compact the OpenAI-compatible prompt surface inside this
+# container without patching vendored DeepAgents.
+_register_harness_profile(
+    "openai",
+    _HarnessProfile(
+        base_system_prompt=LOCAL_MODEL_DEEPAGENTS_PROMPT,
+        excluded_tools=frozenset({"task", "write_todos", "compact_conversation"}),
+    ),
+)
+
+
 WAKE_PROMPT = (
-    "A new-mail wake fired. Check your inbox with mail_list (unreadOnly=false). "
-    "For each message, use mail_get to read the full thread, do whatever "
-    "reading/editing under /codebase the message asks for, and reply with "
-    "mail_reply. If the inbox is empty, do nothing and report 'no mail'."
+    "A new-mail wake fired. Use mail_list exactly once with unreadOnly=true. "
+    "If it returns mail, use mail_get on the newest message/thread exactly once, "
+    "then inspect only the codebase files needed for that request, and finish by "
+    "calling mail_reply in the same thread. Do not call mail_list repeatedly. "
+    "If the inbox is empty, do nothing and report 'no mail'."
 )
 
 
@@ -60,41 +82,46 @@ def load_system_prompt() -> str:
     return "You are Archie, Team Room's architect."
 
 
-def make_model() -> ChatOpenAI:
-    """Build the LLM instance using OpenRouter (OpenAI-compatible endpoint).
+def make_model():
+    """Build the LLM instance for Archie's configured model provider.
 
-    Uses OPENROUTER_API_KEY and OPENROUTER_MODEL from environment (injected by
-    build-spec.ts when present in .env). Falls back to the daemon proxy path
-    for the default configuration.
+    Team Room owns provider routing through the local model proxy. DeepAgents is
+    the runtime; it should not imply Anthropic. OpenAI-compatible providers
+    (LM Studio, OpenAI, Ollama) use ChatOpenAI against TEAMROOM_MODEL_BASE_URL.
+    Anthropic uses ChatAnthropic against ANTHROPIC_BASE_URL.
+
+    OpenRouter is intentionally not selected by ambient OPENROUTER_* env vars
+    here: those variables are global today and previously hijacked Archie even
+    when the agent config was meant to use another provider. OpenRouter should
+    become an explicit provider/fallback choice in a later routing feature.
     """
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-    openrouter_model = os.environ.get("OPENROUTER_MODEL")
+    provider = os.environ["TEAMROOM_PROVIDER"]
+    model_id = os.environ["TEAMROOM_MODEL"]
 
-    if openrouter_key and openrouter_model:
+    if provider in {"lm-studio", "openai", "ollama"}:
+        # LangChain's ChatOpenAI treats base_url as the OpenAI API root and
+        # appends /chat/completions, so include /v1 here to reach Team Room's
+        # OpenAI-compatible proxy route: /v1/chat/completions.
+        base_url = os.environ["TEAMROOM_MODEL_BASE_URL"].rstrip("/") + "/v1"
         return ChatOpenAI(
-            model=openrouter_model,
-            base_url="https://openrouter.ai/api/v1",
-            api_key=openrouter_key,
-            http_client=httpx.Client(
-                headers={
-                    "HTTP-Referrer": "https://teamroom.local",
-                    "X-Title": "Team Room Archie",
-                },
-            ),
+            model=model_id,
+            base_url=base_url,
+            api_key=os.environ["TEAMROOM_MODEL_API_TOKEN"],
+            max_tokens=512,
+            temperature=0,
         )
 
-    # Fallback: route through the daemon's Anthropic-shape proxy.
-    # This must use ChatAnthropic, not ChatOpenAI: Team Room's Anthropic
-    # adapter forwards Anthropic `/v1/messages` requests, not OpenAI
-    # `/chat/completions` requests.
-    anthropic_base = os.environ["ANTHROPIC_BASE_URL"]
-    anthropic_token = os.environ["ANTHROPIC_AUTH_TOKEN"]
-    model_id = os.environ.get("TEAMROOM_MODEL", "claude-opus-4-7")
-    return ChatAnthropic(
-        model_name=model_id,
-        base_url=anthropic_base,
-        api_key=anthropic_token,
-    )
+    if provider == "anthropic":
+        # Route through the daemon's Anthropic-shape proxy. This must use
+        # ChatAnthropic, not ChatOpenAI: Team Room's Anthropic adapter forwards
+        # Anthropic `/v1/messages` requests, not OpenAI `/chat/completions`.
+        return ChatAnthropic(
+            model_name=model_id,
+            base_url=os.environ["ANTHROPIC_BASE_URL"],
+            api_key=os.environ["ANTHROPIC_AUTH_TOKEN"],
+        )
+
+    raise RuntimeError(f"unsupported TEAMROOM_PROVIDER for Archie: {provider}")
 
 
 async def build_agent(checkpointer: AsyncSqliteSaver):

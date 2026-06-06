@@ -60,14 +60,14 @@ Archie uses the post-`main` split:
 ```yaml
 name: archie
 runtime: deepagents
-provider: anthropic
-model: claude-opus-4-7
+provider: lm-studio
+model: google/gemma-4-26b-a4b-qat
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []
 ```
 
-`runtime: deepagents` selects the container entrypoint/runtime shape. `provider: anthropic` selects proxy token routing.
+`runtime: deepagents` selects the container entrypoint/runtime shape. `provider: lm-studio` selects OpenAI-compatible proxy token routing to the local LM Studio backend.
 
 ### 5.2 Persistent lifecycle
 
@@ -107,7 +107,7 @@ M6 closes when:
 
 ## 7. Known follow-ups before close
 
-- Decide whether the OpenRouter path in `agents/archie/shim.py` is a temporary debug escape hatch or a supported configuration.
+- Decide how OpenRouter should become an explicit provider or fallback configuration rather than an ambient `OPENROUTER_*` shortcut.
 - Cap first-wake DeepAgents build retries so repeated MCP/model construction failures eventually surface to daemon respawn.
 - Make the `/codebase` requirement loud for `runtime: deepagents` or document the operator requirement clearly.
 - Document that Docker “Up” means process booted, not necessarily first-wake readiness.

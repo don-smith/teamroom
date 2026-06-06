@@ -72,8 +72,8 @@ describe("loadAgentConfig", () => {
     expect(cfg).toMatchObject({
       name: "archie",
       runtime: "deepagents",
-      provider: "anthropic",
-      model: "claude-opus-4-7",
+      provider: "lm-studio",
+      model: "google/gemma-4-26b-a4b-qat",
       lifecycle: "persistent",
     });
   });
@@ -312,11 +312,11 @@ describe("loadAgentConfig — runtime field", () => {
   it("accepts explicit runtime: deepagents with an existing model provider", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: archie\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: anthropic\nlifecycle: persistent\n",
+      "name: archie\nmodel: google/gemma-4-26b-a4b-qat\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: lm-studio\nlifecycle: persistent\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.runtime).toBe("deepagents");
-    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.provider).toBe("lm-studio");
     expect(cfg.lifecycle).toBe("persistent");
   });
 

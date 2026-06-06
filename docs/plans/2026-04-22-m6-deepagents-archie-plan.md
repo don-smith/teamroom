@@ -10,7 +10,7 @@
 
 | Decision | Outcome |
 |---|---|
-| Runtime/provider split | Keep `main`’s split. Archie is `runtime: deepagents`, `provider: anthropic`. |
+| Runtime/provider split | Keep `main`’s split. Archie is `runtime: deepagents`, `provider: lm-studio`. |
 | Coding-agent role | Use `main`’s `pi-coder`; do not add a second coding agent in M6. |
 | Runtime scope | DeepAgents only for M6. |
 | Milestone name | “DeepAgents runtime + Archie architect.” |
@@ -26,7 +26,7 @@ Already landed before/through the merge:
 - DeepAgents submodule at `vendor/deepagents/`.
 - Archie scaffold, shim, and Dockerfile under `agents/archie/`.
 - Merge from `main`, including Bun runtime and `pi-coder`.
-- Reframed Archie config as `runtime: deepagents`, `provider: anthropic`.
+- Reframed Archie config as `runtime: deepagents`, `provider: lm-studio`.
 
 ## Task A — Post-merge static baseline
 
@@ -62,7 +62,7 @@ Expected/current: all non-environmental tests pass. Current known environmental 
 
 ## Task C — Archie implementation polish
 
-- [ ] Decide whether `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` in `agents/archie/shim.py` is supported configuration or temporary debug code.
+- [x] Remove ambient `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` selection from `agents/archie/shim.py`; OpenRouter should become explicit provider/fallback config later.
   - If supported: document it and make config naming explicit.
   - If temporary: remove it and route exclusively through Team Room’s proxy.
 - [ ] Add first-wake build retry cap in `agents/archie/shim.py`.
@@ -84,7 +84,8 @@ bun run docker:build:archie
 ```bash
 docker run --rm -i \
   -e TEAMROOM_AGENT_NAME=archie \
-  -e TEAMROOM_MODEL=claude-opus-4-7 \
+  -e TEAMROOM_PROVIDER=lm-studio \
+  -e TEAMROOM_MODEL=google/gemma-4-26b-a4b-qat \
   -v "$PWD/agents/archie/AGENTS.md:/AGENTS.md" \
   -v "$PWD/agents/archie/store:/store" \
   -v "$PWD:/codebase" \
