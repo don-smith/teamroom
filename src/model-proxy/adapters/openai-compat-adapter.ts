@@ -11,8 +11,10 @@ export interface OpenAICompatAdapterOpts {
   id: Provider;
   /** Upstream base URL (e.g. `http://localhost:1234` or `http://localhost:11434`). */
   upstreamUrl: string;
-  /** Auth mode — `bearer` for LM Studio-style token, `none` for Ollama-style unauthenticated. */
+  /** Auth mode — `bearer` for LM Studio/OpenAI-style token, `none` for Ollama-style unauthenticated. */
   auth: OpenAICompatAuth;
+  /** Optional provider-specific headers added during auth/header resolution. */
+  defaultHeaders?: Record<string, string>;
 }
 
 /**
@@ -37,6 +39,9 @@ export class OpenAICompatAdapter implements ProviderAdapter {
 
   async resolveAuth(headers: OutgoingHttpHeaders): Promise<void> {
     delete headers["x-api-key"];
+    for (const [name, value] of Object.entries(this.opts.defaultHeaders ?? {})) {
+      headers[name] = value;
+    }
     if (this.opts.auth.mode === "bearer") {
       headers.authorization = `Bearer ${this.opts.auth.key}`;
     } else {

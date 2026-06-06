@@ -17,6 +17,7 @@ describe("resolveServeProviderTokens", () => {
     ).toEqual({
       lmStudioToken: "lm-token",
       openaiToken: null,
+      openrouterToken: null,
     });
   });
 
@@ -27,5 +28,27 @@ describe("resolveServeProviderTokens", () => {
         { LM_STUDIO_API_TOKEN: "lm-token" },
       ),
     ).toThrow(/OPENAI_TOKEN/);
+  });
+
+  it("requires OPENROUTER_API_KEY when an openrouter agent is configured", () => {
+    expect(() =>
+      resolveServeProviderTokens(
+        ["lm-studio", "openrouter"],
+        { LM_STUDIO_API_TOKEN: "lm-token" },
+      ),
+    ).toThrow(/OPENROUTER_API_KEY/);
+  });
+
+  it("returns OPENROUTER_API_KEY when an openrouter agent is configured", () => {
+    expect(
+      resolveServeProviderTokens(
+        ["lm-studio", "openrouter"],
+        { LM_STUDIO_API_TOKEN: "lm-token", OPENROUTER_API_KEY: "or-token" },
+      ),
+    ).toEqual({
+      lmStudioToken: "lm-token",
+      openaiToken: null,
+      openrouterToken: "or-token",
+    });
   });
 });

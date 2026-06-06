@@ -60,14 +60,14 @@ Archie uses the post-`main` split:
 ```yaml
 name: archie
 runtime: deepagents
-provider: lm-studio
-model: qwen/qwen3.6-27b
+provider: openrouter
+model: deepseek/deepseek-v4-flash
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []
 ```
 
-`runtime: deepagents` selects the container entrypoint/runtime shape. `provider: lm-studio` selects OpenAI-compatible proxy token routing to the local LM Studio backend.
+`runtime: deepagents` selects the container entrypoint/runtime shape. `provider: openrouter` selects OpenAI-compatible proxy token routing to OpenRouter.
 
 ### 5.2 Persistent lifecycle
 

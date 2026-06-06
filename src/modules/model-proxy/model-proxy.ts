@@ -25,6 +25,7 @@ export interface ModelProxyDeps {
   lmStudio: { upstreamUrl: string; realKey: string };
   ollama: { upstreamUrl: string };
   openai: { upstreamUrl: string; realKey: string };
+  openrouter: { upstreamUrl: string; realKey: string };
   anthropic: AnthropicCreds | null;
 }
 
@@ -45,6 +46,15 @@ export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProx
       id: "openai",
       upstreamUrl: deps.openai.upstreamUrl,
       auth: { mode: "bearer", key: deps.openai.realKey },
+    }),
+    openrouter: new OpenAICompatAdapter({
+      id: "openrouter",
+      upstreamUrl: deps.openrouter.upstreamUrl,
+      auth: { mode: "bearer", key: deps.openrouter.realKey },
+      defaultHeaders: {
+        "HTTP-Referer": "https://teamroom.local",
+        "X-Title": "Team Room",
+      },
     }),
   };
   const anthropicAdapterPresent = deps.anthropic !== null;

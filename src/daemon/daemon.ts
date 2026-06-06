@@ -53,6 +53,10 @@ export interface DaemonOptions {
     upstreamUrl: string; // host-side URL for the OpenAI-compatible API
     realKey: string;
   };
+  openrouter: {
+    upstreamUrl: string; // host-side URL for the OpenRouter OpenAI-compatible API
+    realKey: string;
+  };
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -121,6 +125,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     lmStudio: opts.lmStudio,
     ollama: opts.ollama,
     openai: opts.openai,
+    openrouter: opts.openrouter,
     anthropic: opts.anthropic,
   });
 

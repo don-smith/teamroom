@@ -1,7 +1,7 @@
 name: archie
 runtime: deepagents
-provider: lm-studio
-model: qwen/qwen3.6-27b
+provider: openrouter
+model: deepseek/deepseek-v4-flash
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []

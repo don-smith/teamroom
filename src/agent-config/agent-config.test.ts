@@ -72,8 +72,8 @@ describe("loadAgentConfig", () => {
     expect(cfg).toMatchObject({
       name: "archie",
       runtime: "deepagents",
-      provider: "lm-studio",
-      model: "qwen/qwen3.6-27b",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
       lifecycle: "persistent",
     });
   });
@@ -254,6 +254,16 @@ describe("loadAgentConfig — provider field", () => {
     expect(cfg.provider).toBe("openai");
     expect(cfg.runtime).toBe("pi");
   });
+
+  it("accepts provider: openrouter", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: t\nprovider: openrouter\nruntime: deepagents\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.runtime).toBe("deepagents");
+  });
 });
 
 describe("loadAgentConfig — runtime field", () => {
@@ -296,6 +306,12 @@ describe("loadAgentConfig — runtime field", () => {
       "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
     );
     expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
   });
 
   it("accepts explicit runtime: pi with an existing model provider", () => {
@@ -312,11 +328,11 @@ describe("loadAgentConfig — runtime field", () => {
   it("accepts explicit runtime: deepagents with an existing model provider", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: archie\nmodel: qwen/qwen3.6-27b\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: lm-studio\nlifecycle: persistent\n",
+      "name: archie\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: openrouter\nlifecycle: persistent\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.runtime).toBe("deepagents");
-    expect(cfg.provider).toBe("lm-studio");
+    expect(cfg.provider).toBe("openrouter");
     expect(cfg.lifecycle).toBe("persistent");
   });
 

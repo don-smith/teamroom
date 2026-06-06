@@ -25,6 +25,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     });
     const pidFile = join(dataDir, "teamroom.pid");
@@ -39,6 +40,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     });
     await daemon.stop();
@@ -51,6 +53,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     });
     unlinkSync(join(dataDir, "teamroom.pid"));
@@ -77,6 +80,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     });
 
@@ -103,6 +107,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     })).rejects.toThrow(/TEAMROOM_CODEBASE_PATH.*deepagents.*archie/);
   });
@@ -113,6 +118,7 @@ describe("daemon shutdown", () => {
       lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
       ollama: { upstreamUrl: "http://example.invalid" },
       openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
       anthropic: null,
     });
     const portFile = join(dataDir, "ports", "mail-mcp.port");

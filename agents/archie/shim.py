@@ -11,12 +11,12 @@ Environment (injected by Team Room's build-spec.ts):
   TEAMROOM_AGENT_NAME     — "archie"
   TEAMROOM_MCP_URL        — http://host.docker.internal:<port>/mcp
   TEAMROOM_MCP_TOKEN      — bearer for mail-MCP
-  TEAMROOM_PROVIDER       — model provider (lm-studio, openai, ollama, anthropic)
+  TEAMROOM_PROVIDER       — model provider (lm-studio, openai, openrouter, ollama, anthropic)
   TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compatible for local/openai providers)
   TEAMROOM_MODEL_API_TOKEN — proxy-minted token for OpenAI-compatible providers
   ANTHROPIC_BASE_URL      — daemon proxy URL (Anthropic-shape)
   ANTHROPIC_AUTH_TOKEN    — proxy-minted token for Anthropic
-  TEAMROOM_MODEL          — e.g. "qwen/qwen3.6-27b"
+  TEAMROOM_MODEL          — e.g. "deepseek/deepseek-v4-flash"
 
 API notes (verified against vendor/deepagents/libs/deepagents/deepagents/graph.py):
   - create_deep_agent accepts system_prompt= (not instructions=)
@@ -87,18 +87,17 @@ def make_model():
 
     Team Room owns provider routing through the local model proxy. DeepAgents is
     the runtime; it should not imply Anthropic. OpenAI-compatible providers
-    (LM Studio, OpenAI, Ollama) use ChatOpenAI against TEAMROOM_MODEL_BASE_URL.
+    (LM Studio, OpenAI, OpenRouter, Ollama) use ChatOpenAI against TEAMROOM_MODEL_BASE_URL.
     Anthropic uses ChatAnthropic against ANTHROPIC_BASE_URL.
 
-    OpenRouter is intentionally not selected by ambient OPENROUTER_* env vars
-    here: those variables are global today and previously hijacked Archie even
-    when the agent config was meant to use another provider. OpenRouter should
-    become an explicit provider/fallback choice in a later routing feature.
+    OpenRouter is selected only when TEAMROOM_PROVIDER=openrouter, not by
+    ambient OPENROUTER_* env vars. This keeps provider choice explicit in
+    agent.yaml.
     """
     provider = os.environ["TEAMROOM_PROVIDER"]
     model_id = os.environ["TEAMROOM_MODEL"]
 
-    if provider in {"lm-studio", "openai", "ollama"}:
+    if provider in {"lm-studio", "openai", "openrouter", "ollama"}:
         # LangChain's ChatOpenAI treats base_url as the OpenAI API root and
         # appends /chat/completions, so include /v1 here to reach Team Room's
         # OpenAI-compatible proxy route: /v1/chat/completions.

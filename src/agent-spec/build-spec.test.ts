@@ -97,9 +97,9 @@ describe("buildSpec", () => {
     const archie: AgentConfig = {
       ...cfg,
       name: "archie",
-      model: "qwen/qwen3.6-27b",
+      model: "deepseek/deepseek-v4-flash",
       imageTag: "teamroom-agent-archie:latest",
-      provider: "lm-studio",
+      provider: "openrouter",
       runtime: "deepagents",
       lifecycle: "persistent",
     };
@@ -115,12 +115,12 @@ describe("buildSpec", () => {
     });
 
     expect(spec.env.TEAMROOM_RUNTIME).toBe("deepagents");
-    expect(spec.env.TEAMROOM_PROVIDER).toBe("lm-studio");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("openrouter");
     expect(spec.env.TEAMROOM_MODEL_API_TOKEN).toBe("archie-proxy-token");
     expect(tokenRegistry.lookup("archie-proxy-token")).toMatchObject({
       agentId: "archie",
-      provider: "lm-studio",
-      model: "qwen/qwen3.6-27b",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
     });
   });
 

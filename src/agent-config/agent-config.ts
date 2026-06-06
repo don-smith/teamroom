@@ -37,11 +37,11 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
   if (provider === undefined || provider === null) {
-    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', or 'openai')`);
+    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter')`);
   }
-  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai") {
+  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai" && provider !== "openrouter") {
     throw new Error(
-      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', or 'openai' (got '${String(provider)}')`,
+      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter' (got '${String(provider)}')`,
     );
   }
 
@@ -83,6 +83,7 @@ function inferRuntime(provider: Provider): AgentRuntime {
     case "lm-studio":
     case "ollama":
     case "openai":
+    case "openrouter":
       return "langgraph";
   }
 }

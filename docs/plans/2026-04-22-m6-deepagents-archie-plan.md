@@ -10,7 +10,7 @@
 
 | Decision | Outcome |
 |---|---|
-| Runtime/provider split | Keep `main`’s split. Archie is `runtime: deepagents`, `provider: lm-studio`. |
+| Runtime/provider split | Keep `main`’s split. Archie is `runtime: deepagents`, `provider: openrouter`. |
 | Coding-agent role | Use `main`’s `pi-coder`; do not add a second coding agent in M6. |
 | Runtime scope | DeepAgents only for M6. |
 | Milestone name | “DeepAgents runtime + Archie architect.” |
@@ -26,7 +26,7 @@ Already landed before/through the merge:
 - DeepAgents submodule at `vendor/deepagents/`.
 - Archie scaffold, shim, and Dockerfile under `agents/archie/`.
 - Merge from `main`, including Bun runtime and `pi-coder`.
-- Reframed Archie config as `runtime: deepagents`, `provider: lm-studio`.
+- Reframed Archie config as `runtime: deepagents`, `provider: openrouter`.
 
 ## Task A — Post-merge static baseline
 
@@ -84,8 +84,8 @@ bun run docker:build:archie
 ```bash
 docker run --rm -i \
   -e TEAMROOM_AGENT_NAME=archie \
-  -e TEAMROOM_PROVIDER=lm-studio \
-  -e TEAMROOM_MODEL=qwen/qwen3.6-27b \
+  -e TEAMROOM_PROVIDER=openrouter \
+  -e TEAMROOM_MODEL=deepseek/deepseek-v4-flash \
   -v "$PWD/agents/archie/AGENTS.md:/AGENTS.md" \
   -v "$PWD/agents/archie/store:/store" \
   -v "$PWD:/codebase" \
