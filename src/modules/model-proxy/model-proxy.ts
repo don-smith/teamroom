@@ -24,6 +24,7 @@ export interface ModelProxyDeps {
   logger: Logger;
   lmStudio: { upstreamUrl: string; realKey: string };
   ollama: { upstreamUrl: string };
+  openai: { upstreamUrl: string; realKey: string };
   anthropic: AnthropicCreds | null;
 }
 
@@ -40,6 +41,11 @@ export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProx
       upstreamUrl: deps.ollama.upstreamUrl,
       auth: { mode: "none" },
     }),
+    openai: new OpenAICompatAdapter({
+      id: "openai",
+      upstreamUrl: deps.openai.upstreamUrl,
+      auth: { mode: "bearer", key: deps.openai.realKey },
+    }),
   };
   const anthropicAdapterPresent = deps.anthropic !== null;
   if (deps.anthropic) {
@@ -47,7 +53,7 @@ export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProx
   }
   const modelProxy = new LocalModelProxy({
     registry: tokenRegistry,
-    adapters: adapters,
+    adapters,
     logger: deps.logger,
   });
   const proxyInfo = await modelProxy.start();

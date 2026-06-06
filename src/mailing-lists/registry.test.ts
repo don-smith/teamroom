@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MailingListRegistry, type ListDefinition } from "./registry.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 
@@ -8,6 +8,7 @@ function cfg(name: string, subs: string[]): AgentConfig {
     model: "m",
     imageTag: "t",
     provider: "anthropic",
+    runtime: "anthropic",
     configPath: "/x",
     agentsMdPath: "/x/AGENTS.md",
     storePath: "/x/store",

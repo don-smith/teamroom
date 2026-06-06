@@ -62,7 +62,7 @@ We tried sending `sk-ant-oat01-...` tokens (from `claude setup-token`) directly 
 - **`turn errored: missing_credential`** — the proxy didn't find an Anthropic credential at boot. On macOS check the Keychain has an entry (`security find-generic-password -s "Claude Code-credentials"` should print metadata). If it doesn't, run `claude setup-token` and paste the result into `.env` as `CLAUDE_CODE_OAUTH_TOKEN`. On Linux check `~/.claude/.credentials.json`.
 - **macOS prompts for Keychain access on every daemon start.** Click **Always Allow** rather than Allow. If the prompt is dismissable / reproducible, set `CLAUDE_CODE_OAUTH_TOKEN` in `.env` to bypass the Keychain entirely.
 - **Repeated 401 from Anthropic in OAuth mode** — your OAuth token may have expired or been revoked. Run `claude setup-token` for a fresh one and update `.env` (or re-login to Claude Code so the Keychain entry refreshes), then restart the daemon.
-- **`oauth exchange failed: status=403/429`** (legacy, should not occur with current code) — The original M2 design tried `POST /api/oauth/claude_cli/create_api_key` first; that path is gated. Current code uses the Claude Code CLI subprocess in the container instead, which is the only working programmatic path. If you see this error, you're on out-of-date code — `git pull` and `npm run build`.
+- **`oauth exchange failed: status=403/429`** (legacy, should not occur with current code) — The original M2 design tried `POST /api/oauth/claude_cli/create_api_key` first; that path is gated. Current code uses the Claude Code CLI subprocess in the container instead, which is the only working programmatic path. If you see this error, you're on out-of-date code — `git pull`, rebuild the Claude agent image, and restart the daemon.
 
 ## Related
 

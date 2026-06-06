@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { killStaleTeamroomContainers, type DockerExec } from "../../src/container/kill-stale.js";
 
 describe("daemon-restart-kills-containers", () => {
@@ -23,10 +23,15 @@ describe("daemon-restart-kills-containers", () => {
   });
 
   it("is a no-op when no stale containers match the label", async () => {
-    const exec: DockerExec = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const calls: { cmd: string; args: string[] }[] = [];
+    const exec: DockerExec = async (cmd, args) => {
+      calls.push({ cmd, args });
+      return { stdout: "", stderr: "" };
+    };
     const killed = await killStaleTeamroomContainers({ dockerExec: exec });
     expect(killed).toEqual([]);
-    // `docker ps` ran once; no kills followed.
-    expect((exec as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    expect(calls).toEqual([
+      { cmd: "docker", args: ["ps", "-q", "--filter", "label=teamroom-agent=true"] },
+    ]);
   });
 });

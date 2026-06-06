@@ -72,17 +72,25 @@ export class ChatServer {
     // Close all connected sockets first so wss.close() doesn't hang.
     for (const conn of this.connections) {
       try {
-        conn.ws.close();
+        conn.ws.terminate();
       } catch {
         /* ignore */
       }
     }
     this.connections.clear();
     if (this.wss) {
+      for (const client of this.wss.clients) {
+        try {
+          client.terminate();
+        } catch {
+          /* ignore */
+        }
+      }
       await new Promise<void>((r) => this.wss!.close(() => r()));
       this.wss = null;
     }
     if (this.http) {
+      this.http.closeAllConnections?.();
       await new Promise<void>((r) => this.http!.close(() => r()));
       this.http = null;
     }

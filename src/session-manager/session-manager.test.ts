@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { SessionTimerManager, type TimerFactory, type TimerHandle } from "./session-manager.js";
 import { FakeRunner } from "../container/fake-runner.js";
 

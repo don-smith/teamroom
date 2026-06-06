@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +30,8 @@ describe("loadAgentConfig", () => {
     expect(cfg.model).toBe("claude-opus-4-7");
     expect(cfg.imageTag).toBe("teamroom-agent-studio-assistant:latest");
     expect(cfg.provider).toBe("lm-studio");
+    expect(cfg.runtime).toBe("langgraph");
+    expect(cfg.lifecycle).toBe("session");
     expect(cfg.configPath).toBe(agentDir);
     expect(cfg.agentsMdPath).toBe(join(agentDir, "AGENTS.md"));
     expect(cfg.storePath).toBe(join(agentDir, "store"));
@@ -53,6 +55,27 @@ describe("loadAgentConfig", () => {
   it("rejects when required yaml fields are missing", () => {
     writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
+  });
+
+  it("loads the real pi-coder agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/pi-coder"));
+    expect(cfg).toMatchObject({
+      name: "pi-coder",
+      runtime: "pi",
+      provider: "openai",
+      model: "openai/gpt-5.5",
+    });
+  });
+
+  it("loads the real Archie agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/archie"));
+    expect(cfg).toMatchObject({
+      name: "archie",
+      runtime: "deepagents",
+      provider: "anthropic",
+      model: "claude-opus-4-7",
+      lifecycle: "persistent",
+    });
   });
 });
 
@@ -200,7 +223,7 @@ describe("loadAgentConfig — provider field", () => {
   it("throws when provider is not in the allowed set", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
@@ -208,9 +231,9 @@ describe("loadAgentConfig — provider field", () => {
   it("echoes the offending provider value in the error message", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'openai'/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'bespoke'/);
   });
 
   it("accepts provider: ollama", () => {
@@ -222,21 +245,102 @@ describe("loadAgentConfig — provider field", () => {
     expect(cfg.provider).toBe("ollama");
   });
 
-  it("accepts provider: deepagents", () => {
+  it("accepts provider: openai", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      `name: x\nmodel: m\nimage_tag: t\nprovider: deepagents\n`,
+      `name: x\nmodel: openai/gpt-5.5\nimage_tag: t\nprovider: openai\nruntime: pi\nsubscriptions: []\n`,
     );
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.provider).toBe("deepagents");
+    expect(cfg.provider).toBe("openai");
+    expect(cfg.runtime).toBe("pi");
+  });
+});
+
+describe("loadAgentConfig — runtime field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "runtime-agent");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
   });
 
-  it("accepts provider: hermes", () => {
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("infers runtime from provider when runtime is omitted", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      `name: x\nmodel: m\nimage_tag: t\nprovider: hermes\n`,
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("anthropic");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: lm-studio\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: ollama\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+  });
+
+  it("accepts explicit runtime: pi with an existing model provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: pi-coder\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-pi-coder:latest\nruntime: pi\nprovider: anthropic\n",
     );
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.provider).toBe("hermes");
+    expect(cfg.runtime).toBe("pi");
+    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.model).toBe("claude-opus-4-7");
+  });
+
+  it("accepts explicit runtime: deepagents with an existing model provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: archie\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: anthropic\nlifecycle: persistent\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.runtime).toBe("deepagents");
+    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.lifecycle).toBe("persistent");
+  });
+
+  it("rejects unknown runtime values", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: anthropic\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi.*deepagents/);
+  });
+
+  it("rejects runtime: anthropic with a non-anthropic provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: openai/gpt-5.5\nimage_tag: z\nruntime: anthropic\nprovider: openai\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
+  });
+
+  it("rejects runtime: langgraph with provider: anthropic", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: claude-opus-4-7\nimage_tag: z\nruntime: langgraph\nprovider: anthropic\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
   });
 });

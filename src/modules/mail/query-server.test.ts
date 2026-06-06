@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { WebSocket } from "ws";
 import { QueryServer } from "./query-server.js";
 import { composeStorage, type Storage } from "../storage/storage.js";

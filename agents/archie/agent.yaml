@@ -1,5 +1,6 @@
 name: archie
-provider: deepagents
+runtime: deepagents
+provider: anthropic
 model: claude-opus-4-7
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent

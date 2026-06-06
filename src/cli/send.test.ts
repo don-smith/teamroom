@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { send } from "./send.js";
 import { composeStorage, type Storage } from "../modules/storage/storage.js";
 import { composeMessaging, type Messaging } from "../modules/messaging/messaging.js";
@@ -19,7 +19,7 @@ describe("teamroom send (channel-based)", () => {
     storage = composeStorage({ dataDir: ":memory:" });
     storage.agentRepo.create({ id: "alice", configPath: "/a", createdAt: "2026-04-20T00:00:00Z" });
     const cfg: AgentConfig = {
-      name: "alice", model: "m", imageTag: "img", provider: "anthropic",
+      name: "alice", model: "m", imageTag: "img", provider: "anthropic", runtime: "anthropic",
       configPath: "/a", agentsMdPath: "/a/AGENTS.md", storePath: "/a/store",
       subscriptions: [], allowedTools: [],
       lifecycle: "session",

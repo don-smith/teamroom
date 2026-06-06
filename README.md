@@ -6,37 +6,36 @@ A multi-agent harness modeled after a software delivery team.
 
 ## Current state
 
-Milestone 4.5 — "AI-native harness." Channel-kind addresses (`channel:cli:*`), a compose-pattern refactor of the daemon, and an MCP SDK retrofit of the mail-MCP server. Two agents run concurrently: `studio-assistant` (LM Studio, local) and `claude-assistant` (Anthropic, real API via Claude Code OAuth or API key). Containers communicate exclusively via the mail substrate (dispatcher → session-management → MCP tools). The `tail` command is gone; `chat`, `inbox`, and `thread` replace it. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
+Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, filesystem MCP access, and LM Studio/Ollama adapter consolidation. This branch extends that shape with a Bun-first runtime/tooling path and a Pi SDK based general coding teammate, `pi-coder`, while preserving Team Room's central model-proxy credential routing. Agents communicate through the mail substrate (dispatcher -> session-management -> MCP/tools); `chat`, `send`, `inbox`, and `thread` are the main CLI surfaces. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
 
-- As-built: [`docs/as-built/2026-04-21-teamroom-m4.md`](docs/as-built/2026-04-21-teamroom-m4.md) — M4 shipped state. M4.5 as-built lands at milestone close.
+- Latest as-built: [`docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md`](docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md).
+- Prior Pi/OpenAI landing: [`docs/as-built/2026-05-16-pi-coder-openai.md`](docs/as-built/2026-05-16-pi-coder-openai.md).
 - Practices: [`docs/ways-of-working.md`](docs/ways-of-working.md)
 - Retro: [`docs/retros/2026-04-18-m1.md`](docs/retros/2026-04-18-m1.md) (M1)
 
 ## Install the CLI
 
-Prerequisites: Node.js 22+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`).
+Prerequisites: Bun 1.3+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`). If you want to run `pi-coder`, also set `OPENAI_TOKEN` for the hosted OpenAI provider.
 
 > **Submodules.** Team Room vendors external agent harnesses (DeepAgents, Hermes) under `vendor/`. When cloning fresh, use `git clone --recurse-submodules <url>`. If you already cloned without, run `git submodule update --init --recursive` once. Submodule pointers are bumped in explicit commits (`chore(vendor): bump <harness> to <tag>`); there's no auto-update.
 
 ```bash
 # 1. Dependencies
-npm install
+bun install
 
 # 2. Configure secrets
 cp .env.example .env
-# edit .env and set LM_STUDIO_API_TOKEN to your LM Studio token
+# edit .env and set LM_STUDIO_API_TOKEN
+# set OPENAI_TOKEN too if you plan to use pi-coder
 
-# 3. Build the CLI
-npm run build
-
-# 4. Install the teamroom binary into a PATH directory you choose.
+# 3. Install the teamroom binary into a PATH directory you choose.
 #    The script only writes into that directory — it does NOT modify your shell
 #    config or PATH. Make sure the directory is already on your PATH.
-npm run install-cli -- ~/bin
+bun scripts/install-cli.ts ~/bin --force
 #    (use --force if ~/bin/teamroom already exists and you want to overwrite it)
 
-# 5. Verify
-teamroom status
+# 4. Verify
+teamroom --help
 ```
 
 ## Day-to-day use
@@ -45,17 +44,19 @@ teamroom status
 # One-time per model/agent change: rebuild each agent's image
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
 docker build -t teamroom-agent-claude-assistant:latest -f agents/claude-assistant/Dockerfile .
+docker build -t teamroom-agent-pi-coder:latest -f agents/pi-coder/Dockerfile .
 
 # Three terminals
 teamroom serve                                          # daemon (foreground — Ctrl+C to stop)
 teamroom chat studio-assistant                          # interactive REPL with local LM Studio agent
 teamroom chat claude-assistant                          # interactive REPL with real Anthropic agent
+teamroom chat pi-coder                                  # interactive REPL with Pi SDK coding agent
 teamroom send studio-assistant "hello"                  # fire-and-forget send
 teamroom inbox studio-assistant                         # read agent's inbox
 teamroom status                                         # daemon liveness
 ```
 
-If the CLI code changes, rerun `npm run build` — the symlink points at `dist/cli/main.js` so rebuilds take effect without re-running `install-cli`.
+If the CLI code changes, no rebuild is needed — the installed symlink points at `src/cli/main.ts`, so Bun executes the current source directly.
 
 ## Smoke test
 

@@ -1,14 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { parseClientMessage, type ServerMessage } from "./protocol.js";
+import { describe, expect, it } from "bun:test";
+import { parseClientMessage, type ClientMessage, type ServerMessage } from "./protocol.js";
 
 describe("mail WebSocket protocol", () => {
   it("parses inbox query", () => {
-    const msg = { type: "query", id: "q1", query: "inbox", params: { agent: "alice" } };
+    const msg: Extract<ClientMessage, { query: "inbox" }> = {
+      type: "query",
+      id: "q1",
+      query: "inbox",
+      params: { agent: "alice" },
+    };
     expect(parseClientMessage(JSON.stringify(msg))).toEqual(msg);
   });
 
   it("parses thread query", () => {
-    const msg = { type: "query", id: "q2", query: "thread", params: { id: "T1" } };
+    const msg: Extract<ClientMessage, { query: "thread" }> = {
+      type: "query",
+      id: "q2",
+      query: "thread",
+      params: { id: "T1" },
+    };
     expect(parseClientMessage(JSON.stringify(msg))).toEqual(msg);
   });
 

@@ -20,7 +20,7 @@
  * reachable) — no silent skip per project preference.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { resolve } from "node:path";
 import OpenAI from "openai";
 import { loadEnvFile } from "../../src/env/env-file.js";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { FakeRunner, type Script } from "./fake-runner.js";
 import type { ContainerStdoutEvent } from "./container-runner.js";
 

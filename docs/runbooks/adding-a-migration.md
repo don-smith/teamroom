@@ -5,7 +5,7 @@ Schema changes land as numbered SQL files in `src/db/migrations/`. The migrator 
 ## Preconditions
 
 - You know what schema change you want and have already thought about whether an equivalent change can be avoided (schemas are forever once a migration lands in main).
-- `npm install` has run; tests pass on the current branch (`npm test`).
+- `bun install` has run; the relevant DB tests pass on the current branch.
 - Existing migrations live at `src/db/migrations/NNN_<description>.sql` — check the current highest number.
 
 ## Steps
@@ -31,36 +31,30 @@ Schema changes land as numbered SQL files in `src/db/migrations/`. The migrator 
 
 6. Run the suite — co-located repo tests use `:memory:` databases and call `runMigrations` before each test, so they exercise your new migration every run:
    ```bash
-   npm test
+   bun test src/db
    ```
 
 7. Inspect the applied schema locally against a real file DB:
    ```bash
    rm -f data/teamroom.db
-   node dist/cli/main.js serve &   # or just wait for the next boot
+   bun src/cli/main.ts serve &   # or just wait for the next boot
    sqlite3 data/teamroom.db ".schema"
    sqlite3 data/teamroom.db "SELECT * FROM _migrations"
-   ```
-
-8. If the build is relevant (migrations are copied into `dist/` by `npm run build`), confirm the file landed:
-   ```bash
-   npm run build
-   ls dist/db/migrations
    ```
 
 ## Verifying success
 
 - The `_migrations` ledger in a fresh DB contains both `001_initial` and your new file.
 - `sqlite3 data/teamroom.db ".schema"` shows the new column/index/table.
-- Full test suite passes.
-- `dist/db/migrations/` contains the new `.sql` file after `npm run build`.
+- Focused DB tests pass.
+- `runMigrations(createDatabase(":memory:"))` can see your new `.sql` file directly from `src/db/migrations/`.
 
 ## Troubleshooting
 
 - **"no such table: _migrations" after startup.** The migrator didn't run. Check `src/daemon/daemon.ts` — `runMigrations` must be called before any repo is used. In tests, confirm the test bootstrap calls it.
 - **Migration applied but tests fail on schema mismatch.** Your `:memory:` DB is fresh per-test; the failure is likely in the repo or the types. Grep for the old column name.
 - **"near ALTER": syntax error.** SQLite's `ALTER TABLE` supports `RENAME TO`, `RENAME COLUMN`, `ADD COLUMN`, and `DROP COLUMN` (3.35+). For anything more invasive (type change, constraint change), write a multi-step migration: create new table → copy data → drop old → rename.
-- **The migration is applied in dev but not in production.** Migrations live in `src/db/migrations/` but must be copied into `dist/` by the build. If `npm run build` does not copy your file, check `package.json`'s `build` script — it runs `cp src/db/migrations/*.sql dist/db/migrations/`.
+- **The migration is applied in tests but not on boot.** Team Room now runs TypeScript directly with Bun, so the daemon should read `src/db/migrations/` from the source tree. If it does not, check `src/db/migrator.ts` for path resolution regressions before looking for a missing build step.
 
 ## Related
 

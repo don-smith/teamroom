@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { composeMail } from "./mail.js";
 import { composeStorage } from "../storage/storage.js";
 import { JsonLinesLogger } from "../../logger/logger.js";

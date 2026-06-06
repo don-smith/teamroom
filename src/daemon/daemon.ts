@@ -49,6 +49,10 @@ export interface DaemonOptions {
   ollama: {
     upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:11434
   };
+  openai: {
+    upstreamUrl: string; // host-side URL for the OpenAI-compatible API
+    realKey: string;
+  };
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -112,6 +116,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     logger: obs.rootLogger,
     lmStudio: opts.lmStudio,
     ollama: opts.ollama,
+    openai: opts.openai,
     anthropic: opts.anthropic,
   });
 

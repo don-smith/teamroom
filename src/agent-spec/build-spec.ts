@@ -1,7 +1,6 @@
 import type { DockerRunSpec, Mount } from "../container/docker-command.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 import type { TokenRegistry } from "../model-proxy/token-registry.js";
-import type { Provider } from "../types.js";
 
 export interface BuildSpecArgs {
   agentId: string;
@@ -22,12 +21,11 @@ export interface BuildSpecArgs {
 export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
   const cfg = args.agentConfigs.get(args.agentId);
   if (!cfg) throw new Error(`no agent config for '${args.agentId}'`);
-  const modelProvider = resolveModelProvider(cfg.provider);
   const proxyToken = args.tokenRegistry.mint({
     agentId: args.agentId,
     turnId: `session-${args.mcpToken.slice(0, 8)}`,
     traceId: args.genId(),
-    provider: modelProvider,
+    provider: cfg.provider,
     model: cfg.model,
   });
   const mounts: Mount[] = [
@@ -44,6 +42,7 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
     env: {
       TEAMROOM_TRACE_ID: args.genId(),
       TEAMROOM_AGENT_NAME: args.agentId,
+      TEAMROOM_RUNTIME: cfg.runtime,
       TEAMROOM_PROVIDER: cfg.provider,
       TEAMROOM_MODEL: cfg.model,
       TEAMROOM_MODEL_BASE_URL: args.modelBaseUrl,
@@ -66,26 +65,4 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
     spec.env.OPENROUTER_MODEL = openrouterModel;
   }
   return spec;
-}
-
-/**
- * Map an agent's harness provider to the model provider the daemon proxy
- * should use when minting its token. For internal harnesses the two are the
- * same. For external harnesses (deepagents, hermes) the harness runs in its
- * own container but routes LLM calls through Team Room's Anthropic proxy
- * (M6 decision — see docs/specs/...-m6-multi-harness-design.md §7).
- *
- * If a future agent wants a different model backend (e.g. Archie on a local
- * model), add an `model_provider` field on agent.yaml to override this default.
- */
-function resolveModelProvider(harnessProvider: Provider): Provider {
-  switch (harnessProvider) {
-    case "deepagents":
-    case "hermes":
-      return "anthropic";
-    case "anthropic":
-    case "lm-studio":
-    case "ollama":
-      return harnessProvider;
-  }
 }

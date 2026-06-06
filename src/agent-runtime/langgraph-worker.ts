@@ -152,14 +152,21 @@ export class LangGraphAgentWorker implements AgentWorker {
     };
     if (fsRoots.length > 0) {
       // `command` is resolved relative to process.cwd():
-      //   - /app in the container (Dockerfile sets WORKDIR /app; npm ci installs /app/node_modules)
-      //   - the repo root in tests (vitest runs from there; node_modules sits there too)
+      //   - /app in the container (Dockerfile sets WORKDIR /app; bun install populates /app/node_modules)
+      //   - the repo root in tests (node_modules sits there too)
       // Don't "improve" this to an absolute path without re-auditing both environments.
+      const filesystemServerEntrypoint = [
+        "node_modules",
+        "@modelcontextprotocol",
+        "server-filesystem",
+        "dist",
+        "index.js",
+      ].join("/");
       mcpServers.filesystem = {
         transport: "stdio",
-        command: "node",
+        command: "bun",
         args: [
-          "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+          filesystemServerEntrypoint,
           ...fsRoots,
         ],
         stderr: "inherit",

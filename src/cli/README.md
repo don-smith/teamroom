@@ -4,7 +4,7 @@ Six short-lived subcommands (`serve`, `send`, `chat`, `inbox`, `thread`, `status
 
 **Runs on the host**, as separate short-lived processes. `chat` holds a WebSocket open for interactive use. `serve` is the exception: it spawns the long-running daemon in-process. Commands that need to reach the daemon discover its ports via the `ports/` file convention (see `ports.ts`).
 
-**Dev rebuild.** After editing `src/**/*.ts`, run `npm run build` before exercising the `teamroom` CLI — the `bin` entry in `package.json` points at `dist/cli/main.js` (compiled output) and won't pick up source changes until rebuilt.
+**Direct execution.** After editing `src/**/*.ts`, rerun the CLI command you want to exercise — the `bin` entry in `package.json` points at `src/cli/main.ts`, so Bun picks up source changes without a rebuild.
 
 ## Files
 
@@ -23,5 +23,5 @@ Six short-lived subcommands (`serve`, `send`, `chat`, `inbox`, `thread`, `status
 
 - **Parent:** [src/README.md](../README.md)
 - **Uses:** [db/README.md](../db/README.md), [bus/README.md](../bus/README.md), [env/env-file.ts](../env/env-file.ts), [agent-config/README.md](../agent-config/README.md), [daemon/README.md](../daemon/README.md).
-- **Used by:** `package.json` `bin` entry (`teamroom` → `dist/cli/main.js`).
+- **Used by:** `package.json` `bin` entry (`teamroom` → `src/cli/main.ts`).
 - **As-built:** [M1](../../docs/as-built/2026-04-18-teamroom-m1.md) — §1 exit criteria, §2 processes and boundaries (CLI subcommands). M4.5 as-built lands at milestone close.

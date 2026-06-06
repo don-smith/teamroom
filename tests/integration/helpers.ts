@@ -130,6 +130,7 @@ export async function composeIntegrationHarness(opts: HarnessOpts): Promise<Inte
       model: "claude-opus-4-7",
       imageTag: `teamroom-agent-${name}:latest`,
       provider: "anthropic",
+      runtime: "anthropic",
       configPath: `/agents/${name}`,
       agentsMdPath: `/agents/${name}/AGENTS.md`,
       storePath: `/agents/${name}/store`,

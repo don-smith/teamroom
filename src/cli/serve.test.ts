@@ -1,0 +1,31 @@
+import { describe, expect, it } from "bun:test";
+import { resolveServeProviderTokens } from "./serve.js";
+
+describe("resolveServeProviderTokens", () => {
+  it("requires LM_STUDIO_API_TOKEN for the existing local-model path", () => {
+    expect(() =>
+      resolveServeProviderTokens(["lm-studio"], {}),
+    ).toThrow(/LM_STUDIO_API_TOKEN/);
+  });
+
+  it("does not require OPENAI_TOKEN when no openai agent is configured", () => {
+    expect(
+      resolveServeProviderTokens(
+        ["lm-studio", "anthropic"],
+        { LM_STUDIO_API_TOKEN: "lm-token" },
+      ),
+    ).toEqual({
+      lmStudioToken: "lm-token",
+      openaiToken: null,
+    });
+  });
+
+  it("requires OPENAI_TOKEN when an openai agent is configured", () => {
+    expect(() =>
+      resolveServeProviderTokens(
+        ["lm-studio", "openai"],
+        { LM_STUDIO_API_TOKEN: "lm-token" },
+      ),
+    ).toThrow(/OPENAI_TOKEN/);
+  });
+});

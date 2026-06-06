@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { composeMessaging } from "../messaging/messaging.js";
 import { JsonLinesLogger } from "../../logger/logger.js";
 import { ControllableClock } from "../../clock/clock.js";
@@ -15,6 +15,7 @@ describe("composeSessionManagement", () => {
       model: "m",
       imageTag: `img-${name}`,
       provider: "lm-studio",
+      runtime: "langgraph",
       configPath: "/fake",
       agentsMdPath: "/fake/AGENTS.md",
       storePath: "/fake/store",
@@ -27,25 +28,51 @@ describe("composeSessionManagement", () => {
   it("subscribes to mail.delivered, mail.sent, and tool.call on the bus", async () => {
     const messaging = composeMessaging({ logger });
     const runner = new FakeRunner();
+    const scheduled: Array<{ ms: number; cancelled: boolean; fire: () => void }> = [];
+    const specCalls: Array<{ agentId: string; token: string }> = [];
     const sm = composeSessionManagement({
       messaging, logger, runner,
       idleMinutes: 30,
-      timerFactory: { schedule: () => ({ cancel: () => {} }) },
-      spec: () => ({ imageTag: "x", mounts: [], env: {}, labels: {} }),
+      timerFactory: {
+        schedule(ms, fn) {
+          const timer = { ms, cancelled: false, fire: fn };
+          scheduled.push(timer);
+          return {
+            cancel() {
+              timer.cancelled = true;
+            },
+          };
+        },
+      },
+      spec: (agentId, token) => {
+        specCalls.push({ agentId, token });
+        return { imageTag: "x", mounts: [], env: {}, labels: {} };
+      },
       genToken: () => "tok-1",
       agentConfigs: new Map(),
     });
 
-    const onMailSpy = vi.spyOn(sm.sessionManager, "onMailDelivered");
-    void messaging.eventBus.publish("mail.delivered", { to: "agent:foo" });
-    expect(onMailSpy).toHaveBeenCalledWith("agent:foo");
+    void messaging.eventBus.publish("mail.delivered", { to: "foo" });
+    expect(specCalls).toEqual([{ agentId: "foo", token: "tok-1" }]);
+    expect(runner.sessions).toHaveLength(1);
+    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]).toMatchObject({ ms: 30 * 60 * 1000, cancelled: false });
 
-    const onActivitySpy = vi.spyOn(sm.sessionManager, "onAgentActivity");
-    void messaging.eventBus.publish("mail.sent", { from: "agent:bar" });
-    expect(onActivitySpy).toHaveBeenCalledWith("agent:bar");
+    void messaging.eventBus.publish("mail.sent", { from: "foo" });
+    expect(runner.sessions).toHaveLength(1);
+    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(scheduled).toHaveLength(2);
+    expect(scheduled[0]?.cancelled).toBe(true);
+    expect(scheduled[1]).toMatchObject({ ms: 30 * 60 * 1000, cancelled: false });
 
-    void messaging.eventBus.publish("tool.call", { agentId: "baz", tool: "mail.send" });
-    expect(onActivitySpy).toHaveBeenCalledWith("baz");
+    void messaging.eventBus.publish("tool.call", { agentId: "foo", tool: "mail.send" });
+    expect(scheduled).toHaveLength(3);
+    expect(scheduled[1]?.cancelled).toBe(true);
+    expect(scheduled[2]).toMatchObject({ ms: 30 * 60 * 1000, cancelled: false });
+
+    scheduled[2]?.fire();
+    expect(runner.sessions[0]?.isStdinClosed()).toBe(true);
 
     await sm.stop();
   });

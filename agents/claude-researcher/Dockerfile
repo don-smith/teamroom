@@ -1,17 +1,19 @@
-FROM node:22-alpine
+# Alpine's musl base leaves Bun's global `claude` symlink pointing at the
+# glibc binary, which does not exec at runtime. Use the official glibc image
+# for the Claude workers only.
+FROM oven/bun:1.3
 
 WORKDIR /app
 
 # Install production deps for the agent runtime (must match repo package.json,
 # which includes @anthropic-ai/claude-agent-sdk as a dep).
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY package.json bun.lock ./
+RUN bun install --production --frozen-lockfile
 
 # Install the Claude Code CLI globally — claude-agent-sdk's `query()` spawns
 # this binary as a subprocess to talk to Anthropic.
-RUN npm install -g @anthropic-ai/claude-code
+RUN bun install -g @anthropic-ai/claude-code
 
-COPY dist/agent-runtime /app/agent-runtime
-COPY dist/types.js /app/types.js
+COPY src /app/src
 
-ENTRYPOINT ["node", "/app/agent-runtime/main.js"]
+ENTRYPOINT ["bun", "/app/src/agent-runtime/main.ts"]

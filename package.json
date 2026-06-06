@@ -4,41 +4,36 @@
   "private": true,
   "type": "module",
   "bin": {
-    "teamroom": "dist/cli/main.js"
+    "teamroom": "src/cli/main.ts"
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/db/migrations && cp src/db/migrations/*.sql dist/db/migrations/",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "install-cli": "node scripts/install-cli.mjs ~/.local/bin --force",
-    "docker:build:archie": "docker build -t teamroom-agent-archie:latest -f agents/archie/Dockerfile .",
-    "docker:build:dev": "docker build -t teamroom-agent-dev:latest -f agents/dev/Dockerfile ."
+    "install-cli": "bun scripts/install-cli.ts ~/.local/bin --force",
+    "docker:build:archie": "docker build -t teamroom-agent-archie:latest -f agents/archie/Dockerfile ."
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@anthropic-ai/sdk": "^0.65.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@langchain/core": "^1.1.40",
     "@langchain/langgraph": "^1.2.9",
     "@langchain/mcp-adapters": "^1.1.3",
     "@langchain/openai": "^1.4.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@modelcontextprotocol/server-filesystem": "^2026.1.14",
-    "better-sqlite3": "^11.5.0",
     "chokidar": "^4.0.1",
     "commander": "^12.1.0",
     "openai": "^6.34.0",
+    "typebox": "^1.1.24",
     "ws": "^8.20.0",
     "yaml": "^2.6.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
+    "@types/bun": "latest",
     "@types/node": "^22.19.17",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.3"
-  },
-  "engines": {
-    "node": ">=22"
+    "typescript": "^5.6.3"
   }
 }

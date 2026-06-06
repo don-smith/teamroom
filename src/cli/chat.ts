@@ -119,6 +119,13 @@ export async function runChat(args: RunChatArgs): Promise<void> {
     }
   } finally {
     rl.close();
-    ws.close();
+    await new Promise<void>((resolve) => {
+      if (ws.readyState === ws.CLOSED) {
+        resolve();
+        return;
+      }
+      ws.once("close", () => resolve());
+      ws.close();
+    });
   }
 }

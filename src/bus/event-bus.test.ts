@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { EventBus } from "./event-bus.js";
 import { CapturingLogger } from "../logger/logger.js";
 import { ControllableClock } from "../clock/clock.js";
@@ -14,45 +14,57 @@ describe("EventBus", () => {
 
   it("does not deliver to subscribers of other types", () => {
     const bus = new EventBus();
-    const a = vi.fn();
-    const b = vi.fn();
-    bus.subscribe("mail.delivered", a);
-    bus.subscribe("tool.call", b);
+    let mailDeliveredCount = 0;
+    let toolCallCount = 0;
+    bus.subscribe("mail.delivered", () => {
+      mailDeliveredCount += 1;
+    });
+    bus.subscribe("tool.call", () => {
+      toolCallCount += 1;
+    });
     bus.publish("mail.delivered", { to: "agent:X" });
-    expect(a).toHaveBeenCalledOnce();
-    expect(b).not.toHaveBeenCalled();
+    expect(mailDeliveredCount).toBe(1);
+    expect(toolCallCount).toBe(0);
   });
 
   it("supports multiple subscribers to the same type", () => {
     const bus = new EventBus();
-    const a = vi.fn();
-    const b = vi.fn();
-    bus.subscribe("tool.call", a);
-    bus.subscribe("tool.call", b);
+    let firstCount = 0;
+    let secondCount = 0;
+    bus.subscribe("tool.call", () => {
+      firstCount += 1;
+    });
+    bus.subscribe("tool.call", () => {
+      secondCount += 1;
+    });
     bus.publish("tool.call", { agentId: "X", tool: "mail.list" });
-    expect(a).toHaveBeenCalledOnce();
-    expect(b).toHaveBeenCalledOnce();
+    expect(firstCount).toBe(1);
+    expect(secondCount).toBe(1);
   });
 
   it("unsubscribe stops deliveries", () => {
     const bus = new EventBus();
-    const h = vi.fn();
-    const off = bus.subscribe("tool.call", h);
+    let callCount = 0;
+    const off = bus.subscribe("tool.call", () => {
+      callCount += 1;
+    });
     off();
     bus.publish("tool.call", {});
-    expect(h).not.toHaveBeenCalled();
+    expect(callCount).toBe(0);
   });
 
   it("isolates a throwing subscriber — other subscribers still fire", () => {
     const logger = new CapturingLogger(new ControllableClock("2026-04-20T00:00:00.000Z"));
     const bus = new EventBus(logger);
-    const good = vi.fn();
+    let goodCount = 0;
     bus.subscribe("tool.call", () => {
       throw new Error("boom");
     });
-    bus.subscribe("tool.call", good);
+    bus.subscribe("tool.call", () => {
+      goodCount += 1;
+    });
     expect(() => bus.publish("tool.call", {})).not.toThrow();
-    expect(good).toHaveBeenCalledOnce();
+    expect(goodCount).toBe(1);
     expect(logger.entries.some((e) => e.msg === "event-bus.handler.error")).toBe(true);
   });
 

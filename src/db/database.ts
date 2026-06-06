@@ -1,11 +1,23 @@
-import Database from "better-sqlite3";
-import type { Database as BetterDb } from "better-sqlite3";
+import { Database as BunDatabase } from "bun:sqlite";
 
-export type Db = BetterDb;
+export interface Statement {
+  run(...params: readonly unknown[]): unknown;
+  get(...params: readonly unknown[]): unknown;
+  all(...params: readonly unknown[]): unknown[];
+}
+
+export interface Db {
+  prepare(sql: string): Statement;
+  exec(sql: string): void;
+  transaction<TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
+  close(): void;
+}
 
 export function createDatabase(dsn: string): Db {
-  const db = new Database(dsn);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  const db = new BunDatabase(dsn);
+  db.exec("PRAGMA foreign_keys = ON");
+  if (dsn !== ":memory:") {
+    db.exec("PRAGMA journal_mode = WAL");
+  }
   return db;
 }

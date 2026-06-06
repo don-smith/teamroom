@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { composeStorage } from "../storage/storage.js";
 import { composeMessaging } from "../messaging/messaging.js";
 import { JsonLinesLogger } from "../../logger/logger.js";
@@ -13,6 +13,7 @@ describe("composeMcpMail", () => {
     model: "m",
     imageTag: "img",
     provider: "anthropic",
+    runtime: "anthropic",
     configPath: "/a",
     agentsMdPath: "/a/AGENTS.md",
     storePath: "/a/store",
@@ -56,8 +57,10 @@ describe("composeMcpMail", () => {
       maxMailsPerThread: 10,
     });
 
-    const onDelivered = vi.fn();
-    messaging.eventBus.subscribe("mail.delivered", onDelivered);
+    const deliveredTargets: string[] = [];
+    messaging.eventBus.subscribe<{ to: string }>("mail.delivered", ({ to }) => {
+      deliveredTargets.push(to);
+    });
 
     mcpMail.dispatcher.sendMail({
       from: "agent:alice",
@@ -66,7 +69,7 @@ describe("composeMcpMail", () => {
       threadId: null,
     });
 
-    expect(onDelivered).toHaveBeenCalled();
+    expect(deliveredTargets).toEqual(["bob"]);
     expect(storage.messageRepo.listInbox("bob", { includeArchived: false }).length).toBe(1);
     storage.close();
   });

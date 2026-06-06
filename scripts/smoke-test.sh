@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# M4.5 smoke test — exercises serve → send → inbox for one agent per provider.
-# Requires: .env with LM_STUDIO_API_TOKEN; LM Studio running with a model
-#   loaded; Docker running; Anthropic credentials discoverable (CLAUDE_CODE_OAUTH_TOKEN
-#   or ANTHROPIC_API_KEY in .env, or ~/.claude/.credentials.json, or — on
-#   macOS — the system Keychain entry "Claude Code-credentials").
+# M4.5 smoke test — exercises serve → send → thread for one agent per provider.
+# Requires: Bun installed; .env with LM_STUDIO_API_TOKEN; LM Studio running
+#   with a model loaded; Docker running; Anthropic credentials discoverable
+#   (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .env, or
+#   ~/.claude/.credentials.json, or — on macOS — the system Keychain entry
+#   "Claude Code-credentials").
 #
 # TODO(manual-acceptance): multi-turn memory check and multi-agent mail
 #   round-trip are covered by the seven-scenario manual acceptance pass
@@ -48,8 +49,8 @@ if ! curl -sS -m 3 -o /dev/null "${LM_STUDIO_HOST_URL}/v1/models"; then
   exit 1
 fi
 
-echo "==> Building TypeScript"
-npm run build
+echo "==> Typechecking"
+bun run typecheck
 
 echo "==> Building agent images"
 docker build -t teamroom-agent-studio-assistant:latest -f agents/studio-assistant/Dockerfile .
@@ -78,9 +79,15 @@ trap cleanup EXIT
 
 dump_failure_diagnostics() {
   local agent="$1"
+  local thread_id="${2:-}"
   echo "" >&2
   echo "==> Inbox contents for $agent:" >&2
-  node dist/cli/main.js inbox "$agent" 2>&1 || true
+  bun src/cli/main.ts inbox "$agent" 2>&1 || true
+  if [[ -n "$thread_id" ]]; then
+    echo "" >&2
+    echo "==> Thread contents for $agent (thread $thread_id):" >&2
+    bun src/cli/main.ts thread "$thread_id" 2>&1 || true
+  fi
   echo "" >&2
   echo "==> Last 40 daemon log entries (most recent JSONL file):" >&2
   local log_file
@@ -95,9 +102,58 @@ dump_failure_diagnostics() {
   docker ps -a --filter "name=^teamroom-" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>&1 | head -6 >&2 || true
 }
 
+resolve_thread_id() {
+  local agent="$1"
+  local body="$2"
+  local thread_id=""
+  for _ in $(seq 1 20); do
+    thread_id=$(
+      AGENT="$agent" BODY="$body" bun --eval '
+        import { Database } from "bun:sqlite";
+        const db = new Database("data/teamroom.db", { readonly: true });
+        try {
+          const row = db
+            .query(`SELECT thread_id FROM messages WHERE agent_id = ?1 AND direction = ?2 AND body = ?3 ORDER BY created_at DESC LIMIT 1`)
+            .get(process.env.AGENT, "in", process.env.BODY) as { thread_id: string | null } | null;
+          if (row?.thread_id) process.stdout.write(row.thread_id);
+        } finally {
+          db.close();
+        }
+      '
+    )
+    if [[ -n "$thread_id" ]]; then
+      printf '%s\n' "$thread_id"
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+thread_has_outbound_marker() {
+  local thread_id="$1"
+  local marker="$2"
+  local expected_from="${3:-}"
+  bun src/cli/main.ts thread "$thread_id" 2>/dev/null | MARKER="$marker" EXPECTED_FROM="$expected_from" bun --eval '
+    const marker = process.env.MARKER ?? "";
+    const expectedFrom = process.env.EXPECTED_FROM ?? "";
+    const input = await Bun.stdin.text();
+    for (const line of input.split("\n")) {
+      if (line.trim() === "") continue;
+      const row = JSON.parse(line) as { direction?: string; body?: unknown; from?: unknown };
+      const body = typeof row.body === "string" ? row.body.trim() : null;
+      const fromMatches = expectedFrom === "" || row.from === expectedFrom;
+      if (row.direction === "out" && body === marker && fromMatches) {
+        process.exit(0);
+      }
+    }
+    process.exit(1);
+  '
+}
+
 echo "==> Starting daemon in background"
 rm -rf data
-node dist/cli/main.js serve &
+bun src/cli/main.ts serve &
 DAEMON_PID=$!
 
 # Wait for the daemon to signal it's up (pid file).
@@ -110,22 +166,31 @@ if [[ ! -f data/teamroom.pid ]]; then
   exit 1
 fi
 
-# Send a message to an agent, then poll inbox until the marker appears.
+# Send a message to an agent, resolve the new thread id, then poll the full
+# thread until an outbound reply row contains the marker.
 run_agent() {
   local agent="$1"
   local marker="$2"
+  local prompt="Hello from the smoke test — reply with exactly: $marker"
+  local thread_id=""
   echo "==> Sending to $agent (expect: $marker)"
-  node dist/cli/main.js send "$agent" "Hello from the smoke test — reply with exactly: $marker"
-  echo "==> Waiting for $agent reply in inbox (up to 60s)"
+  bun src/cli/main.ts send "$agent" "$prompt"
+  echo "==> Resolving thread id for $agent"
+  if ! thread_id=$(resolve_thread_id "$agent" "$prompt"); then
+    echo "==> FAIL: could not resolve thread id for $agent send" >&2
+    dump_failure_diagnostics "$agent"
+    return 1
+  fi
+  echo "==> Waiting for $agent outbound reply on thread $thread_id (up to 60s)"
   for _ in $(seq 1 120); do
-    if node dist/cli/main.js inbox "$agent" 2>/dev/null | grep -q "$marker"; then
-      echo "==> $agent OK"
+    if thread_has_outbound_marker "$thread_id" "$marker" "agent:$agent"; then
+      echo "==> $agent OK (thread $thread_id)"
       return 0
     fi
     sleep 0.5
   done
-  echo "==> FAIL: $agent did not reply with '$marker'" >&2
-  dump_failure_diagnostics "$agent"
+  echo "==> FAIL: $agent did not produce an outbound reply with '$marker' on thread $thread_id" >&2
+  dump_failure_diagnostics "$agent" "$thread_id"
   return 1
 }
 

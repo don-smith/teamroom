@@ -1,8 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MailingListTriggerListener } from "./trigger-listener.js";
 import { MailingListRegistry } from "./registry.js";
 import { EventBus } from "../bus/event-bus.js";
-import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
+import type { SendMailInput, SendMailResult } from "../mail-dispatcher/mail-dispatcher.js";
+
+class FakeDispatcher {
+  public readonly sent: SendMailInput[] = [];
+
+  sendMail(input: SendMailInput): SendMailResult {
+    this.sent.push(input);
+    return { threadId: input.threadId ?? "thread-1", rowIds: [] };
+  }
+}
 
 describe("MailingListTriggerListener", () => {
   it("forwards triggering bus events to the dispatcher as a system-sent mail", () => {
@@ -11,7 +20,7 @@ describe("MailingListTriggerListener", () => {
       [],
     );
     const bus = new EventBus();
-    const dispatcher = { sendMail: vi.fn() } as unknown as MailDispatcher;
+    const dispatcher = new FakeDispatcher();
 
     new MailingListTriggerListener({
       bus,
@@ -22,13 +31,13 @@ describe("MailingListTriggerListener", () => {
 
     bus.publish("turn.started", { agentId: "X", turnId: "T" });
 
-    expect(dispatcher.sendMail).toHaveBeenCalledWith({
+    expect(dispatcher.sent).toEqual([{
       from: "system",
       to: ["list:harness-activity"],
       subject: "turn.started",
       body: 'turn.started: {"agentId":"X","turnId":"T"}',
       threadId: null,
-    });
+    }]);
   });
 
   it("honors a custom subject formatter", () => {
@@ -37,7 +46,7 @@ describe("MailingListTriggerListener", () => {
       [],
     );
     const bus = new EventBus();
-    const dispatcher = { sendMail: vi.fn() } as unknown as MailDispatcher;
+    const dispatcher = new FakeDispatcher();
     new MailingListTriggerListener({
       bus,
       registry,
@@ -48,9 +57,8 @@ describe("MailingListTriggerListener", () => {
 
     bus.publish("e", {});
 
-    expect(dispatcher.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: "[e]" }),
-    );
+    expect(dispatcher.sent).toHaveLength(1);
+    expect(dispatcher.sent[0]).toMatchObject({ subject: "[e]" });
   });
 
   it("ignores events that trigger no lists", () => {
@@ -59,12 +67,12 @@ describe("MailingListTriggerListener", () => {
       [],
     );
     const bus = new EventBus();
-    const dispatcher = { sendMail: vi.fn() } as unknown as MailDispatcher;
+    const dispatcher = new FakeDispatcher();
     new MailingListTriggerListener({ bus, registry, dispatcher, formatBody: () => "" });
 
     bus.publish("unrelated", {});
 
-    expect(dispatcher.sendMail).not.toHaveBeenCalled();
+    expect(dispatcher.sent).toHaveLength(0);
   });
 
   it("fans out to multiple lists triggered by the same event", () => {
@@ -76,14 +84,13 @@ describe("MailingListTriggerListener", () => {
       [],
     );
     const bus = new EventBus();
-    const dispatcher = { sendMail: vi.fn() } as unknown as MailDispatcher;
+    const dispatcher = new FakeDispatcher();
     new MailingListTriggerListener({ bus, registry, dispatcher, formatBody: () => "" });
 
     bus.publish("e", {});
 
-    expect(dispatcher.sendMail).toHaveBeenCalledTimes(2);
-    const toValues = (dispatcher.sendMail as unknown as ReturnType<typeof vi.fn>).mock.calls
-      .map((c) => c[0].to);
+    expect(dispatcher.sent).toHaveLength(2);
+    const toValues = dispatcher.sent.map((mail) => mail.to);
     expect(toValues).toEqual([["list:l1"], ["list:l2"]]);
   });
 });
