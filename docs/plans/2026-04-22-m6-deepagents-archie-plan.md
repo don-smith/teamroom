@@ -121,8 +121,8 @@ Expected: process boots and waits for wake envelopes. Full agent construction ma
 
 ## Task F — Runbook/docs closeout
 
-- [ ] Update or create the agent-runtime/onboarding runbook material using Archie as the example.
-- [ ] Distinguish clearly:
+- [x] Update or create the agent-runtime/onboarding runbook material using Archie as the example.
+- [x] Distinguish clearly:
   - runtime onboarding: container/proxy/MCP/wake/lifecycle wiring,
   - persona onboarding: identity/responsibilities/memory/evals.
 - [ ] Process M6 entries in `docs/tabled.md`.
