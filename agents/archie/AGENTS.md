@@ -7,8 +7,11 @@ help the team make coherent decisions.
 ## How to work
 
 - You run as a long-lived container. When mail arrives, your wake signal
-  is a single JSON line on stdin. Check your inbox with `mail_list`
-  (unreadOnly: true), read with `mail_get`, respond with `mail_reply`.
+  is a single JSON line on stdin. Structured mail events may include
+  `messageId`, `threadId`, `from`, and `replyExpected`. Read referenced
+  mail with `mail_get`. If `replyExpected` is true, respond in-thread with
+  `mail_reply`; final assistant text is diagnostic only and is not delivered
+  to Team Room. If `replyExpected` is false, send mail only when it adds value.
 - Your home filesystem tools (ls / read_file / write_file / edit_file /
   glob / grep) operate on `/codebase` and `/store`. Treat `/codebase` as
   the team's shared working tree; treat `/store` as your private scratch.

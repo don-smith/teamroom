@@ -65,15 +65,22 @@ Expected/current: all non-environmental tests pass. Current known environmental 
 - [x] Remove ambient `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` selection from `agents/archie/shim.py`; OpenRouter should become explicit provider/fallback config later.
   - If supported: document it and make config naming explicit.
   - If temporary: remove it and route exclusively through Team Room’s proxy.
+- [x] Add structured `mail.delivered` wake metadata and `replyExpected` accounting for all runtimes.
+  - Direct `to:` mail from CLI/human or another agent sets `replyExpected: true`.
+  - List fanout and cc-style deliveries set `replyExpected: false`.
+  - Wake envelopes carry `messageId`, `threadId`, `from`, and `replyExpected`.
+  - Runtime prompts distinguish required replies from optional/noisy replies.
+- [x] Key Archie DeepAgents checkpoints by Team Room mail thread when structured wake metadata is present, avoiding global `archie-main` context buildup across unrelated smoke tests.
+- [x] Add Archie shim safety net for reply-required wakes: if DeepAgents produces final assistant text without a successful `mail_reply` tool result, send that text via direct MCP `mail.reply` and log the fallback.
 - [ ] Add first-wake build retry cap in `agents/archie/shim.py`.
   - Repeated MCP/model construction failures should eventually `sys.exit(1)` so daemon respawn/cap behavior engages.
-- [ ] Make `/codebase` requirement loud for Archie.
-  - Preferred: daemon/config validation for `runtime: deepagents` when no codebase mount is configured, or a clear shim-side startup warning if validation is too invasive.
+- [x] Make `/codebase` requirement loud for Archie.
+  - Daemon/config validation now requires `TEAMROOM_CODEBASE_PATH` when any agent uses `runtime: deepagents`.
 - [ ] Re-run typecheck and targeted tests.
 
 ## Task D — Archie Docker baseline
 
-- [ ] Build the image:
+- [x] Build the image:
 
 ```bash
 bun run docker:build:archie
@@ -96,19 +103,20 @@ Expected: process boots and waits for wake envelopes. Full agent construction ma
 
 ## Task E — Live Team Room acceptance
 
-- [ ] Start daemon with Archie registered and codebase mounted.
-- [ ] Verify `session.persistent_boot_spawn` for Archie.
-- [ ] Send Archie mail asking for a codebase-grounded architectural observation.
-- [ ] Verify Archie:
-  - wakes,
+- [x] Start daemon with Archie registered and codebase mounted.
+- [x] Verify `session.persistent_boot_spawn` for Archie.
+- [x] Send Archie mail asking for a codebase-grounded architectural observation.
+- [x] Verify Archie:
+  - wakes with structured `mail.delivered` metadata,
+  - sees `replyExpected: true`,
   - uses mail-MCP,
   - reads `/codebase`,
   - replies in-thread.
 - [ ] Verify persistent lifecycle:
-  - container remains alive after reply,
-  - daemon shutdown kills it,
-  - daemon restart boot-spawns it,
-  - simulated crash respawns it within cap.
+  - [x] container remains alive after reply,
+  - [x] daemon shutdown kills it,
+  - [ ] daemon restart boot-spawns it,
+  - [ ] simulated crash respawns it within cap.
 
 ## Task F — Runbook/docs closeout
 

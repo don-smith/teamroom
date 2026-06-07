@@ -41,6 +41,35 @@ describe("AnthropicAgentWorker", () => {
     ]);
   });
 
+  it("turns structured reply-expected mail wakes into a mail.reply instruction", async () => {
+    let prompt = "";
+    const client: LlmClient = {
+      async createMessage(args) {
+        prompt = String(args.messages[0]?.content ?? "");
+        return { text: "" };
+      },
+    };
+
+    const worker = new AnthropicAgentWorker({ client, model: "m", agentsMdPath: agentsMd });
+    await worker.handleWake({
+      type: "wake",
+      events: [{
+        type: "mail.delivered",
+        to: "claude-assistant",
+        messageId: "msg-1",
+        threadId: "thread-1",
+        from: "channel:cli:don",
+        replyExpected: true,
+      }],
+    });
+
+    expect(prompt).toContain("requires a reply");
+    expect(prompt).toContain("msg-1");
+    expect(prompt).toContain("thread-1");
+    expect(prompt).toContain("mail.reply");
+    expect(prompt).toContain("Final assistant text is diagnostic only");
+  });
+
   it('does not emit {type:"reply"} (or any stdout envelope) for LLM text', async () => {
     const client: LlmClient = {
       async createMessage() {

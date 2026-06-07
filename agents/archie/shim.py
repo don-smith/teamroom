@@ -38,6 +38,8 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
+
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.profiles import _HarnessProfile, _register_harness_profile
@@ -50,7 +52,10 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 LOCAL_MODEL_DEEPAGENTS_PROMPT = """You are a DeepAgents-based Team Room agent.
 Use available tools when needed, then answer concisely. For mail wakes, inspect
 mail, read requested codebase files before making architectural claims, and
-reply in-thread. Cite file paths when relevant."""
+reply in-thread. Cite file paths when relevant. Prefer the smallest useful
+inspection over broad codebase exploration."""
+
+PER_WAKE_RECURSION_LIMIT = 16
 
 
 # The default DeepAgents harness prompt and subagent/todo tools are too large
@@ -66,13 +71,100 @@ _register_harness_profile(
 )
 
 
-WAKE_PROMPT = (
-    "A new-mail wake fired. Use mail_list exactly once with unreadOnly=true. "
-    "If it returns mail, use mail_get on the newest message/thread exactly once, "
-    "then inspect only the codebase files needed for that request, and finish by "
-    "calling mail_reply in the same thread. Do not call mail_list repeatedly. "
-    "If the inbox is empty, do nothing and report 'no mail'."
-)
+def build_wake_prompt(envelope: dict) -> str:
+    events = envelope.get("events") if isinstance(envelope, dict) else None
+    mail_events = [e for e in events or [] if isinstance(e, dict) and e.get("type") == "mail.delivered"]
+    if not mail_events:
+        return (
+            "A Team Room wake fired, but no structured mail event was included. "
+            "Use mail_list exactly once with unreadOnly=true. If there is actionable mail, "
+            "read it with mail_get and respond with mail_reply when useful. If nothing is "
+            "actionable, end without sending mail."
+        )
+
+    event = mail_events[-1]
+    message_id = event.get("messageId", "unknown")
+    thread_id = event.get("threadId", "unknown")
+    sender = event.get("from", "unknown")
+    reply_expected = bool(event.get("replyExpected"))
+
+    if reply_expected:
+        return (
+            "A Team Room mail event requires a reply. "
+            f"Message id: {message_id}. Thread id: {thread_id}. From: {sender}. "
+            "Use mail_get exactly once with the message id above. For codebase/architecture "
+            "questions, read at most four highly relevant files; for this Archie runtime/provider "
+            "area, prefer agents/archie/agent.yaml, agents/archie/shim.py, "
+            "src/agent-spec/build-spec.ts, src/modules/model-proxy/model-proxy.ts, and "
+            "src/types.ts. Then call mail_reply with that same message id. Do not continue "
+            "investigating once you have one concise observation. Final assistant text is "
+            "diagnostic only and is not delivered to Team Room; the turn is complete only "
+            "after mail_reply succeeds."
+        )
+
+    return (
+        "A Team Room mail event arrived without a required reply. "
+        f"Message id: {message_id}. Thread id: {thread_id}. From: {sender}. "
+        "Use mail_get if you need to read it. Send mail only if doing so adds value; "
+        "otherwise end without replying."
+    )
+
+
+def mail_event(envelope: dict) -> dict | None:
+    events = envelope.get("events") if isinstance(envelope, dict) else None
+    for event in reversed(events or []):
+        if isinstance(event, dict) and event.get("type") == "mail.delivered":
+            return event
+    return None
+
+
+def checkpoint_thread_id(envelope: dict) -> str:
+    event = mail_event(envelope)
+    if event and event.get("threadId"):
+        return f"mail-thread-{event['threadId']}"
+    return "archie-main"
+
+
+def has_successful_mail_reply(result: dict) -> bool:
+    for message in result.get("messages", []):
+        if getattr(message, "type", None) == "tool" and getattr(message, "name", None) == "mail_reply":
+            return True
+    return False
+
+
+def final_ai_text(result: dict) -> str | None:
+    for message in reversed(result.get("messages", [])):
+        if getattr(message, "type", None) == "ai" and getattr(message, "content", None):
+            content = message.content
+            return content if isinstance(content, str) else str(content)
+    return None
+
+
+async def fallback_mail_reply(message_id: str, body: str) -> None:
+    mcp_url = os.environ["TEAMROOM_MCP_URL"]
+    mcp_token = os.environ["TEAMROOM_MCP_TOKEN"]
+    request = {
+        "jsonrpc": "2.0",
+        "id": "archie-fallback-mail-reply",
+        "method": "tools/call",
+        "params": {
+            "name": "mail.reply",
+            "arguments": {"id": message_id, "body": body},
+        },
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            mcp_url,
+            json=request,
+            headers={
+                "accept": "application/json, text/event-stream",
+                "x-teamroom-mcp-token": mcp_token,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict) and payload.get("error"):
+            raise RuntimeError(f"fallback mail.reply failed: {payload['error']}")
 
 
 def load_system_prompt() -> str:
@@ -195,9 +287,6 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
 async def handle_wake(
     state: dict, checkpointer: AsyncSqliteSaver, envelope: dict
 ) -> None:
-    # envelope is intentionally unused for M6 — the canned WAKE_PROMPT covers
-    # "check your inbox and act on whatever's there"; a later milestone may
-    # surface event hints (e.g., mail-thread id) into the prompt.
     # Build agent on first wake; cache in state dict for subsequent wakes.
     if state.get("agent") is None:
         print(
@@ -208,23 +297,40 @@ async def handle_wake(
 
     agent = state["agent"]
 
-    # Single thread id for all M6 wakes — lets the checkpointer accumulate
-    # history across wakes. A later milestone can key on mail thread_id.
-    thread_id = "archie-main"
-    config = {"configurable": {"thread_id": thread_id}}
-    print(f"[archie] invoking agent with prompt: {WAKE_PROMPT}", file=sys.stderr)
+    thread_id = checkpoint_thread_id(envelope)
+    wake_prompt = build_wake_prompt(envelope)
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": PER_WAKE_RECURSION_LIMIT,
+    }
+    print(f"[archie] invoking agent with prompt: {wake_prompt}", file=sys.stderr)
     result = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": WAKE_PROMPT}]},
+        {"messages": [{"role": "user", "content": wake_prompt}]},
         config=config,
     )
     # Log full result for debugging
     print(f"[archie] result keys: {result.keys()}", file=sys.stderr)
     print(f"[archie] messages: {result.get('messages', [])}", file=sys.stderr)
+
+    text = final_ai_text(result)
+    event = mail_event(envelope)
+    if (
+        event
+        and event.get("replyExpected")
+        and event.get("messageId")
+        and text
+        and not has_successful_mail_reply(result)
+    ):
+        print(
+            "[archie] replyExpected wake ended without successful mail_reply; sending fallback mail.reply",
+            file=sys.stderr,
+        )
+        await fallback_mail_reply(str(event["messageId"]), text)
+        print("[archie] fallback mail.reply sent", file=sys.stderr)
+
     # Emit the last AI text to stderr so it shows in daemon logs.
-    for message in reversed(result.get("messages", [])):
-        if getattr(message, "type", None) == "ai" and getattr(message, "content", None):
-            print(f"[archie] {message.content}", file=sys.stderr)
-            return
+    if text:
+        print(f"[archie] {text}", file=sys.stderr)
     else:
         print("[archie] wake finished with no AI message", file=sys.stderr)
 

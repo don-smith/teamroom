@@ -1,6 +1,7 @@
 import type { MessageRepo } from "../db/message-repo.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { Clock } from "../clock/clock.js";
+import type { MailDeliveredEvent } from "../types.js";
 import { parseAddress, formatAddress, type Address } from "./address.js";
 
 /**
@@ -60,8 +61,8 @@ export class MailDispatcher {
       }
     }
 
-    const expandedTo = this.expand(parsedTo);
-    const expandedCc = this.expand(parsedCc);
+    const expandedTo = this.expand(parsedTo, { replyExpectedForDirectAgent: this.fromCreatesReplyExpectation(input.from) });
+    const expandedCc = this.expand(parsedCc, { replyExpectedForDirectAgent: false });
 
     // Thread cap counts every row we'd add (multi-recipient dispatch counts N).
     const cap = this.deps.maxMailsPerThread;
@@ -75,15 +76,16 @@ export class MailDispatcher {
 
     // Post-expansion envelope strings — every recipient row sees the full
     // group on `to`/`cc`, not just their own address.
-    const toStrings = expandedTo.map(formatAddress);
-    const ccStrings = expandedCc.length === 0 ? null : expandedCc.map(formatAddress);
+    const toStrings = expandedTo.map((delivery) => formatAddress(delivery.address));
+    const ccStrings = expandedCc.length === 0 ? null : expandedCc.map((delivery) => formatAddress(delivery.address));
 
     const rowIds: string[] = [];
     const now = this.deps.clock.nowIso();
 
-    for (const addr of [...expandedTo, ...expandedCc]) {
+    for (const delivery of [...expandedTo, ...expandedCc]) {
       const id = this.deps.genId();
       rowIds.push(id);
+      const addr = delivery.address;
 
       if (addr.kind === "agent") {
         this.deps.messageRepo.create({
@@ -100,7 +102,15 @@ export class MailDispatcher {
           subject: input.subject ?? null,
           threadId,
         });
-        this.deps.bus.publish("mail.delivered", { to: addr.name });
+        const payload: MailDeliveredEvent = {
+          type: "mail.delivered",
+          to: addr.name,
+          messageId: id,
+          threadId,
+          from: input.from,
+          replyExpected: delivery.replyExpected,
+        };
+        this.deps.bus.publish("mail.delivered", payload);
       } else if (addr.kind === "channel" && addr.channel === "cli") {
         // CLI outbound rows carry the full mail envelope so that the
         // ChatServer can forward it over WebSocket without additional lookups.
@@ -145,17 +155,21 @@ export class MailDispatcher {
     return { threadId, rowIds };
   }
 
-  private expand(addrs: Address[]): Address[] {
-    const out: Address[] = [];
+  private expand(addrs: Address[], opts: { replyExpectedForDirectAgent: boolean }): Array<{ address: Address; replyExpected: boolean }> {
+    const out: Array<{ address: Address; replyExpected: boolean }> = [];
     for (const a of addrs) {
       if (a.kind === "list") {
         const subs = this.deps.listSubscribers(a.name);
-        for (const s of subs) out.push({ kind: "agent", name: s });
+        for (const s of subs) out.push({ address: { kind: "agent", name: s }, replyExpected: false });
       } else {
-        out.push(a);
+        out.push({ address: a, replyExpected: a.kind === "agent" ? opts.replyExpectedForDirectAgent : false });
       }
     }
     return out;
+  }
+
+  private fromCreatesReplyExpectation(from: string): boolean {
+    return this.safeParseFrom(from)?.kind === "agent" || from.startsWith("channel:cli:");
   }
 
   private safeParseFrom(from: string): Address | null {

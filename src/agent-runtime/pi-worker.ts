@@ -10,12 +10,24 @@ import {
   type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
-import type { Provider } from "../types.js";
+import type { MailDeliveredEvent, Provider } from "../types.js";
 import { buildPiMailTools } from "./pi-mail-tools.js";
 import { buildPiModelConfig } from "./pi-model.js";
 
-const WAKE_PROMPT =
-  "You received a Team Room wake notification. First check unread mail with mail_list({ unreadOnly: true }), then read relevant messages with mail_get. Reply in-thread with mail_reply when responding to a request, or use mail_send for a new thread. If a coding task is requested, inspect and edit the mounted codebase as needed. If nothing is actionable, end your turn without sending mail.";
+function isMailDeliveredEvent(event: string | MailDeliveredEvent): event is MailDeliveredEvent {
+  return typeof event === "object" && event.type === "mail.delivered";
+}
+
+function wakePrompt(wake: WakeEnvelope): string {
+  const mail = [...wake.events].reverse().find(isMailDeliveredEvent);
+  if (!mail) {
+    return "You received a Team Room wake notification. First check unread mail with mail_list({ unreadOnly: true }), then read relevant messages with mail_get. Reply in-thread with mail_reply when responding to a request, or use mail_send for a new thread. If a coding task is requested, inspect and edit the mounted codebase as needed. If nothing is actionable, end your turn without sending mail.";
+  }
+  if (mail.replyExpected) {
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail_get, do any needed work, then reply in-thread with mail_reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+  }
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail_get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+}
 
 const TEAMROOM_APPEND_PROMPT = `You run inside Team Room as a general coding teammate.
 On every wake, check unread Team Room mail first.
@@ -80,9 +92,9 @@ export class PiAgentWorker implements AgentWorker {
     return new PiAgentWorker(session, opts);
   }
 
-  async handleWake(_wake: WakeEnvelope): Promise<void> {
+  async handleWake(wake: WakeEnvelope): Promise<void> {
     try {
-      await this.session.prompt(WAKE_PROMPT);
+      await this.session.prompt(wakePrompt(wake));
     } catch (err) {
       this.onError?.(err);
     }

@@ -7,6 +7,7 @@ import type { DockerRunSpec } from "../../container/docker-command.js";
 import type { Messaging } from "../messaging/messaging.js";
 import type { Logger } from "../../logger/logger.js";
 import type { AgentConfig } from "../../agent-config/agent-config.js";
+import type { MailDeliveredEvent } from "../../types.js";
 
 export interface SessionManagement {
   sessionManager: SessionTimerManager;
@@ -47,8 +48,8 @@ export function composeSessionManagement(deps: SessionManagementDeps): SessionMa
   // The three bus subscriptions that make M4 actually flow.
   // (Mirrors what daemon.ts currently does inline; will be removed from
   //  daemon.ts in Plan Task 16.)
-  deps.messaging.eventBus.subscribe<{ to: string }>("mail.delivered", (p) => {
-    sessionManager.onMailDelivered(p.to);
+  deps.messaging.eventBus.subscribe<MailDeliveredEvent>("mail.delivered", (p) => {
+    sessionManager.onMailDelivered(p);
   });
   deps.messaging.eventBus.subscribe<{ from: string }>("mail.sent", (p) => {
     sessionManager.onAgentActivity(p.from);

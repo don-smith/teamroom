@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { AnthropicLlmClient, type LlmClient } from "./anthropic-llm-client.js";
+import type { MailDeliveredEvent } from "../types.js";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
@@ -15,8 +16,20 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 const DEFAULT_SYSTEM_PROMPT =
   "You are an agent running inside the Team Room harness. On wake, check your inbox via the mail.* MCP tools and respond to any unread mail. Reply in-thread with mail.reply; start fresh threads with mail.send.";
 
-const WAKE_PROMPT =
-  "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+function isMailDeliveredEvent(event: string | MailDeliveredEvent): event is MailDeliveredEvent {
+  return typeof event === "object" && event.type === "mail.delivered";
+}
+
+function wakePrompt(wake: WakeEnvelope): string {
+  const mail = [...wake.events].reverse().find(isMailDeliveredEvent);
+  if (!mail) {
+    return "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+  }
+  if (mail.replyExpected) {
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+  }
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+}
 
 export interface AnthropicAgentWorkerOpts {
   client: LlmClient;
@@ -66,7 +79,7 @@ export class AnthropicAgentWorker implements AgentWorker {
     });
   }
 
-  async handleWake(_wake: WakeEnvelope): Promise<void> {
+  async handleWake(wake: WakeEnvelope): Promise<void> {
     const system = existsSync(this.opts.agentsMdPath)
       ? readFileSync(this.opts.agentsMdPath, "utf8")
       : DEFAULT_SYSTEM_PROMPT;
@@ -74,7 +87,7 @@ export class AnthropicAgentWorker implements AgentWorker {
     const result = await this.opts.client.createMessage({
       model: this.opts.model,
       system,
-      messages: [{ role: "user", content: WAKE_PROMPT }],
+      messages: [{ role: "user", content: wakePrompt(wake) }],
     });
 
     if (result.text && this.opts.onText) {

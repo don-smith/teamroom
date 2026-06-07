@@ -1,6 +1,7 @@
 import type { ContainerRunner, RunningContainer } from "../container/container-runner.js";
 import type { DockerRunSpec } from "../container/docker-command.js";
 import type { Logger } from "../logger/logger.js";
+import type { MailDeliveredEvent } from "../types.js";
 
 /**
  * TimerHandle returned by TimerFactory.schedule. The timer manager calls
@@ -80,11 +81,12 @@ export class SessionTimerManager {
 
   constructor(private readonly deps: SessionTimerManagerDeps) {}
 
-  onMailDelivered(agentId: string): void {
+  onMailDelivered(delivery: MailDeliveredEvent): void {
+    const agentId = delivery.to;
     let s = this.sessions.get(agentId);
     if (!s) s = this.spawn(agentId);
     try {
-      s.rc.writeEnvelope({ type: "wake", events: ["mail"] });
+      s.rc.writeEnvelope({ type: "wake", events: [delivery] });
     } catch (err) {
       // A lingering Session pointing at a torn-down container — drop it
       // and respawn. Possible if the runner exited between the bus event
@@ -95,7 +97,7 @@ export class SessionTimerManager {
       });
       this.removeSession(agentId, s);
       const fresh = this.spawn(agentId);
-      fresh.rc.writeEnvelope({ type: "wake", events: ["mail"] });
+      fresh.rc.writeEnvelope({ type: "wake", events: [delivery] });
       return;
     }
     this.armTimer(s);

@@ -5,6 +5,18 @@ import { ControllableClock } from "../../clock/clock.js";
 import { FakeRunner } from "../../container/fake-runner.js";
 import { composeSessionManagement } from "./session-management.js";
 import type { AgentConfig } from "../../agent-config/agent-config.js";
+import type { MailDeliveredEvent } from "../../types.js";
+
+function mailDelivered(to: string): MailDeliveredEvent {
+  return {
+    type: "mail.delivered",
+    to,
+    messageId: `msg-${to}`,
+    threadId: `thread-${to}`,
+    from: "channel:cli:don",
+    replyExpected: true,
+  };
+}
 
 describe("composeSessionManagement", () => {
   const logger = new JsonLinesLogger(new ControllableClock("2026-04-20T00:00:00Z"), () => {}, { component: "test" });
@@ -52,16 +64,17 @@ describe("composeSessionManagement", () => {
       agentConfigs: new Map(),
     });
 
-    void messaging.eventBus.publish("mail.delivered", { to: "foo" });
+    const delivery = mailDelivered("foo");
+    void messaging.eventBus.publish("mail.delivered", delivery);
     expect(specCalls).toEqual([{ agentId: "foo", token: "tok-1" }]);
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: [delivery] }]);
     expect(scheduled).toHaveLength(1);
     expect(scheduled[0]).toMatchObject({ ms: 30 * 60 * 1000, cancelled: false });
 
     void messaging.eventBus.publish("mail.sent", { from: "foo" });
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(runner.sessions[0]?.envelopes).toEqual([{ type: "wake", events: [delivery] }]);
     expect(scheduled).toHaveLength(2);
     expect(scheduled[0]?.cancelled).toBe(true);
     expect(scheduled[1]).toMatchObject({ ms: 30 * 60 * 1000, cancelled: false });

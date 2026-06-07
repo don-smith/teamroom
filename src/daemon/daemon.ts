@@ -169,8 +169,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // see in the daemon log when agents send/receive mail and call MCP tools.
   // (composeSessionManagement consumes the same events for timer-reset; this
   // adds a parallel logging consumer with no behavioral effect.)
-  messaging.eventBus.subscribe<{ to: string }>("mail.delivered", (p) => {
-    obs.rootLogger.info("mail.delivered", { to: p.to });
+  messaging.eventBus.subscribe<{ to: string; messageId?: string; threadId?: string; replyExpected?: boolean }>("mail.delivered", (p) => {
+    obs.rootLogger.info("mail.delivered", {
+      to: p.to,
+      messageId: p.messageId,
+      threadId: p.threadId,
+      replyExpected: p.replyExpected,
+    });
   });
   messaging.eventBus.subscribe<{ from: string }>("mail.sent", (p) => {
     obs.rootLogger.info("mail.sent", { from: p.from });

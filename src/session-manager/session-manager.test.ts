@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { SessionTimerManager, type TimerFactory, type TimerHandle } from "./session-manager.js";
 import { FakeRunner } from "../container/fake-runner.js";
+import type { MailDeliveredEvent } from "../types.js";
 
 interface ManualTimers extends TimerFactory {
   advance(ms: number): void;
@@ -43,6 +44,18 @@ function manualTimers(): ManualTimers {
   };
 }
 
+function mailDelivered(to: string, overrides: Partial<MailDeliveredEvent> = {}): MailDeliveredEvent {
+  return {
+    type: "mail.delivered",
+    to,
+    messageId: `msg-${to}`,
+    threadId: `thread-${to}`,
+    from: "channel:cli:don",
+    replyExpected: true,
+    ...overrides,
+  };
+}
+
 function setup(idleMinutes = 30) {
   const runner = new FakeRunner();
   const timerFactory = manualTimers();
@@ -64,24 +77,24 @@ function setup(idleMinutes = 30) {
 describe("SessionTimerManager", () => {
   it("spawns a container on first onMailDelivered and writes the initial wake", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("claude-assistant");
+    manager.onMailDelivered(mailDelivered("claude-assistant"));
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [mailDelivered("claude-assistant")] }]);
   });
 
   it("reuses a live session on subsequent onMailDelivered — only writes a new wake", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
+    manager.onMailDelivered(mailDelivered("A"));
     expect(runner.sessions).toHaveLength(1);
     expect(runner.sessions[0]!.envelopes).toHaveLength(2);
   });
 
   it("resets the idle timer on mail.delivered", () => {
     const { manager, runner, timerFactory } = setup(30);
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     timerFactory.advance(29 * 60 * 1000);
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     timerFactory.advance(29 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(false);
     timerFactory.advance(1 * 60 * 1000);
@@ -90,7 +103,7 @@ describe("SessionTimerManager", () => {
 
   it("resets the idle timer on onAgentActivity", () => {
     const { manager, runner, timerFactory } = setup(30);
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     timerFactory.advance(29 * 60 * 1000);
     manager.onAgentActivity("A");
     timerFactory.advance(29 * 60 * 1000);
@@ -99,14 +112,14 @@ describe("SessionTimerManager", () => {
 
   it("fires the timer and closes stdin after idleMinutes of silence", () => {
     const { manager, runner, timerFactory } = setup(30);
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     timerFactory.advance(30 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(true);
   });
 
   it("idleMinutes=0 disables the timer", () => {
     const { manager, runner, timerFactory } = setup(0);
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     timerFactory.advance(365 * 24 * 60 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(false);
     expect(timerFactory.pending()).toBe(0);
@@ -114,7 +127,7 @@ describe("SessionTimerManager", () => {
 
   it("removes the session when the container exits", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     expect(manager.hasSession("A")).toBe(true);
     runner.sessions[0]!.simulateExit({ exitCode: 0 });
     expect(manager.hasSession("A")).toBe(false);
@@ -122,16 +135,16 @@ describe("SessionTimerManager", () => {
 
   it("respawns on next mail after container exit", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     runner.sessions[0]!.simulateExit({ exitCode: 0 });
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     expect(runner.sessions).toHaveLength(2);
   });
 
   it("tokenFor / resolveToken round-trip per agent", () => {
     const { manager } = setup();
     expect(manager.tokenFor("A")).toBeNull();
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     const token = manager.tokenFor("A");
     expect(token).toMatch(/^tok-/);
     expect(manager.resolveToken(token!)).toBe("A");
@@ -140,10 +153,10 @@ describe("SessionTimerManager", () => {
 
   it("mints a fresh token on respawn", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     const first = manager.tokenFor("A")!;
     runner.sessions[0]!.simulateExit({ exitCode: 0 });
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     const second = manager.tokenFor("A")!;
     expect(second).not.toBe(first);
     expect(manager.resolveToken(first)).toBeNull();
@@ -151,8 +164,8 @@ describe("SessionTimerManager", () => {
 
   it("killAll terminates every live session and clears the maps", async () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
-    manager.onMailDelivered("B");
+    manager.onMailDelivered(mailDelivered("A"));
+    manager.onMailDelivered(mailDelivered("B"));
     await manager.killAll();
     expect(manager.sessionCount()).toBe(0);
     // FakeRunningContainer.kill → simulateExit(137); both sessions should be gone.
@@ -169,7 +182,7 @@ describe("SessionTimerManager", () => {
 
   it("spawnIfAbsent is a no-op when the session already exists", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     manager.spawnIfAbsent("A");
     expect(runner.sessions).toHaveLength(1);
     // The initial wake is still the only envelope — spawnIfAbsent didn't write one.
@@ -179,9 +192,9 @@ describe("SessionTimerManager", () => {
   it("onMailDelivered reuses a session created by spawnIfAbsent and writes its first wake", () => {
     const { manager, runner } = setup();
     manager.spawnIfAbsent("A");
-    manager.onMailDelivered("A");
+    manager.onMailDelivered(mailDelivered("A"));
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: ["mail"] }]);
+    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [mailDelivered("A")] }]);
   });
 });
 
@@ -207,7 +220,7 @@ describe("SessionTimerManager — persistent lifecycle", () => {
 
   it("does not arm the idle timer for a persistent agent on mail.delivered", () => {
     const { manager, runner, timerFactory } = persistentSetup("persistent-one", 30);
-    manager.onMailDelivered("persistent-one");
+    manager.onMailDelivered(mailDelivered("persistent-one"));
     expect(timerFactory.pending()).toBe(0);
     timerFactory.advance(365 * 24 * 60 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(false);
@@ -215,7 +228,7 @@ describe("SessionTimerManager — persistent lifecycle", () => {
 
   it("does arm the idle timer for a session agent even when other agents are persistent", () => {
     const { manager, runner, timerFactory } = persistentSetup("persistent-one", 30);
-    manager.onMailDelivered("session-other");
+    manager.onMailDelivered(mailDelivered("session-other"));
     expect(timerFactory.pending()).toBe(1);
     timerFactory.advance(30 * 60 * 1000);
     expect(runner.sessions[0]!.isStdinClosed()).toBe(true);
@@ -234,7 +247,7 @@ describe("SessionTimerManager — persistent lifecycle", () => {
 
   it("does not respawn a session-lifecycle agent after exit", () => {
     const { manager, runner } = persistentSetup("persistent-one");
-    manager.onMailDelivered("session-other");
+    manager.onMailDelivered(mailDelivered("session-other"));
     runner.sessions[0]!.simulateExit({ exitCode: 0 });
     expect(runner.sessions).toHaveLength(1);
     expect(manager.hasSession("session-other")).toBe(false);
