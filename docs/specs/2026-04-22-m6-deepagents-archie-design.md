@@ -68,7 +68,9 @@ Mail wakes are no longer only string tags. `mail.delivered` events include the m
 
 For M6, direct human/CLI-to-agent and direct agent-to-agent `to:` mail sets `replyExpected: true`; list fanout and cc-style deliveries set `replyExpected: false`. Runtimes may still receive legacy string wake tags and should handle them by checking mail normally.
 
-The key protocol rule: final assistant text is diagnostic only. If a wake has `replyExpected: true`, the agent should complete the request by replying in-thread through mail-MCP. If `replyExpected: false`, the agent may remain silent unless sending mail adds value. This avoids both lost replies and noisy agents. Archie also has a logged safety net: when a reply-required wake ends with final assistant text but no successful `mail_reply` tool result, the shim sends that final text through `mail.reply` directly and logs the fallback.
+The key protocol rule: final assistant text is diagnostic only. If a wake has `replyExpected: true`, the agent should complete the request by replying in-thread through mail-MCP. If `replyExpected: false`, the agent may remain silent unless sending mail adds value. This avoids both lost replies and noisy agents.
+
+Archie has an **Archie-only** safety net, not a generic runtime rule: when a reply-required wake ends with final assistant text but no successful `mail_reply` tool result, the shim sends that final text through `mail.reply` directly. This is intentionally treated as a failure/safety-net path, not normal success. Archie emits structured runtime telemetry for both malformed tool calls (`agent.tool_call.invalid`) and fallback usage (`agent.reply_required.fallback_used`); the session manager publishes those events onto the Team Room event bus and the daemon logs them at warn level.
 
 This shape deliberately leaves room for future channel-specific response expectations, such as a Telegram voice sidecar that post-processes a mail reply into a spoken response. The agent should express the reply through Team Room mail; Team Room/channel infrastructure can perform sidecar rendering later.
 

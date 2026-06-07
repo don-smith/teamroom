@@ -42,6 +42,7 @@ export function composeSessionManagement(deps: SessionManagementDeps): SessionMa
     spec: deps.spec,
     genToken: deps.genToken,
     logger: deps.logger,
+    eventBus: deps.messaging.eventBus,
     lifecycleFor,
   });
 

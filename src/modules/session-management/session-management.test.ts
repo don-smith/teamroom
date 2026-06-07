@@ -90,6 +90,43 @@ describe("composeSessionManagement", () => {
     await sm.stop();
   });
 
+  it("publishes structured runtime log events from container stdout onto the event bus", async () => {
+    const messaging = composeMessaging({ logger });
+    const runner = new FakeRunner();
+    const seen: unknown[] = [];
+    messaging.eventBus.subscribe("agent.tool_call.invalid", (payload) => seen.push(payload));
+
+    const sm = composeSessionManagement({
+      messaging,
+      logger,
+      runner,
+      idleMinutes: 30,
+      timerFactory: { schedule: () => ({ cancel: () => {} }) },
+      spec: () => ({ imageTag: "x", mounts: [], env: {}, labels: {} }),
+      genToken: () => "tok-1",
+      agentConfigs: new Map(),
+    });
+
+    void messaging.eventBus.publish("mail.delivered", mailDelivered("foo"));
+    runner.sessions[0]?.simulateEvent({
+      type: "log",
+      level: "warn",
+      msg: "agent.tool_call.invalid",
+      messageId: "msg-1",
+      invalidToolCalls: [{ name: "mail_reply", error: "bad JSON" }],
+    });
+
+    expect(seen).toEqual([
+      {
+        agentId: "foo",
+        messageId: "msg-1",
+        invalidToolCalls: [{ name: "mail_reply", error: "bad JSON" }],
+      },
+    ]);
+
+    await sm.stop();
+  });
+
   it("spawns persistent agents at init and never spawns session agents at init", async () => {
     const messaging = composeMessaging({ logger });
     const runner = new FakeRunner();

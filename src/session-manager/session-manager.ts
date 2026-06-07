@@ -1,5 +1,6 @@
 import type { ContainerRunner, RunningContainer } from "../container/container-runner.js";
 import type { DockerRunSpec } from "../container/docker-command.js";
+import type { EventBus } from "../bus/event-bus.js";
 import type { Logger } from "../logger/logger.js";
 import type { MailDeliveredEvent } from "../types.js";
 
@@ -40,6 +41,7 @@ export interface SessionTimerManagerDeps {
   /** Mint a fresh MCP token per spawn. */
   genToken: () => string;
   logger?: Logger;
+  eventBus?: EventBus;
   /**
    * Per-agent lifecycle lookup. `persistent` agents skip the idle timer
    * entirely and are respawned on unexpected exit. `session` (default)
@@ -166,6 +168,11 @@ export class SessionTimerManager {
     const session: Session = { agentId, rc, timer: null, token };
     this.sessions.set(agentId, session);
     this.tokens.set(token, agentId);
+    rc.onEvent((event) => {
+      if (event.type !== "log") return;
+      const { type: _type, level: _level, msg, ...payload } = event;
+      this.deps.eventBus?.publish(msg, { agentId, ...payload });
+    });
     rc.onExit(() => {
       this.removeSession(agentId, session);
       if (this.isShuttingDown) return;

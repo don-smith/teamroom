@@ -183,6 +183,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   messaging.eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
     obs.rootLogger.info("tool.call", { agentId: p.agentId, tool: p.tool });
   });
+  messaging.eventBus.subscribe<{
+    agentId: string;
+    messageId?: string;
+    threadId?: string;
+    invalidToolCalls?: Array<{ name?: string; id?: string; error?: string }>;
+  }>("agent.tool_call.invalid", (p) => {
+    obs.rootLogger.warn("agent.tool_call.invalid", p);
+  });
+  messaging.eventBus.subscribe<{
+    agentId: string;
+    messageId?: string;
+    threadId?: string;
+    reason?: string;
+  }>("agent.reply_required.fallback_used", (p) => {
+    obs.rootLogger.warn("agent.reply_required.fallback_used", p);
+  });
 
   // --- 11. Channels (chat WebSocket on its own port) ---
   const channels = await composeChannels({

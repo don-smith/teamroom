@@ -125,11 +125,32 @@ def checkpoint_thread_id(envelope: dict) -> str:
     return "archie-main"
 
 
+def emit_log(level: str, msg: str, **fields) -> None:
+    print(json.dumps({"type": "log", "level": level, "msg": msg, **fields}), flush=True)
+
+
 def has_successful_mail_reply(result: dict) -> bool:
     for message in result.get("messages", []):
         if getattr(message, "type", None) == "tool" and getattr(message, "name", None) == "mail_reply":
             return True
     return False
+
+
+def invalid_tool_calls(result: dict) -> list[dict]:
+    calls = []
+    for message in result.get("messages", []):
+        for call in getattr(message, "invalid_tool_calls", []) or []:
+            if not isinstance(call, dict):
+                calls.append({"error": str(call)})
+                continue
+            calls.append(
+                {
+                    "id": call.get("id"),
+                    "name": call.get("name"),
+                    "error": call.get("error"),
+                }
+            )
+    return calls
 
 
 def final_ai_text(result: dict) -> str | None:
@@ -314,6 +335,16 @@ async def handle_wake(
 
     text = final_ai_text(result)
     event = mail_event(envelope)
+    invalid_calls = invalid_tool_calls(result)
+    if invalid_calls:
+        emit_log(
+            "warn",
+            "agent.tool_call.invalid",
+            messageId=event.get("messageId") if event else None,
+            threadId=event.get("threadId") if event else None,
+            invalidToolCalls=invalid_calls,
+        )
+
     if (
         event
         and event.get("replyExpected")
@@ -324,6 +355,13 @@ async def handle_wake(
         print(
             "[archie] replyExpected wake ended without successful mail_reply; sending fallback mail.reply",
             file=sys.stderr,
+        )
+        emit_log(
+            "warn",
+            "agent.reply_required.fallback_used",
+            messageId=event.get("messageId"),
+            threadId=event.get("threadId"),
+            reason="replyExpected wake ended without successful mail_reply",
         )
         await fallback_mail_reply(str(event["messageId"]), text)
         print("[archie] fallback mail.reply sent", file=sys.stderr)

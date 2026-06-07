@@ -71,7 +71,8 @@ Expected/current: all non-environmental tests pass. Current known environmental 
   - Wake envelopes carry `messageId`, `threadId`, `from`, and `replyExpected`.
   - Runtime prompts distinguish required replies from optional/noisy replies.
 - [x] Key Archie DeepAgents checkpoints by Team Room mail thread when structured wake metadata is present, avoiding global `archie-main` context buildup across unrelated smoke tests.
-- [x] Add Archie shim safety net for reply-required wakes: if DeepAgents produces final assistant text without a successful `mail_reply` tool result, send that text via direct MCP `mail.reply` and log the fallback.
+- [x] Add Archie-only shim safety net for reply-required wakes: if DeepAgents produces final assistant text without a successful `mail_reply` tool result, send that text via direct MCP `mail.reply`.
+- [x] Make the safety net loud: Archie emits `agent.tool_call.invalid` for malformed tool calls and `agent.reply_required.fallback_used` when fallback sends mail; session management republishes structured runtime log events to the event bus, and the daemon logs them at warn level.
 - [ ] Add first-wake build retry cap in `agents/archie/shim.py`.
   - Repeated MCP/model construction failures should eventually `sys.exit(1)` so daemon respawn/cap behavior engages.
 - [x] Make `/codebase` requirement loud for Archie.
