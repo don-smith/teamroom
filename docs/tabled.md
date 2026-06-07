@@ -8,7 +8,7 @@ Keep this file small. If it grows past a screen of content, that's a signal to p
 
 **Milestone-close processing:** at the end of each milestone, sweep this file. Outstanding items worth keeping roll into [`docs/roadmap.md#backlog`](roadmap.md#backlog); completed/obsolete items are dropped. The file ends each milestone empty (or near-empty).
 
-Mechanics in the `epiphany-tabling` skill (`.claude/skills/epiphany-tabling/`).
+Mechanics in the `epiphany-tabling` skill (`.agents/skills/epiphany-tabling/`).
 
 ---
 

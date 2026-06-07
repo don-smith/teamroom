@@ -7,7 +7,7 @@
 > bullet.
 >
 > **What this is not.** Process content (→ `docs/ways-of-working.md`).
-> Procedures (→ `docs/runbooks/`). Tactical capabilities (→ `.claude/skills/`).
+> Procedures (→ `docs/runbooks/`). Tactical capabilities (→ `.agents/skills/`).
 > Anything derivable from current code or docs. Conversation-scoped state
 > (→ plans / tasks).
 >

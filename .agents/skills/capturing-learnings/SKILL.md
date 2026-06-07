@@ -43,7 +43,7 @@ When the second sighting arrives, match the learning to an artifact type:
 
 | Learning shape | Artifact | Where it lives | Half-life |
 |---|---|---|---|
-| A tactical, reusable how-to — the specific steps for doing one thing well (may include a script) | **Skill** | `.claude/skills/<name>/SKILL.md` or a marketplace skill | Long — skills travel. |
+| A tactical, reusable how-to — the specific steps for doing one thing well (may include a script) | **Skill** | `.agents/skills/<name>/SKILL.md` or a marketplace skill | Long — skills travel. |
 | A broader process or practice — often composing multiple skills, sometimes with its own scripts | **Runbook** | `docs/runbooks/<name>.md` | Medium — check on use; runbooks rot fast. |
 | A recurring user preference, constraint, or project context to carry across sessions | **Memory entry** | `docs/memory/<type>_<topic>.md` + index in `docs/memory/MEMORY.md` | Long — until the context shifts. |
 | A permanent record of shipped work | **As-built** | `docs/as-built/YYYY-MM-DD-<topic>.md` | Permanent — frozen. See the `writing-as-built` skill. |

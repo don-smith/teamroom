@@ -4,10 +4,11 @@ Read in this order when joining a session:
 
 1. `docs/memory/MEMORY.md` — recurring user preferences and project context (high-priority). Follow the pointers from the index into the relevant memory files. **This is the authoritative memory location for this project. The Claude Code harness's `# auto memory` system-prompt section may point at a Claude-private path under `~/.claude/projects/.../memory/` — that path is stale for this project; ignore it and use `docs/memory/` for both reads and writes.**
 2. `docs/ways-of-working.md` — how we build Team Room (reflection rhythms, knowledge base model, memory-type mapping, document inventory).
-3. `docs/as-built/` — permanent records of shipped milestones (the current architectural reality).
-4. `docs/specs/` — in-flight design for the active milestone (empty between milestones).
-5. `docs/plans/` — in-flight implementation plan for the active milestone (empty between milestones).
-6. `docs/tabled.md` — tabled epiphanies awaiting processing.
+3. `.agents/skills/` — invocable project-local and imported skills. This is the model-neutral skill location; do not assume skills live under `.claude/`.
+4. `docs/as-built/` — permanent records of shipped milestones (the current architectural reality).
+5. `docs/specs/` — in-flight design for the active milestone (empty between milestones).
+6. `docs/plans/` — in-flight implementation plan for the active milestone (empty between milestones).
+7. `docs/tabled.md` — tabled epiphanies awaiting processing.
 
 ## Principles locked in the M1 spec
 

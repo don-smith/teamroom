@@ -51,5 +51,5 @@ The default `bun test` suite spans both fast in-memory seam tests (SQLite `:memo
 ## Related
 
 - `docs/runbooks/smoke-test.md` — end-to-end verification against real Docker + real LM Studio.
-- `.claude/skills/` — test-driven-development (superpowers).
+- `.agents/skills/` — test-driven-development (superpowers).
 - `docs/memory/feedback_teamroom_testability_and_di.md` — why in-memory real implementations instead of mocking.
