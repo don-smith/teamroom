@@ -7,7 +7,7 @@
 > bullet.
 >
 > **What this is not.** Process content (→ `docs/ways-of-working.md`).
-> Procedures (→ `docs/runbooks/`). Tactical capabilities (→ `.agents/skills/`).
+> Procedures (→ `docs/runbooks/`). Tactical capabilities (→ imported workflow skill packages such as `@juicesharp/rpiv-pi` and `@locksmithdon/dons-flow`).
 > Anything derivable from current code or docs. Conversation-scoped state
 > (→ plans / tasks).
 >

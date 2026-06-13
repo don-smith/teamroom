@@ -2,7 +2,7 @@
 
 *Last reviewed: 2026-06-07. Update the date when this document is revised.*
 
-**Scope of this document.** Ways-of-working holds the **semantic** layer: principles, the knowledge-base model, document inventory, evolution framing, cross-pollination signals, failure modes. The **procedural** layer — the specific rituals we run (epiphany tabling, end-of-artifact checkpoints, retros, as-builts, branch landing, capturing learnings) — lives in invocable skills under `.agents/skills/`. That model-neutral location is intentional: Claude Code, Codex, local models, and future Team Room agents should all be able to discover the same practices. That split keeps this document navigable and makes each practice callable by name when the moment arrives.
+**Scope of this document.** Ways-of-working holds the **semantic** layer: principles, the knowledge-base model, document inventory, evolution framing, cross-pollination signals, failure modes. The **procedural** layer — the specific rituals we run (epiphany tabling, end-of-artifact checkpoints, retros, as-builts, branch landing, capturing learnings) — lives in imported workflow skill packages (e.g., `@juicesharp/rpiv-pi`, `@locksmithdon/dons-flow`). That model-neutral consumption is intentional: Claude Code, Codex, local models, and future Team Room agents should all be able to discover the same practices. That split keeps this document navigable and makes each practice callable by name when the moment arrives.
 
 ## Why this document exists
 
@@ -39,16 +39,16 @@ Six cadences carry the practice. The mechanics of each live in an invocable skil
 
 | Cadence | When it fires | Skill |
 |---|---|---|
-| **Event-driven: epiphanies** | Anytime a realization surfaces mid-work that is not trivially in-scope. | `.agents/skills/epiphany-tabling/` |
-| **Pre-execution plan review** | After a plan is written, before executing. Both the agent and the user read and dry-run the plan before approving. Catches plan-level gaps (config/secrets, test layout, build assets, test/impl inconsistencies) before they become drifts during execution. | `.agents/skills/brainstorming/` for design framing; `.agents/skills/executing-plans/` before implementation begins. |
-| **End-of-artifact checkpoint** | After each approved spec, plan, or major commit set. | `.agents/skills/capturing-learnings/` |
-| **Development-cycle landing** | At the end of a major piece of work or branch: review code/architecture/security, verify, document, process tabled items, reconcile memory, prepare integration. This is the umbrella closeout ritual that invokes the child skills below. | `.agents/skills/land/` |
-| **Significant-work closeout** | When a milestone, major feature, or large refactor closes — produce an as-built and purge the scaffolding. Default expectation is **yes, write one**. | `.agents/skills/writing-as-built/` |
-| **End-of-milestone retrospective** | At milestone close, AFTER the as-built + roadmap update + tabled.md processing are done. Running it last means the retro can reflect on the closeout activities themselves (e.g., "the as-built surfaced a doc drift we hadn't noticed"), not just the milestone work. Four sections (keep doing / stop or change / promote to artifact / commit to memory) with concrete owned action items. | `.agents/skills/writing-retros/` |
+| **Event-driven: epiphanies** | Anytime a realization surfaces mid-work that is not trivially in-scope. | `epiphany-tabling` skill |
+| **Pre-execution plan review** | After a plan is written, before executing. Both the agent and the user read and dry-run the plan before approving. Catches plan-level gaps (config/secrets, test layout, build assets, test/impl inconsistencies) before they become drifts during execution. | `brainstorming` skill for design framing; `executing-plans` skill before implementation begins. |
+| **End-of-artifact checkpoint** | After each approved spec, plan, or major commit set. | `capturing-learnings` skill |
+| **Development-cycle landing** | At the end of a major piece of work or branch: review code/architecture/security, verify, document, process tabled items, reconcile memory, prepare integration. This is the umbrella closeout ritual that invokes the child skills below. | `land` skill |
+| **Significant-work closeout** | When a milestone, major feature, or large refactor closes — produce an as-built and purge the scaffolding. Default expectation is **yes, write one**. | `writing-as-built` skill |
+| **End-of-milestone retrospective** | At milestone close, AFTER the as-built + roadmap update + tabled.md processing are done. Running it last means the retro can reflect on the closeout activities themselves (e.g., "the as-built surfaced a doc drift we hadn't noticed"), not just the milestone work. Four sections (keep doing / stop or change / promote to artifact / commit to memory) with concrete owned action items. | `writing-retros` skill |
 
 ## Skill inventory and use
 
-Project-local and imported skills live under `.agents/skills/`. Use them by name in conversation and cite the path when making durable docs changes.
+Skills are imported as npm workflow packages (e.g., `@juicesharp/rpiv-pi`, `@locksmithdon/dons-flow`). Use them by name in conversation (`/skill:name` or `<skill>` block). There is no repo-managed `.agents/skills/` tree.
 
 | Skill | When Team Room uses it |
 |---|---|
@@ -94,14 +94,14 @@ Current set of document categories. Add a row when a new role emerges; merge and
 
 Learnings turn into durable artifacts — skills, runbooks, memory entries, as-builts — or they turn into nothing. Four artifact types carry them forward:
 
-- **Skills** — tactical, reusable how-tos. Live in `.agents/skills/<name>/` for project-local or imported skills, or in a marketplace for cross-project skills.
+- **Skills** — tactical, reusable how-tos. Consumed as imported npm workflow packages; no repo-local skill tree.
 - **Runbooks** — broader processes or practices that may compose multiple skills. Live in `docs/runbooks/`.
 - **Memory entries** — recurring preferences, constraints, or project context that survive across conversations. Live in `docs/memory/`.
 - **As-builts** — permanent records of shipped work. Live in `docs/as-built/`.
 
 **The promotion rule: once is a moment; twice is a pattern.** Don't formalize on first occurrence. Premature formalization has the same cost structure as premature abstraction in code. Wait for the second sighting, then capture.
 
-The mechanics of the end-of-artifact checkpoint, the skill-vs-runbook heuristic, and the proliferation test live in the `capturing-learnings` skill (`.agents/skills/capturing-learnings/`).
+The mechanics of the end-of-artifact checkpoint, the skill-vs-runbook heuristic, and the proliferation test live in the `capturing-learnings` skill.
 
 ## Working with subagents for Team Room delivery
 

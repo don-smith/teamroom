@@ -8,13 +8,13 @@ Keep this file small. If it grows past a screen of content, that's a signal to p
 
 **Milestone-close processing:** at the end of each milestone, sweep this file. Outstanding items worth keeping roll into [`docs/roadmap.md#backlog`](roadmap.md#backlog); completed/obsolete items are dropped. The file ends each milestone empty (or near-empty).
 
-Mechanics in the `epiphany-tabling` skill (`.agents/skills/epiphany-tabling/`).
+Mechanics in the `epiphany-tabling` skill (imported workflow skill package).
 
 ---
 
 ## Open entries
 
-- **M6 landing paused at Step 1: comprehensive code review required before closeout.** During M6 landing, the assistant ran ahead into runbook/as-built work before completing `land` Step 1 as a conversation. Resume by using `.agents/skills/land/` and `.agents/skills/requesting-code-review/` for a production-level review, not a summary. User expectation: review whether the branch is production-quality, intentional, sufficiently tested, free of accidental/"just got it working" code, and whether tech debt/follow-ups are explicit. Current state: `docs/as-built/2026-06-07-teamroom-m6.md` exists as an uncommitted premature draft and should not be committed until after review + user approval to proceed. `.superset/config.json` deletion is intentional dead-code cleanup; do not restore it.
+- **M6 landing paused at Step 1: comprehensive code review required before closeout.** During M6 landing, the assistant ran ahead into runbook/as-built work before completing `land` Step 1 as a conversation. Resume by using the `land` and `requesting-code-review` workflow skills for a production-level review, not a summary. User expectation: review whether the branch is production-quality, intentional, sufficiently tested, free of accidental/"just got it working" code, and whether tech debt/follow-ups are explicit. Current state: `docs/as-built/2026-06-07-teamroom-m6.md` exists as an uncommitted premature draft and should not be committed until after review + user approval to proceed. `.superset/config.json` deletion is intentional dead-code cleanup; do not restore it.
 
 - **Team onboarding and self-healing team care.** New-project onboarding should likely start with a human-created project/folder and an explicit Team Room initialization/onboarding step, not agents autonomously inventing the project. Longer-term, a compelling direction is that team members know enough about each other to diagnose and help fix team/agent problems, not just project problems — a self-healing team that can reason about roles, boundaries, health, and when to pull in peers. Out of M6 scope; likely belongs in roadmap/backlog after Archie is accepted, alongside future "create a new team member" work.
 
