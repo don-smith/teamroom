@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Room Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --accent: #58a6ff;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --purple: #a371f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  .mermaid {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 2rem;
+    overflow-x: auto;
+  }
+  .legend {
+    display: flex; gap: 1.5rem; flex-wrap: wrap;
+    margin: 1rem 0 2rem;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 0.35rem; }
+  .legend .dot {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px;
+  }
+  .notes {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+  .notes ul { padding-left: 1.2rem; }
+  .notes li { margin: 0.4rem 0; }
+  code {
+    background: var(--surface);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  .tag {
+    display: inline-block;
+    padding: 0.1em 0.55em;
+    border-radius: 3px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+  .tag.ts { background: #3178c6; color: #fff; }
+  .tag.py { background: #3776ab; color: #fff; }
+  .tag.sh { background: #4eaa25; color: #fff; }
+  .tag.yaml { background: #cb171e; color: #fff; }
+  .tag.docker { background: #2496ed; color: #fff; }
+</style>
+</head>
+<body>
+
+<h1>Team Room Architecture</h1>
+<p class="subtitle">M6 — DeepAgents runtime + Archie architect. Frozen 2026-06-14.</p>
+
+<!-- ============================================================ -->
+<h2>1. System Overview</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph "Host Process (Bun)"
+        CLI["CLI<br/><code>teamroom send</code>"]
+        Daemon["Daemon<br/><span class='tag ts'>daemon.ts</span>"]
+        Proxy["Model Proxy<br/><span class='tag ts'>model-proxy.ts</span>"]
+        Dispatch["Mail Dispatcher<br/><span class='tag ts'>mail-dispatcher.ts</span>"]
+        Session["Session Manager<br/><span class='tag ts'>session-manager.ts</span>"]
+        MCP["Mail MCP Server<br/><span class='tag ts'>server.ts</span>"]
+        Bus["Event Bus<br/><span class='tag ts'>event-bus.ts</span>"]
+        Storage["Storage (SQLite)<br/><span class='tag ts'>storage.ts</span>"]
+    end
+
+    subgraph "Containers"
+        Archie["Archie<br/><span class='tag py'>shim.py</span><br/>DeepAgents"]
+        PiCoder["pi-coder<br/><span class='tag ts'>pi-worker.ts</span><br/>Pi Agent"]
+    end
+
+    subgraph "External"
+        OpenRouter["OpenRouter<br/>deepseek-v4-flash<br/>+ other models"]
+    end
+
+    CLI -->|"send mail"| Dispatch
+    Dispatch -->|"mail.delivered"| Bus
+    Bus -->|"wake"| Session
+    Session -->|"stdin envelope"| Archie
+    Session -->|"stdin envelope"| PiCoder
+    Archie -->|"MCP tool calls"| MCP
+    PiCoder -->|"MCP tool calls"| MCP
+    Archie -->|"model requests"| Proxy
+    PiCoder -->|"model requests"| Proxy
+    Proxy --> OpenRouter
+    Dispatch <--> Storage
+    Bus <--> Session
+
+    style Daemon fill:#1a3a5c,stroke:#58a6ff
+    style Proxy fill:#1a3a5c,stroke:#58a6ff
+    style Session fill:#1a3a5c,stroke:#58a6ff
+    style Archie fill:#3c1a5c,stroke:#a371f7
+    style PiCoder fill:#1a5c3a,stroke:#3fb950
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:#58a6ff"></span> TypeScript (host)</span>
+  <span><span class="dot" style="background:#a371f7"></span> Python (DeepAgents)</span>
+  <span><span class="dot" style="background:#3fb950"></span> TypeScript (Pi runtime)</span>
+</div>
+
+<div class="notes">
+<strong>Key boundaries:</strong>
+<ul>
+  <li>The <strong>daemon</strong> owns lifecycle, mail dispatch, and the model proxy — everything agents need to exist and communicate.</li>
+  <li><strong>Containers</strong> are opaque to the daemon beyond stdin wake envelopes. Each container hosts one runtime.</li>
+  <li><strong>Model proxy</strong> is the single egress point for model calls — tokens are minted per-container-spawn, never shared.</li>
+  <li><strong>Event bus</strong> decouples producers (dispatcher) from consumers (session manager, logging, channels).</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>2. Agent Runtime Family</h2>
+
+<div class="mermaid">
+graph LR
+    subgraph "Agent Runtimes"
+        direction TB
+        DeepAgents["<strong>DeepAgents</strong><br/>Python / LangGraph<br/>Filesystem + MCP tools<br/>SQLite checkpointer"]
+        Pi["<strong>Pi</strong><br/>TypeScript / Claude Agent SDK<br/>MCP tools<br/>Bun runtime"]
+    end
+
+    subgraph "Archie (architect)"
+        A_YAML["<span class='tag yaml'>agent.yaml</span><br/>runtime: deepagents<br/>provider: openrouter<br/>lifecycle: persistent"]
+        A_SHIM["<span class='tag py'>shim.py</span><br/>stdin wake loop<br/>lazy graph build<br/>fallback reply"]
+        A_DOCKER["<span class='tag docker'>Dockerfile</span><br/>python:3.13-slim<br/>vendored DeepAgents"]
+    end
+
+    subgraph "pi-coder (coding)"
+        P_YAML["<span class='tag yaml'>agent.yaml</span><br/>runtime: pi<br/>provider: openrouter<br/>lifecycle: session"]
+        P_WORKER["<span class='tag ts'>pi-worker.ts</span><br/>Claude Agent SDK<br/>mail + filesystem tools"]
+        P_DOCKER["<span class='tag docker'>Dockerfile</span><br/>Bun + TypeScript<br/>pi-coding-agent"]
+    end
+
+    DeepAgents --> A_SHIM
+    A_YAML --> A_SHIM
+    A_SHIM --> A_DOCKER
+
+    Pi --> P_WORKER
+    P_YAML --> P_WORKER
+    P_WORKER --> P_DOCKER
+
+    style A_SHIM fill:#3c1a5c,stroke:#a371f7
+    style P_WORKER fill:#1a5c3a,stroke:#3fb950
+</div>
+
+<div class="notes">
+<strong>Two-runtime strategy (post-M6 consolidation):</strong>
+<ul>
+  <li><strong>DeepAgents</strong> — for personas needing filesystem exploration, codebase reasoning, and persistent lifecycle (Archie the architect). Python, vendored at <code>vendor/deepagents/</code>.</li>
+  <li><strong>Pi</strong> — for coding/CLI-oriented agents. TypeScript, uses the Claude Agent SDK via the <code>@earendil-works/pi-coding-agent</code> npm package.</li>
+  <li>Both runtimes share the same provider (<strong>OpenRouter</strong>), mail-MCP surface, and daemon-managed lifecycle.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>3. Container Lifecycle</h2>
+
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> BootSpawn: daemon start
+    BootSpawn --> Idle: container up, stdin open
+
+    Idle --> Wake: mail.delivered event
+    Wake --> Processing: shim receives envelope
+    Processing --> Reply: mail_reply via MCP
+    Reply --> Idle: wake complete
+
+    Idle --> CleanExit: daemon shutdown (lifecycle=any)
+    Processing --> Crash: unexpected exit
+
+    Crash --> Respawn: lifecycle=persistent, count < 10
+    Crash --> Capped: lifecycle=persistent, count >= 10
+    Respawn --> BootSpawn: backoff timer
+
+    CleanExit --> [*]: container removed
+
+    note right of Respawn
+        Respawn with 5s backoff.
+        Counter resets on clean exit.
+        Capped at 10 per daemon lifetime.
+    end note
+
+    note right of Wake
+        Containers remain alive between wakes
+        for persistent-lifecycle agents.
+        Session agents get an idle timer
+        and exit after inactivity.
+    end note
+</div>
+
+<!-- ============================================================ -->
+<h2>4. Mail &amp; Wake Protocol</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    actor H as Human (CLI)
+    participant D as MailDispatcher
+    participant B as EventBus
+    participant S as SessionManager
+    participant C as Container (stdin)
+    participant R as Agent Runtime
+    participant M as Mail MCP
+
+    H->>D: teamroom send archie "Is this pattern right?"
+    D->>D: Validate recipients, expand lists
+    D->>D: Enforce thread cap
+    D->>B: publish mail.delivered<br/>{to, messageId, threadId, from, replyExpected: true}
+    D-->>H: thread created
+
+    B->>S: mail.delivered event
+    S->>S: Dedupe by messageId
+    S->>C: writeEnvelope({type: "wake", events: [...]})
+    C->>R: handle_wake(envelope)
+
+    R->>R: Build wake prompt<br/>(replyExpected shapes instruction)
+    R->>M: mail.get(messageId) — read the mail
+    M-->>R: message body
+    R->>R: Read codebase files
+    R->>M: mail.reply(messageId, body) — reply in-thread
+    M-->>R: reply sent
+
+    Note over R: replyExpected: true → must reply<br/>replyExpected: false → silent unless value-add
+</div>
+
+<div class="notes">
+<strong>Protocol guarantees:</strong>
+<ul>
+  <li><code>replyExpected: true</code> for direct CLI→agent and agent→agent mail. <code>false</code> for list fanout/cc.</li>
+  <li>Final assistant text is <strong>diagnostic only</strong> — Team Room-visible communication flows exclusively through mail tools.</li>
+  <li>Archie has an <strong>Archie-only fallback</strong>: if a reply-required wake ends without a successful <code>mail_reply</code>, the shim sends the final text via direct MCP. Telemetry fires so the failure is not hidden.</li>
+  <li>Wake deduplication by <code>messageId</code> prevents double-processing on container respawn.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>5. Configuration Contract</h2>
+
+<div class="mermaid">
+graph TD
+    Config["agent.yaml"] -->|"parsed by"| Loader["agent-config.ts"]
+    Loader -->|"AgentConfig"| BuildSpec["build-spec.ts"]
+    BuildSpec -->|"DockerRunSpec"| Session["session-manager.ts"]
+    Session -->|"env vars"| Container["Container"]
+
+    subgraph "agent.yaml"
+        Name["name: archie"]
+        Runtime["runtime: deepagents | pi"]
+        Provider["provider: openrouter"]
+        Model["model: deepseek/deepseek-v4-flash"]
+        Lifecycle["lifecycle: persistent | session"]
+    end
+
+    subgraph "Injected into container"
+        Token["TEAMROOM_MCP_TOKEN<br/>TEAMROOM_MODEL_API_TOKEN"]
+        MCP["TEAMROOM_MCP_URL"]
+        ModelUrl["TEAMROOM_MODEL_BASE_URL"]
+        RuntimeEnv["TEAMROOM_RUNTIME<br/>TEAMROOM_PROVIDER<br/>TEAMROOM_MODEL"]
+    end
+
+    Config --> RuntimeEnv
+    Config --> ModelUrl
+
+    style Config fill:#8b1a1a,stroke:#cb171e
+    style Container fill:#333,stroke:#666
+</div>
+
+<div class="notes">
+<strong>Validation at daemon boot:</strong>
+<ul>
+  <li><code>validateRuntimeProvider</code> gates every runtime/provider combination — invalid pairs fail at config load, not inside the container.</li>
+  <li><code>deepagents</code> runtime requires <code>TEAMROOM_CODEBASE_PATH</code> — the daemon fails loudly if the codebase is missing.</li>
+  <li>Provider tokens (LM Studio, OpenAI, OpenRouter) are only required when a configured agent uses that provider.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>6. Module Composition (Daemon Startup)</h2>
+
+<div class="mermaid">
+graph TD
+    Start["startDaemon()"] --> Obs["composeObservability"]
+    Obs --> K["killStaleContainers"]
+    K --> Storage["composeStorage + agent discovery"]
+    Storage --> Msg["composeMessaging"]
+    Msg --> Mcp["composeMcpMail"]
+    Mcp --> Codebase["resolve + validate codebase path"]
+    Codebase --> Proxy["composeModelProxy"]
+    Proxy --> MCP2["Mail MCP Server start"]
+    MCP2 --> Sess["composeSessionManagement"]
+    Sess --> Chan["composeChannels"]
+    Chan --> Mail["composeMail"]
+
+    Sess -->|"spawnIfAbsent"| Boot["boot-spawn persistent agents"]
+    Boot -->|"catch failure, continue"| Ready["daemon ready"]
+
+    style Start fill:#1a3a5c,stroke:#58a6ff
+    style Ready fill:#1a5c3a,stroke:#3fb950
+</div>
+
+<div class="notes">
+<strong>Startup ordering is load-bearing:</strong>
+<ul>
+  <li>Ingress surfaces (channels, mail-MCP) start <em>after</em> their dependencies (model proxy, storage) and stop <em>before</em> them.</li>
+  <li>One persistent agent failing boot-spawn does not block daemon startup — the error is logged and startup continues.</li>
+  <li>Stop order reverses: channels → mail → mail-MCP → model proxy → storage.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2>7. Key Decisions</h2>
+
+<div class="notes">
+<table style="width:100%; border-collapse: collapse; color: var(--text);">
+<thead>
+<tr style="border-bottom: 1px solid var(--border); text-align: left;">
+  <th style="padding: 0.5rem;">Decision</th>
+  <th style="padding: 0.5rem;">Why</th>
+</tr>
+</thead>
+<tbody>
+<tr style="border-bottom: 1px solid var(--border);">
+  <td style="padding: 0.5rem; white-space: nowrap;">Runtime ≠ Provider</td>
+  <td style="padding: 0.5rem;">Container loop (runtime) is separate from model routing (provider). Enables DeepAgents+OpenRouter and Pi+OpenRouter without coupling.</td>
+</tr>
+<tr style="border-bottom: 1px solid var(--border);">
+  <td style="padding: 0.5rem; white-space: nowrap;">Daemon-managed respawn</td>
+  <td style="padding: 0.5rem;">No Docker <code>--restart</code>. The daemon owns stdin, observability, and respawn policy — Docker is an opaque executor.</td>
+</tr>
+<tr style="border-bottom: 1px solid var(--border);">
+  <td style="padding: 0.5rem; white-space: nowrap;">Lazy MCP discovery</td>
+  <td style="padding: 0.5rem;">Docker "Up" means the process started, not "ready for wakes." First-wake latency pays the MCP+model cost; keeps boot liveness independent of dependencies.</td>
+</tr>
+<tr style="border-bottom: 1px solid var(--border);">
+  <td style="padding: 0.5rem; white-space: nowrap;">replyExpected protocol</td>
+  <td style="padding: 0.5rem;">Agents must not spam every wake but must not drop direct requests. Protocol-level distinction between must-reply and optional-silence.</td>
+</tr>
+<tr style="border-bottom: 1px solid var(--border);">
+  <td style="padding: 0.5rem; white-space: nowrap;">Archie-only fallback</td>
+  <td style="padding: 0.5rem;">If a reply-required wake produces no <code>mail_reply</code>, Archie sends final text directly. Loud telemetry so the underlying tool-call failure is not hidden. At N=2 this is correct; promote to a generic runtime contract when a second deepagents agent joins.</td>
+</tr>
+<tr>
+  <td style="padding: 0.5rem; white-space: nowrap;">Skills as npm packages</td>
+  <td style="padding: 0.5rem;">No repo-local skill tree. Skills consumed from <code>@juicesharp/rpiv-pi</code>, <code>@locksmithdon/dons-flow</code> — shared, versioned, multi-model.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+</body>
+</html>
