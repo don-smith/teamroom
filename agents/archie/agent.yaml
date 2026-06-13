@@ -5,3 +5,7 @@ model: deepseek/deepseek-v4-flash
 image_tag: teamroom-agent-archie:latest
 lifecycle: persistent
 subscriptions: []
+# allowed_tools is intentionally omitted for Archie. DeepAgents discovers the
+# available tool surface dynamically from the mail-MCP server, so no static
+# allowlist is required. If a future persona needs tool restriction, add
+# allowed_tools here and teach the shim to filter discovered tools against it.

@@ -44,11 +44,13 @@ function manualTimers(): ManualTimers {
   };
 }
 
+let mailSeq = 0;
 function mailDelivered(to: string, overrides: Partial<MailDeliveredEvent> = {}): MailDeliveredEvent {
+  const n = ++mailSeq;
   return {
     type: "mail.delivered",
     to,
-    messageId: `msg-${to}`,
+    messageId: `msg-${to}-${n}`,
     threadId: `thread-${to}`,
     from: "channel:cli:don",
     replyExpected: true,
@@ -77,9 +79,10 @@ function setup(idleMinutes = 30) {
 describe("SessionTimerManager", () => {
   it("spawns a container on first onMailDelivered and writes the initial wake", () => {
     const { manager, runner } = setup();
-    manager.onMailDelivered(mailDelivered("claude-assistant"));
+    const delivery = mailDelivered("claude-assistant");
+    manager.onMailDelivered(delivery);
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [mailDelivered("claude-assistant")] }]);
+    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [delivery] }]);
   });
 
   it("reuses a live session on subsequent onMailDelivered — only writes a new wake", () => {
@@ -192,9 +195,10 @@ describe("SessionTimerManager", () => {
   it("onMailDelivered reuses a session created by spawnIfAbsent and writes its first wake", () => {
     const { manager, runner } = setup();
     manager.spawnIfAbsent("A");
-    manager.onMailDelivered(mailDelivered("A"));
+    const delivery = mailDelivered("A");
+    manager.onMailDelivered(delivery);
     expect(runner.sessions).toHaveLength(1);
-    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [mailDelivered("A")] }]);
+    expect(runner.sessions[0]!.envelopes).toEqual([{ type: "wake", events: [delivery] }]);
   });
 });
 
@@ -235,11 +239,12 @@ describe("SessionTimerManager — persistent lifecycle", () => {
   });
 
   it("respawns a persistent container after an unexpected exit (no wake envelope)", () => {
-    const { manager, runner } = persistentSetup("persistent-one");
+    const { manager, runner, timerFactory } = persistentSetup("persistent-one");
     manager.spawnIfAbsent("persistent-one");
     const firstToken = manager.tokenFor("persistent-one");
     runner.sessions[0]!.simulateExit({ exitCode: 1 });
-    // Synchronous respawn — no backoff in this milestone; see A5 commit message.
+    expect(runner.sessions).toHaveLength(1); // respawn scheduled but not yet fired
+    timerFactory.advance(5000);
     expect(runner.sessions).toHaveLength(2);
     expect(runner.sessions[1]!.envelopes).toEqual([]); // respawn does NOT write wake
     expect(manager.tokenFor("persistent-one")).not.toBe(firstToken);
@@ -262,15 +267,40 @@ describe("SessionTimerManager — persistent lifecycle", () => {
   });
 
   it("stops respawning after MAX_RESPAWNS_PER_AGENT consecutive failures", () => {
-    const { manager, runner } = persistentSetup("persistent-one");
+    const { manager, runner, timerFactory } = persistentSetup("persistent-one");
     manager.spawnIfAbsent("persistent-one");
     // Drive 11 consecutive exits — after 10 respawns, the 11th exit should not respawn.
     for (let i = 0; i < 11; i++) {
       const last = runner.sessions[runner.sessions.length - 1]!;
       last.simulateExit({ exitCode: 1 });
+      timerFactory.advance(5000);
     }
     // 1 initial spawn + 10 respawns = 11 total sessions; next exit stops.
     expect(runner.sessions).toHaveLength(11);
     expect(manager.hasSession("persistent-one")).toBe(false);
+  });
+
+  it("resets respawn count after a clean exit", () => {
+    const { manager, runner, timerFactory } = persistentSetup("persistent-one");
+    manager.spawnIfAbsent("persistent-one");
+    // Two failures, then a clean exit, then another failure should still respawn
+    // because the counter was reset.
+    runner.sessions[0]!.simulateExit({ exitCode: 1 });
+    timerFactory.advance(5000);
+    runner.sessions[1]!.simulateExit({ exitCode: 1 });
+    timerFactory.advance(5000);
+    runner.sessions[2]!.simulateExit({ exitCode: 0 });
+    manager.spawnIfAbsent("persistent-one");
+    runner.sessions[3]!.simulateExit({ exitCode: 1 });
+    timerFactory.advance(5000);
+    expect(runner.sessions).toHaveLength(5);
+  });
+
+  it("deduplicates wake delivery by messageId", () => {
+    const { manager, runner } = persistentSetup("persistent-one");
+    const delivery = mailDelivered("persistent-one");
+    manager.onMailDelivered(delivery);
+    manager.onMailDelivered(delivery);
+    expect(runner.sessions[0]!.envelopes).toHaveLength(1);
   });
 });

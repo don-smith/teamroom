@@ -16,18 +16,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Layout inside /opt matches vendor/deepagents/ at the commit pinned by the
 # repo's submodule pointer.
 COPY vendor/deepagents/ /opt/deepagents/
+RUN test -f /opt/deepagents/libs/deepagents/pyproject.toml || (echo 'DeepAgents submodule missing; initialize it with: git submodule update --init --recursive' && exit 1)
 
 # Install DeepAgents from the vendored source, plus MCP adapter + Anthropic
 # LangChain integration + LangGraph SQLite checkpointer.
 # (DeepAgents' own deps are resolved from its pyproject.toml; this pulls them
 # transitively.)
+#
+# Checkpointer upgrade note: Archie persists LangGraph checkpoints at
+# /store/langgraph-checkpoint.db. The database schema is owned by the pinned
+# DeepAgents/LangGraph versions. Before upgrading langgraph-checkpoint-sqlite
+# or the vendored DeepAgents submodule, back up /store and verify checkpoint
+# compatibility; there is no automatic migration path.
 RUN pip install --no-cache-dir \
         /opt/deepagents/libs/deepagents \
         langchain-mcp-adapters \
         langchain-anthropic \
         langchain-openai \
         httpx \
-        langgraph-checkpoint-sqlite
+        langgraph-checkpoint-sqlite==3.1.0 \
+        pytest==9.0.3 \
+        pytest-asyncio==1.4.0
 
 # Our shim is the container's entrypoint.
 COPY agents/archie/shim.py /app/shim.py

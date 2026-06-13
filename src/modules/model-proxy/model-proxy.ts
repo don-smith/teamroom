@@ -101,6 +101,14 @@ function buildAnthropicAdapter(creds: AnthropicCreds): AnthropicAdapter {
  * exchange: Anthropic gates the programmatic exchange endpoint with 403
  * for `claude setup-token` issued tokens, but those tokens are themselves
  * long-lived API tokens accepted directly via `x-api-key` on `/v1/messages`.
+ *
+ * Expiry/refresh contract: the returned `expiresAt` is hard-coded to one year
+ * because `claude setup-token` tokens are valid for roughly one year. There is
+ * no programmatic refresh today; when the cache entry expires, the next request
+ * re-runs this passthrough using the same `oauthToken` supplied at daemon start
+ * (from `CLAUDE_CODE_OAUTH_TOKEN`, keychain, or `ANTHROPIC_API_KEY`). If calls
+ * start failing with 401, refresh the token manually via `claude setup-token`
+ * and restart the daemon with the new credential.
  */
 function directOAuthPassthrough(oauthToken: string): Promise<{ tempKey: string; expiresAt: number }> {
   return Promise.resolve({

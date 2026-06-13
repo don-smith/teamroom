@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { AnthropicLlmClient, type LlmClient } from "./anthropic-llm-client.js";
 import type { MailDeliveredEvent } from "../types.js";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
+import { sanitizeMailFrom } from "./sanitize-from.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
 /**
@@ -25,10 +26,11 @@ function wakePrompt(wake: WakeEnvelope): string {
   if (!mail) {
     return "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
   }
+  const from = sanitizeMailFrom(mail.from);
   if (mail.replyExpected) {
-    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
   }
-  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
 }
 
 export interface AnthropicAgentWorkerOpts {

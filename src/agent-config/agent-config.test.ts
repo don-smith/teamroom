@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadAgentConfig } from "./agent-config.js";
@@ -359,4 +359,32 @@ describe("loadAgentConfig — runtime field", () => {
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
   });
+
+  it("rejects runtime: pi with provider: openrouter", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: z\nruntime: pi\nprovider: openrouter\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
+  });
+});
+
+describe("loadAgentConfig — every checked-in agent.yaml loads", () => {
+  const agentsDir = join(process.cwd(), "agents");
+  if (!existsSync(agentsDir)) {
+    it.skip("no agents/ directory", () => {});
+  } else {
+    const entries = readdirSync(agentsDir)
+      .map((name) => join(agentsDir, name))
+      .filter((full) => statSync(full).isDirectory());
+    for (const full of entries) {
+      const name = full.split("/").pop() ?? full;
+      it(`loads agents/${name}/agent.yaml without runtime/provider mismatch`, () => {
+        const cfg = loadAgentConfig(full);
+        expect(cfg.name).toBe(name);
+        expect(cfg.runtime).toBeDefined();
+        expect(cfg.provider).toBeDefined();
+      });
+    }
+  }
 });

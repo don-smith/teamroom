@@ -32,6 +32,7 @@ function runtimeFromEnv(): { runtime: string; source: "TEAMROOM_RUNTIME" | "TEAM
     case "lm-studio":
     case "ollama":
     case "openai":
+    case "openrouter":
       return { runtime: "langgraph", source: "TEAMROOM_PROVIDER" };
     default:
       throw new Error(`unknown TEAMROOM_PROVIDER: '${provider}'`);
@@ -53,6 +54,10 @@ export async function buildWorker(): Promise<AgentWorker> {
       const { PiAgentWorker } = await import("./pi-worker.js");
       return PiAgentWorker.create();
     }
+    case "deepagents":
+      throw new Error(
+        `runtime '${runtime}' is implemented by agents/archie/shim.py; the TypeScript worker factory does not build it`,
+      );
     default:
       throw new Error(`unknown ${source}: '${runtime}'`);
   }

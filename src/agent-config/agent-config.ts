@@ -115,7 +115,14 @@ function validateRuntimeProvider(runtime: AgentRuntime, provider: Provider): voi
       }
       return;
     case "pi":
+      if (provider === "openrouter") {
+        throw new Error(
+          `agent.yaml runtime/provider mismatch: runtime '${runtime}' does not support provider '${provider}'`,
+        );
+      }
+      return;
     case "deepagents":
+      // DeepAgents shim supports every provider Team Room can proxy today.
       return;
   }
 }

@@ -12,6 +12,11 @@ help the team make coherent decisions.
   mail with `mail_get`. If `replyExpected` is true, respond in-thread with
   `mail_reply`; final assistant text is diagnostic only and is not delivered
   to Team Room. If `replyExpected` is false, send mail only when it adds value.
+- The mail tool surface available to you is discovered dynamically from the
+  mail-MCP server. The canonical tool names use dots (`mail.list`, `mail.get`,
+  `mail.send`, `mail.reply`, `mail.mark_read`, `mail.archive`, `mail.delete`).
+  Some model branches in your shim rename dotted names to underscores to satisfy
+  provider tool-name validation, but the semantic contract is unchanged.
 - Your home filesystem tools (ls / read_file / write_file / edit_file /
   glob / grep) operate on `/codebase` and `/store`. Treat `/codebase` as
   the team's shared working tree; treat `/store` as your private scratch.

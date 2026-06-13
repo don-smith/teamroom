@@ -49,6 +49,11 @@ export interface SessionTimerManagerDeps {
    * if omitted — existing callers keep working.
    */
   lifecycleFor?: (agentId: string) => "session" | "persistent";
+  /**
+   * Cooldown between persistent respawns to avoid tight crash loops.
+   * Defaults to 5 seconds.
+   */
+  respawnBackoffMs?: number;
 }
 
 interface Session {
@@ -56,7 +61,10 @@ interface Session {
   rc: RunningContainer;
   timer: TimerHandle | null;
   token: string;
+  closing: boolean;
 }
+
+const MAX_RECENT_DELIVERIES = 100;
 
 /**
  * Owns per-agent container lifetime in M4.
@@ -77,6 +85,7 @@ interface Session {
 export class SessionTimerManager {
   private readonly sessions = new Map<string, Session>();
   private readonly tokens = new Map<string, string>(); // token → agentId
+  private readonly recentDeliveries = new Map<string, string[]>();
   private isShuttingDown = false;
   private respawnCounts = new Map<string, number>();
   private static readonly MAX_RESPAWNS_PER_AGENT = 10;
@@ -85,10 +94,18 @@ export class SessionTimerManager {
 
   onMailDelivered(delivery: MailDeliveredEvent): void {
     const agentId = delivery.to;
+    if (this.isRecentlyDelivered(agentId, delivery.messageId)) {
+      this.deps.logger?.info("session-manager.delivery.deduped", {
+        agentId,
+        messageId: delivery.messageId,
+      });
+      return;
+    }
     let s = this.sessions.get(agentId);
     if (!s) s = this.spawn(agentId);
     try {
       s.rc.writeEnvelope({ type: "wake", events: [delivery] });
+      this.recordDelivery(agentId, delivery.messageId);
     } catch (err) {
       // A lingering Session pointing at a torn-down container — drop it
       // and respawn. Possible if the runner exited between the bus event
@@ -100,6 +117,7 @@ export class SessionTimerManager {
       this.removeSession(agentId, s);
       const fresh = this.spawn(agentId);
       fresh.rc.writeEnvelope({ type: "wake", events: [delivery] });
+      this.recordDelivery(agentId, delivery.messageId);
       return;
     }
     this.armTimer(s);
@@ -145,6 +163,9 @@ export class SessionTimerManager {
   async killAll(): Promise<void> {
     this.isShuttingDown = true;
     const all = [...this.sessions.values()];
+    for (const s of all) {
+      s.closing = true;
+    }
     await Promise.all(
       all.map(async (s) => {
         try {
@@ -159,13 +180,15 @@ export class SessionTimerManager {
     );
     this.sessions.clear();
     this.tokens.clear();
+    this.recentDeliveries.clear();
+    this.respawnCounts.clear();
   }
 
   private spawn(agentId: string): Session {
     const token = this.deps.genToken();
     const spec = this.deps.spec(agentId, token);
     const rc = this.deps.runner.start(spec);
-    const session: Session = { agentId, rc, timer: null, token };
+    const session: Session = { agentId, rc, timer: null, token, closing: false };
     this.sessions.set(agentId, session);
     this.tokens.set(token, agentId);
     rc.onEvent((event) => {
@@ -173,13 +196,17 @@ export class SessionTimerManager {
       const { type: _type, level: _level, msg, ...payload } = event;
       this.deps.eventBus?.publish(msg, { agentId, ...payload });
     });
-    rc.onExit(() => {
+    rc.onExit((result) => {
       this.removeSession(agentId, session);
-      if (this.isShuttingDown) return;
+      if (this.isShuttingDown || session.closing) return;
       const lifecycle = this.deps.lifecycleFor?.(agentId) ?? "session";
       if (lifecycle === "persistent") {
+        if (result.exitCode === 0) {
+          this.respawnCounts.delete(agentId);
+          this.deps.logger?.info("session.persistent_clean_exit", { agentId });
+          return;
+        }
         const count = (this.respawnCounts.get(agentId) ?? 0) + 1;
-        this.respawnCounts.set(agentId, count);
         if (count > SessionTimerManager.MAX_RESPAWNS_PER_AGENT) {
           this.deps.logger?.warn("session.persistent_respawn_cap_reached", {
             agentId,
@@ -188,8 +215,14 @@ export class SessionTimerManager {
           });
           return;
         }
-        this.deps.logger?.info("session.persistent_respawn", { agentId, count });
-        this.spawn(agentId);
+        this.respawnCounts.set(agentId, count);
+        const delay = this.deps.respawnBackoffMs ?? 5000;
+        this.deps.logger?.info("session.persistent_respawn", { agentId, count, delayMs: delay });
+        this.deps.timerFactory.schedule(delay, () => {
+          if (!this.isShuttingDown && !this.sessions.has(agentId)) {
+            this.spawn(agentId);
+          }
+        });
       }
     });
     this.deps.logger?.info("session.spawned", { agentId });
@@ -208,6 +241,22 @@ export class SessionTimerManager {
     session.timer = null;
   }
 
+  private isRecentlyDelivered(agentId: string, messageId: string): boolean {
+    return this.recentDeliveries.get(agentId)?.includes(messageId) ?? false;
+  }
+
+  private recordDelivery(agentId: string, messageId: string): void {
+    let ids = this.recentDeliveries.get(agentId);
+    if (!ids) {
+      ids = [];
+      this.recentDeliveries.set(agentId, ids);
+    }
+    ids.push(messageId);
+    while (ids.length > MAX_RECENT_DELIVERIES) {
+      ids.shift();
+    }
+  }
+
   private armTimer(s: Session): void {
     s.timer?.cancel();
     const lifecycle = this.deps.lifecycleFor?.(s.agentId) ?? "session";
@@ -217,6 +266,7 @@ export class SessionTimerManager {
     }
     s.timer = this.deps.timerFactory.schedule(this.deps.idleMinutes * 60 * 1000, () => {
       this.deps.logger?.info("session.idle_exit", { agentId: s.agentId });
+      s.closing = true;
       s.rc.closeStdin();
     });
   }

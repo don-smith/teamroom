@@ -3,6 +3,8 @@ import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, unlinkSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startDaemon } from "./daemon.js";
+import { FakeRunner } from "../container/fake-runner.js";
+import type { DockerRunSpec } from "../container/docker-command.js";
 
 describe("daemon shutdown", () => {
   let root: string;
@@ -127,5 +129,58 @@ describe("daemon shutdown", () => {
     expect(port).toBeGreaterThan(0);
     await daemon.stop();
     expect(existsSync(portFile)).toBe(false);
+  });
+
+  it("removes daemon bus logging subscribers on stop", async () => {
+    const daemon = await startDaemon({
+      dataDir, agentsDir,
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
+      anthropic: null,
+    });
+    const before = daemon.eventBus.subscriberCount("mail.delivered");
+    expect(before).toBeGreaterThan(0);
+    await daemon.stop();
+    const after = daemon.eventBus.subscriberCount("mail.delivered");
+    // composeSessionManagement's subscription is not removed by stop(), but the
+    // daemon's own logging subscriber is.
+    expect(after).toBe(before - 1);
+  });
+
+  it("starts even when a persistent agent's boot-spawn fails", async () => {
+    const agentDir = join(agentsDir, "archie");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# Archie");
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: archie\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-archie:latest\nprovider: openrouter\nruntime: deepagents\nlifecycle: persistent\n",
+    );
+    mkdirSync(join(root, "codebase"), { recursive: true });
+
+    const runner = new FakeRunner();
+    runner.start = (_spec: DockerRunSpec) => {
+      throw new Error("simulated boot-spawn failure");
+    };
+
+    const daemon = await startDaemon({
+      dataDir, agentsDir,
+      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
+      ollama: { upstreamUrl: "http://example.invalid" },
+      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
+      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
+      anthropic: null,
+      runner,
+    });
+
+    try {
+      // Boot-spawn failure should not prevent daemon start; the agent simply
+      // has no live session yet.
+      expect(daemon.sessionManager.hasSession("archie")).toBe(false);
+    } finally {
+      await daemon.stop();
+    }
   });
 });

@@ -51,4 +51,9 @@ export class EventBus {
       }
     }
   }
+
+  /** Test-only: number of active subscribers for an event type. */
+  subscriberCount(type: EventType): number {
+    return this.handlers.get(type)?.size ?? 0;
+  }
 }

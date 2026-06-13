@@ -13,6 +13,7 @@ import type { AgentWorker, WakeEnvelope } from "./worker.js";
 import type { MailDeliveredEvent, Provider } from "../types.js";
 import { buildPiMailTools } from "./pi-mail-tools.js";
 import { buildPiModelConfig } from "./pi-model.js";
+import { sanitizeMailFrom } from "./sanitize-from.js";
 
 function isMailDeliveredEvent(event: string | MailDeliveredEvent): event is MailDeliveredEvent {
   return typeof event === "object" && event.type === "mail.delivered";
@@ -23,10 +24,11 @@ function wakePrompt(wake: WakeEnvelope): string {
   if (!mail) {
     return "You received a Team Room wake notification. First check unread mail with mail_list({ unreadOnly: true }), then read relevant messages with mail_get. Reply in-thread with mail_reply when responding to a request, or use mail_send for a new thread. If a coding task is requested, inspect and edit the mounted codebase as needed. If nothing is actionable, end your turn without sending mail.";
   }
+  const from = sanitizeMailFrom(mail.from);
   if (mail.replyExpected) {
-    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail_get, do any needed work, then reply in-thread with mail_reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail_get, do any needed work, then reply in-thread with mail_reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
   }
-  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail_get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail_get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
 }
 
 const TEAMROOM_APPEND_PROMPT = `You run inside Team Room as a general coding teammate.

@@ -7,6 +7,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MultiServerMCPClient, type Connection } from "@langchain/mcp-adapters";
 import type { MailDeliveredEvent } from "../types.js";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
+import { sanitizeMailFrom } from "./sanitize-from.js";
 
 /**
  * LangGraph-backed agent worker for OpenAI-compatible providers (lm-studio,
@@ -28,10 +29,11 @@ function wakePrompt(wake: WakeEnvelope): string {
   if (!mail) {
     return "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
   }
+  const from = sanitizeMailFrom(mail.from);
   if (mail.replyExpected) {
-    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
   }
-  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${mail.from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
 }
 
 const MAX_MESSAGES = 40;
@@ -45,8 +47,11 @@ const MAX_MESSAGES = 40;
  * default and leaves room for a few fumbles without capping a real flow.
  * Observed during M5 acceptance: 10 was too tight — a simple "summarise
  * README" flow hit the cap and the graph returned a WAKE_PROMPT echo.
+ *
+ * Operators can override via `TEAMROOM_LANGGRAPH_RECURSION_LIMIT` for local
+ * models that need more or less headroom.
  */
-const RECURSION_LIMIT = 50;
+const RECURSION_LIMIT = Number(process.env.TEAMROOM_LANGGRAPH_RECURSION_LIMIT) || 50;
 const MAX_RETRIES = 2;
 
 export interface LangGraphAgentWorkerOpts {

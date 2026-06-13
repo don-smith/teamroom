@@ -55,7 +55,8 @@ mail, read requested codebase files before making architectural claims, and
 reply in-thread. Cite file paths when relevant. Prefer the smallest useful
 inspection over broad codebase exploration."""
 
-PER_WAKE_RECURSION_LIMIT = 16
+PER_WAKE_RECURSION_LIMIT = int(os.environ.get("TEAMROOM_ARCHIE_RECURSION_LIMIT", "16"))
+MAX_BUILD_RETRIES = 3
 
 
 # The default DeepAgents harness prompt and subagent/todo tools are too large
@@ -69,6 +70,18 @@ _register_harness_profile(
         excluded_tools=frozenset({"task", "write_todos", "compact_conversation"}),
     ),
 )
+
+
+def sanitize_sender(value: str) -> str:
+    """Escape/strip a mail.from value before interpolating it into prompts."""
+    return (
+        value.replace("\r", " ")
+        .replace("\n", " ")
+        .replace("\t", " ")
+        .replace("\\", "\\\\")
+        .replace("`", "\\`")
+        .strip()[:200]
+    )
 
 
 def build_wake_prompt(envelope: dict) -> str:
@@ -85,7 +98,7 @@ def build_wake_prompt(envelope: dict) -> str:
     event = mail_events[-1]
     message_id = event.get("messageId", "unknown")
     thread_id = event.get("threadId", "unknown")
-    sender = event.get("from", "unknown")
+    sender = sanitize_sender(str(event.get("from", "unknown")))
     reply_expected = bool(event.get("replyExpected"))
 
     if reply_expected:
@@ -313,8 +326,15 @@ async def handle_wake(
         print(
             "[archie] first wake: connecting to MCP and building agent", file=sys.stderr
         )
-        state["agent"] = await build_agent(checkpointer)
-        print("[archie] first wake: agent ready", file=sys.stderr)
+        try:
+            state["agent"] = await build_agent(checkpointer)
+            state["build_failures"] = 0
+            print("[archie] first wake: agent ready", file=sys.stderr)
+        except Exception as err:
+            state["build_failures"] = state.get("build_failures", 0) + 1
+            raise RuntimeError(
+                f"first-wake agent build failed (attempt {state['build_failures']}/{MAX_BUILD_RETRIES}): {err}"
+            ) from err
 
     agent = state["agent"]
 
@@ -411,6 +431,18 @@ async def main() -> None:
                 await handle_wake(state, checkpointer, envelope)
             except Exception as e:
                 print(f"[archie] handle_wake failed: {e!r}", file=sys.stderr)
+                emit_log(
+                    "warn",
+                    "agent.wake_failed",
+                    error=str(e),
+                    buildFailures=state.get("build_failures", 0),
+                )
+                if state.get("build_failures", 0) >= MAX_BUILD_RETRIES:
+                    print(
+                        f"[archie] build failed {state['build_failures']} times; exiting so daemon respawn can engage",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
 
 
 if __name__ == "__main__":

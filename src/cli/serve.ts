@@ -29,7 +29,7 @@ export async function serve(): Promise<void> {
       // (host.docker.internal only resolves *inside* containers — that hostname
       // is what the container uses to reach the proxy, not the other way round.)
       upstreamUrl: process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234",
-      realKey: lmStudioToken,
+      realKey: lmStudioToken ?? "",
     },
     ollama: {
       // Same host-side reasoning as LM Studio above — proxy runs on host, so
@@ -60,9 +60,10 @@ export async function serve(): Promise<void> {
 export function resolveServeProviderTokens(
   providers: readonly Provider[],
   env: Record<string, string | undefined>,
-): { lmStudioToken: string; openaiToken: string | null; openrouterToken: string | null } {
-  const lmStudioToken = env.LM_STUDIO_API_TOKEN;
-  if (!lmStudioToken) {
+): { lmStudioToken: string | null; openaiToken: string | null; openrouterToken: string | null } {
+  const needsLmStudio = providers.includes("lm-studio");
+  const lmStudioToken = env.LM_STUDIO_API_TOKEN ?? null;
+  if (needsLmStudio && !lmStudioToken) {
     throw new Error("LM_STUDIO_API_TOKEN missing from .env");
   }
 
