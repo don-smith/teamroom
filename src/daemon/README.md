@@ -1,10 +1,10 @@
 # `daemon/` — the composition root
 
-The long-running process that owns the DB connection, wires all compose-pattern modules, and manages the lifecycle of four externally-visible ports. Procedural — **no LLM in the hot path**. All intelligence lives in agent containers or the session-management module; the daemon is the boring conveyor belt that keeps them moving.
+The long-running process that owns the DB connection, wires all compose-pattern modules, manages persistent container lifecycle (boot-spawn, respawn, idle timers), and manages the lifecycle of four externally-visible ports. Procedural — **no LLM in the hot path**. All intelligence lives in agent containers or the session-management module; the daemon is the boring conveyor belt that keeps them moving.
 
 **Runs on the host as the main long-running process.** Every other module that isn't `agent-runtime/` is either called from here or supports it. Invariants: *nothing silent, nothing inconsistent, nothing crashes*. Once the daemon has started it does not die from an unhandled exception — see `safety-nets.ts`.
 
-`startDaemon` composes eight modules in order (`observability` → `storage` → `messaging` → `mcp-mail` → `model-proxy` → `session-management` → `channels` → `mail`) and opens four ports: **mail-MCP** (HTTP/MCP), **model-proxy** (HTTP, internal only), **chat** (WebSocket), **mail** (WebSocket). Port numbers are written to `data/ports/` files so CLI commands can discover them without configuration.
+`startDaemon` composes eight modules in order (`observability` → `storage` → `messaging` → `mcp-mail` → `model-proxy` → `session-management` → `channels` → `mail`) and opens four ports: **mail-MCP** (HTTP/MCP), **model-proxy** (HTTP, internal only), **chat** (WebSocket), **mail** (WebSocket). Boot-time behaviour: discovers agent configs, validates codebase mounts for `deepagents` runtimes, and boot-spawns persistent-lifecycle agents via `spawnIfAbsent` (failure in one agent does not block the others). Port numbers are written to `data/ports/` files so CLI commands can discover them without configuration.
 
 ## Files
 

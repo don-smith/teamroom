@@ -31,6 +31,6 @@
 - [Team Room — default to the reference SDK when implementing a third-party protocol](feedback_teamroom_protocol_sdk_default.md) — MCP, OAuth, etc. — protocols drift; SDKs absorb the drift; hand-roll only with a documented blocker-grade reason
 
 ## Project
-- [Team Room — LangGraph is the intended per-agent runtime](project_teamroom_langgraph_direction.md) — agents will run LangGraph workflows eventually; M1 keeps the runtime simple but the container contract is language-agnostic to accommodate it
+- [Team Room — DeepAgents and Pi are the primary agent runtimes](project_teamroom_langgraph_direction.md) — DeepAgents (Python, filesystem+tools, persistent) and Pi (TypeScript, coding SDK) are the two primary runtimes; LangGraph worker retained for backward compat only
 - [Team Room — NanoClaw is the design reference for container + credential patterns](project_teamroom_nanoclaw_reference.md) — qwibitai/nanoclaw on GitHub; M2's OAuth pivot was modeled directly on it
-- [Team Room — prefer OpenAI/Codex and LM Studio for non-Claude agents](project_teamroom_model_provider_preference.md) — current provider preference is OpenAI/Codex or local LM Studio for non-Claude agents; Anthropic remains primarily for Claude-specific flows
+- [Team Room — prefer OpenRouter as the provider backbone](project_teamroom_model_provider_preference.md) — OpenRouter consolidation is the direction; historical preference for OpenAI/Codex + LM Studio remains until acted on

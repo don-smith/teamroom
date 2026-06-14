@@ -4,7 +4,9 @@ description: The user's current model budget/preference has shifted away from An
 type: project
 ---
 
-Team Room's model-provider default has shifted: for non-Claude agents, prefer OpenAI/Codex or local LM Studio where practical. The user currently has substantially more OpenAI/Codex capacity than Anthropic capacity, and also wants to exercise local LM Studio models for suitable agents.
+Team Room's model-provider preference has shifted toward **OpenRouter as the provider backbone** for most agents, using various models through it (e.g. `deepseek/deepseek-v4-flash` for Archie). Reason: during M6, live Archie acceptance with OpenRouter/DeepSeek proved reliable, and the user wants to consolidate providers rather than spread across OpenAI, LM Studio, Ollama, and OpenRouter separately. Consolidation is tabled for pre-M7 cleanup (see `docs/tabled.md`).
+
+Historical preference (still valid until consolidation is acted on): for non-Claude agents, prefer OpenAI/Codex or local LM Studio where practical. Anthropic remains important for Claude-specific agents and OAuth flows.
 
 Anthropic remains important for Claude-specific agents and Claude Code/OAuth flows, but it is no longer the preferred default for every architect/researcher-style Team Room agent. When adding or tuning agents, treat provider choice as an explicit operational decision: local LM Studio for cheap/fast experimentation, OpenAI/Codex for higher-capacity hosted work, Anthropic where the Claude runtime/Claude-specific behavior is the point.
 
