@@ -1,0 +1,7 @@
+name: libby
+runtime: deepagents
+provider: openrouter
+model: deepseek/deepseek-v4-flash
+image_tag: teamroom-agent-libby:latest
+lifecycle: persistent
+subscriptions: []

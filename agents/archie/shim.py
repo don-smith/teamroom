@@ -11,11 +11,9 @@ Environment (injected by Team Room's build-spec.ts):
   TEAMROOM_AGENT_NAME     — "archie"
   TEAMROOM_MCP_URL        — http://host.docker.internal:<port>/mcp
   TEAMROOM_MCP_TOKEN      — bearer for mail-MCP
-  TEAMROOM_PROVIDER       — model provider (lm-studio, openai, openrouter, ollama, anthropic)
-  TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compatible for local/openai providers)
-  TEAMROOM_MODEL_API_TOKEN — proxy-minted token for OpenAI-compatible providers
-  ANTHROPIC_BASE_URL      — daemon proxy URL (Anthropic-shape)
-  ANTHROPIC_AUTH_TOKEN    — proxy-minted token for Anthropic
+  TEAMROOM_PROVIDER       — model provider (always "openrouter")
+  TEAMROOM_MODEL_BASE_URL — daemon proxy URL (OpenAI-compatible)
+  TEAMROOM_MODEL_API_TOKEN — proxy-minted token
   TEAMROOM_MODEL          — e.g. "deepseek/deepseek-v4-flash"
 
 API notes (verified against vendor/deepagents/libs/deepagents/deepagents/graph.py):
@@ -223,8 +221,8 @@ def make_model():
     provider = os.environ["TEAMROOM_PROVIDER"]
     model_id = os.environ["TEAMROOM_MODEL"]
 
-    if provider in {"lm-studio", "openai", "openrouter", "ollama"}:
-        # LangChain's ChatOpenAI treats base_url as the OpenAI API root and
+    if provider == "openrouter":
+        # ChatOpenAI treats base_url as the OpenAI API root and
         # appends /chat/completions, so include /v1 here to reach Team Room's
         # OpenAI-compatible proxy route: /v1/chat/completions.
         base_url = os.environ["TEAMROOM_MODEL_BASE_URL"].rstrip("/") + "/v1"
@@ -234,16 +232,6 @@ def make_model():
             api_key=os.environ["TEAMROOM_MODEL_API_TOKEN"],
             max_tokens=512,
             temperature=0,
-        )
-
-    if provider == "anthropic":
-        # Route through the daemon's Anthropic-shape proxy. This must use
-        # ChatAnthropic, not ChatOpenAI: Team Room's Anthropic adapter forwards
-        # Anthropic `/v1/messages` requests, not OpenAI `/chat/completions`.
-        return ChatAnthropic(
-            model_name=model_id,
-            base_url=os.environ["ANTHROPIC_BASE_URL"],
-            api_key=os.environ["ANTHROPIC_AUTH_TOKEN"],
         )
 
     raise RuntimeError(f"unsupported TEAMROOM_PROVIDER for Archie: {provider}")

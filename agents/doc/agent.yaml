@@ -1,0 +1,11 @@
+name: doc
+runtime: pi
+provider: openrouter
+model: deepseek/deepseek-v4-flash
+image_tag: teamroom-agent-doc:latest
+subscriptions: []
+allowed_tools:
+  - read
+  - write
+  - edit
+  - bash

@@ -1,0 +1,11 @@
+name: micah
+runtime: pi
+provider: openrouter
+model: deepseek/deepseek-v4-flash
+image_tag: teamroom-agent-micah:latest
+subscriptions: []
+allowed_tools:
+  - read
+  - write
+  - edit
+  - bash
