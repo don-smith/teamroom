@@ -14,24 +14,4 @@ Mechanics in the `epiphany-tabling` skill (imported workflow skill package).
 
 ## Open entries
 
-- **M6 landing paused at Step 1: RESOLVED.** Land Step 1 complete (production audit + 3 commits: G2 blockers, docs sweep, as-built). Proceeding through Steps 2-10.
-
-- ~~**Consolidate agent runtimes to DeepAgents + Pi, provider backbone to OpenRouter.**~~ **RESOLVED — shipped in persona realignment (2026-06-18).** Plan in `.myflow/artifacts/plans/2026-06-18_22-37-10_teamroom-persona-realignment.md`.
-
-- **Per-agent volume mount permissions (two-part).** Land Step 3 security audit: `/codebase`, `/AGENTS.md`, and `/store` are all mounted `readOnly: false` regardless of persona. Next destination: spec for mount-perms config field + agent-onboarding runbook update; likely pre-M7 cleanup or M7 persona-maturity pass.
-
-- **Team onboarding and self-healing team care.** New-project onboarding should likely start with a human-created project/folder and an explicit Team Room initialization/onboarding step. Out of M6 scope; likely belongs in roadmap/backlog after Archie is accepted.
-
-- **Per-agent fallback models/providers.** Future agent configs should support a primary model plus ordered fallbacks. Out of M6 scope unless needed for acceptance.
-
-- ~~**Per-agent memory and librarian role are high priorities.**~~ **PARTIALLY RESOLVED — Libby (librarian) shipped in persona realignment.** Memory substrate still deferred (M7).
-
-- ~~**Sweep stale provider/runtime enumerations in docs during Task F1.**~~ **RESOLVED — completed in persona realignment Phase 5 (documentation sweep).**
-
-- **Telegram (+ Discord / Slack) as Team Room channels.** The biggest near-term unlock after Archie is a non-CLI external channel. Out of M6 scope.
-
-- **Distinguish trigger cause on `session.spawned` log.** Code review of Task A3 flagged: when boot-spawns, respawns, and mail-driven spawns all share the same `session.spawned` log line.
-
-- **Archie integration follow-ups (from C1+C2+C3 combined review).** Three Important-level items not blocking C4 but wanted before M6 close.
-
-- **Persistent-lifecycle polish follow-ups (from A5+A6+A7 combined review).** Three Important-level items.
+_None. All items processed during persona realignment close-out — substantive items moved to `docs/roadmap.md#backlog`, obsolesced items dropped._

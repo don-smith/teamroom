@@ -40,7 +40,7 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 
 ### Channel architecture evolution
 
-- **Second channel (Telegram, Slack, voice, etc.).** M4 ships one channel adapter (CLI). When a concrete need for a non-CLI channel arrives: introduce a plugin registry, extract the CLI adapter to a plugin, implement the new channel.
+- **Second channel (Telegram, Slack, voice, etc.).** M4 ships one channel adapter (CLI). When a concrete need for a non-CLI channel arrives: introduce a plugin registry, extract the CLI adapter to a plugin, implement the new channel. Telegram is the leading candidate — the biggest near-term unlock after Archie is a non-CLI external channel.
 - **`channel.cli.out` event generalization.** The dispatcher hard-codes `channel.cli.out` for CLI delivery; a second channel requires either a generic `channel.out` event (preferred) or per-channel event names. See M4.5 Backlog §3 for the fix shape. Trigger: second channel implementation.
 - **`ChannelRegistry` → dispatcher strict-deliver wiring.** The dispatcher accepts channel-kind addresses unconditionally; the registry is consulted only by `ChatServer`. Adding `knownChannels` to `MailDispatcherOpts` closes the gap. Trigger: when the second channel lands, or as a standalone hardening pass.
 - **Unified mail across external channels.** Each external channel (Telegram, etc.) delivers messages as mail to agents and receives agent replies as outbound channel messages. Deferred pending first external channel integration; same design pass as the second-channel work.
@@ -57,6 +57,7 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 - **`ccAll` default on reply.** When a thread has multiple participants, `mail.reply` should default `ccAll: true` so secondary participants aren't silently dropped. Trigger: same milestone as cap-warning.
 - **CLI `cc` support.** The `teamroom chat` REPL has no way to set `cc` on a publish, even though the WebSocket protocol accepts `cc: string[]`. A slash-command or header-style syntax needed. Trigger: human-driven multi-party threads.
 - **System prompts for mail-aware agents.** All agents need system prompts that explicitly teach inbox-check → reply → peer-mail patterns. Content evolves with use; expect prompt iteration over several milestones.
+- **Team onboarding and self-healing.** New-project onboarding should start with a human-created project/folder and an explicit Team Room initialization/onboarding step. Agents should eventually self-heal — notice problems, diagnose, and recover without human intervention. Trigger: next new project that needs Team Room set up.
 
 
 ### Agent personas and runtimes
@@ -76,6 +77,12 @@ Named personas we've identified so far. Each is a slot to fill, not a build task
 
 Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie. Persona realignment narrowed to two runtimes (Pi, DeepAgents). Subsequent runtime additions are individual mini-milestones, evaluated against the two-runtime production shape.
 
+#### Per-agent improvements (from M6 close-out)
+
+- **Archie integration follow-ups.** Three Important-level items from C1+C2+C3 combined review, not blocking C4 but wanted before M6 close.
+- **Persistent-lifecycle polish.** Three Important-level items from A5+A6+A7 combined review around persistent agent lifecycle behavior.
+- **Distinguish trigger cause on `session.spawned` log.** Boot-spawns, respawns, and mail-driven spawns all share the same log line — differentiate them for debugging.
+
 ### Mail substrate evolution
 
 - **In-reply-to / deep threading.** M4 uses `thread_id` only (shallow threading). No reply chains with forks or branches. The `in_reply_to` and `references` fields from the M3 email-metaphor design are the obvious extension. Trigger: agents actually need richer thread semantics.
@@ -91,6 +98,7 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 - **Model-proxy log readability.** Full request/response bodies in JSONL make the daemon log hard to scan. Options: truncate long fields, verbose-mode flag, `teamroom logs` pretty-printer subcommand, or split high-volume spans to a separate file. Trigger: anyone debugging LLM interactions and finding raw logs unreadable.
 - **`teamroom status` enrichment.** Currently shows PID + port files. Could add active session count, per-agent state, last-mail-delivered timestamp, connected channel clients, MCP server health. Trigger: operators wanting a quick health check beyond log grepping.
 - **Agent-container observability.** When a container runs but produces no visible progress, there's no way to tell why — tool calls are captured at the daemon side but container runtime output (wake received, LLM start/done, errors) is on stderr, returned only at exit. Options: `{type:"log"}` stdout envelopes from the runtime forwarded by the session manager; or an MCP logging tool so agents log structured events from inside the turn. Trigger: next time a container is stuck and the cause is unclear.
+- **Per-agent volume mount permissions.** All mounts (`/codebase`, `/AGENTS.md`, `/store`) are `readOnly: false` regardless of persona. A config field for mount permissions per agent would let restrictive personas (e.g. librarian) mount `/codebase` read-only. Spec needed before implementing. Trigger: pre-M7 cleanup or M7 persona-maturity pass.
 - **Per-wake `AbortSignal` wall-clock cap.** `RECURSION_LIMIT: 50` bounds step count; wall clock can still run away on a slow upstream. Deferred until a runaway is observed in production.
 
 ### Future infrastructure
@@ -98,7 +106,7 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 - **Additional MCP servers (memory, scheduling).** M4 shipped mail MCP; M5 added filesystem MCP (in-container stdio child). Subsequent milestones (M7 memory, M8 scheduling) add their own MCP servers using the same patterns — either daemon-hosted HTTP (shared state) or per-container stdio (agent-local). Trigger: each respective milestone.
 - **Generic `openai-compat` provider.** After M5, `lm-studio` + `ollama` share `OpenAICompatAdapter`. A generic `openai-compat` provider absorbs any third concrete backend (Codex, hosted OpenAI, vLLM, self-hosted proxy). Trigger: third concrete backend forces the shape; `see_only_as_far_as_needed` bars premature extraction.
 - **Mail-MCP / daemon coupling architectural review.** The mail-MCP HTTP server lives in-process with the daemon (same trust boundary). Running it as a separately-addressable surface (for multi-host deployment, or hosting mail without sessions) is unexplored. Trigger: a deployment scenario needing that separation, or a security review of the in-process trust boundary.
-- **Multi-model per-agent and per-request model selection.** Agents will eventually have access to multiple models and choose per-request, with per-agent skill arrays mapping work types to models. `agent.yaml` carries a future-list-shape comment. Trigger: a concrete agent with a real per-call model-selection need.
+- **Multi-model per-agent and per-request model selection.** Agents will eventually have access to multiple models and choose per-request, with per-agent skill arrays mapping work types to models. `agent.yaml` carries a future-list-shape comment. This includes ordered fallback models/providers so an agent can degrade gracefully when its primary model is unavailable. Trigger: a concrete agent with a real per-call model-selection need.
 - **Streaming model responses.** Proxy buffers the full response before replying (required for `extractUsage`). Streaming requires SSE pipe, usage parsing from `message_stop`, `deadlineMs` in addition to idle timeout, and possible container↔proxy transport re-evaluation. Trigger: an agent surface needing realtime streaming (long completions, voice, etc.).
 
 ### Code quality
