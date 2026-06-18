@@ -1,0 +1,1668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team Room — architecture &amp; design reference</title>
+<style>
+  /* ---------- Reset ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  img, svg { max-width: 100%; height: auto; }
+
+  /* ---------- Tokens ---------- */
+  :root {
+    --bg:        #faf8f3;
+    --surface:   #ffffff;
+    --border:    #e6e2d6;
+    --rule:      #d6d1c2;
+    --ink:       #1a1a1a;
+    --muted:     #6e6a5c;
+    --faint:     #97927f;
+    --code-bg:   #f1ede1;
+
+    --host:      #1d4e89;
+    --host-soft: #e3ecf5;
+    --container: #c0532f;
+    --container-soft: #f6e3d7;
+    --external:  #6b4d8a;
+    --external-soft: #ece4f3;
+    --bus:       #5f6b3b;
+    --bus-soft:  #ecedd9;
+    --warn:      #a3540f;
+    --good:      #2c6b46;
+
+    --serif: "Iowan Old Style","Charter","Georgia",ui-serif,serif;
+    --sans:  -apple-system,BlinkMacSystemFont,"Segoe UI","Inter","Helvetica Neue",Arial,sans-serif;
+    --mono:  "JetBrains Mono","SF Mono","Menlo","Consolas",monospace;
+  }
+
+  /* ---------- Page ---------- */
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .page {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 64px;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 56px 40px 120px;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+    padding-right: 8px;
+    font-size: 14px;
+  }
+  .sidebar .brand {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  .sidebar .tagline {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .sidebar nav { border-top: 1px solid var(--rule); padding-top: 20px; }
+  .sidebar ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+  .sidebar ol li { counter-increment: toc; margin: 0 0 6px; }
+  .sidebar ol li a {
+    color: var(--ink);
+    text-decoration: none;
+    display: block;
+    padding: 4px 0 4px 28px;
+    position: relative;
+    line-height: 1.35;
+  }
+  .sidebar ol li a::before {
+    content: counter(toc, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 4px;
+    color: var(--faint);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+  .sidebar ol li a:hover { color: var(--host); }
+
+  .sidebar .meta {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .sidebar .meta dt { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-top: 10px; }
+  .sidebar .meta dd { margin: 2px 0 0; padding: 0; color: var(--ink); }
+  .sidebar .meta dd.muted { color: var(--muted); }
+
+  /* ---------- Main ---------- */
+  main { min-width: 0; } /* let SVG shrink */
+  article > section { margin: 0 0 96px; }
+  article > section:first-child { margin-top: 0; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 12px;
+  }
+
+  h1.display {
+    font-family: var(--serif);
+    font-size: 56px;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    font-weight: 600;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-size: 32px;
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 17px;
+    margin: 0 0 6px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  h4 {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 28px 0 10px;
+    font-weight: 600;
+  }
+  p { margin: 0 0 14px; }
+  p.lede { font-size: 19px; line-height: 1.55; color: #2a2a2a; max-width: 64ch; }
+  p.note { color: var(--muted); font-size: 14px; }
+  a { color: var(--host); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+  code, kbd, samp, pre { font-family: var(--mono); font-size: 13.5px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 0.92em; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 18px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  ul.bare { list-style: none; padding: 0; margin: 0 0 14px; }
+  ul.bare li { padding-left: 18px; position: relative; margin-bottom: 6px; }
+  ul.bare li::before { content: ""; position: absolute; left: 0; top: 11px; width: 8px; height: 1px; background: var(--faint); }
+
+  /* ---------- Hero ---------- */
+  .hero { border-bottom: 1px solid var(--rule); padding-bottom: 32px; margin-bottom: 56px; }
+  .hero .meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 36px;
+    margin-top: 32px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .hero .meta-strip > div { display: flex; flex-direction: column; gap: 2px; }
+  .hero .meta-strip .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .hero .meta-strip .value { color: var(--ink); font-size: 14px; }
+  .hero .meta-strip .value.host { color: var(--host); }
+  .hero .meta-strip .value.container { color: var(--container); }
+
+  .source-banner {
+    margin-top: 28px;
+    border-left: 3px solid var(--host);
+    background: var(--host-soft);
+    padding: 14px 18px;
+    font-size: 13.5px;
+    color: #1f2d3d;
+    border-radius: 0 4px 4px 0;
+  }
+  .source-banner strong { color: var(--host); }
+
+  /* ---------- Cards ---------- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .cards.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px 16px;
+  }
+  .card .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--faint);
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .card .rule {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.3;
+    color: var(--ink);
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  .card .why {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .card .why strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Subsystem cards ---------- */
+  .subsys {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 22px;
+    margin-bottom: 14px;
+  }
+  .subsys header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    gap: 16px;
+  }
+  .subsys h3 { margin: 0; font-size: 18px; }
+  .subsys h3 code { background: none; padding: 0; font-size: 14px; color: var(--muted); margin-left: 8px; font-weight: 400; }
+  .subsys .where {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .where.host { color: var(--host); background: var(--host-soft); }
+  .where.container { color: var(--container); background: var(--container-soft); }
+  .where.both { color: var(--bus); background: var(--bus-soft); }
+  .where.external { color: var(--external); background: var(--external-soft); }
+
+  .subsys p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; }
+  .subsys .meta-row {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 4px 12px;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .subsys .meta-row dt { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); padding-top: 3px; }
+  .subsys .meta-row dd { margin: 0; color: var(--ink); }
+  .subsys .meta-row dd code { font-size: 12.5px; }
+
+  /* ---------- Diagram frame ---------- */
+  .figure {
+    margin: 0 0 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 18px 20px;
+  }
+  .figure .caption {
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    margin-top: 14px;
+    padding-top: 12px;
+    line-height: 1.5;
+  }
+  .figure .caption strong { color: var(--ink); font-weight: 600; }
+  .figure svg { display: block; width: 100%; height: auto; }
+
+  /* breakout: let the big architecture diagram extend beyond the column */
+  .breakout {
+    width: calc(100% + 80px);
+    margin-left: -40px;
+  }
+  @media (max-width: 1100px) { .breakout { width: 100%; margin-left: 0; } }
+
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 0 0 18px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+    border-bottom-color: var(--rule);
+  }
+  td code { font-size: 12.5px; }
+
+  /* ---------- Two columns ---------- */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .two-col h3 { margin-top: 4px; }
+  .col-good { border-left: 3px solid var(--good); padding-left: 18px; }
+  .col-warn { border-left: 3px solid var(--warn); padding-left: 18px; }
+  .col-good h3 { color: var(--good); }
+  .col-warn h3 { color: var(--warn); }
+
+  /* ---------- Pointers ---------- */
+  .pointer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .pointer {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 14px 16px;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .pointer .kind {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 4px;
+  }
+  .pointer .name { font-size: 14.5px; font-weight: 600; }
+  .pointer .desc { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .pointer:hover { border-color: var(--host); }
+
+  /* ---------- Pull quote ---------- */
+  blockquote.pull {
+    font-family: var(--serif);
+    font-size: 22px;
+    line-height: 1.4;
+    color: #2a2a2a;
+    border-left: 3px solid var(--container);
+    padding: 6px 0 6px 22px;
+    margin: 28px 0;
+    max-width: 60ch;
+    font-style: italic;
+  }
+  blockquote.pull cite { display: block; font-style: normal; font-size: 13px; font-family: var(--sans); color: var(--muted); margin-top: 8px; }
+
+  /* ---------- Legend ---------- */
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend .swatch { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch span { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 920px) {
+    .page { grid-template-columns: 1fr; gap: 32px; padding: 32px 20px 80px; }
+    .sidebar { position: static; height: auto; }
+    .cards, .cards.three, .two-col, .pointer-grid { grid-template-columns: 1fr; }
+    h1.display { font-size: 40px; }
+    h2 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <p class="brand">Team Room</p>
+    <p class="tagline">A multi-agent harness modeled after a software delivery team.</p>
+    <nav>
+      <ol>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#thesis">The thesis</a></li>
+        <li><a href="#principles">Design principles</a></li>
+        <li><a href="#architecture">System architecture</a></li>
+        <li><a href="#subsystems">Subsystems &amp; responsibilities</a></li>
+        <li><a href="#turn">A turn, end to end</a></li>
+        <li><a href="#deps">Module dependencies</a></li>
+        <li><a href="#runtime">Runtime &amp; configuration</a></li>
+        <li><a href="#timeline">Milestone timeline</a></li>
+        <li><a href="#capabilities">Capabilities today</a></li>
+        <li><a href="#next">Where to go next</a></li>
+      </ol>
+    </nav>
+    <dl class="meta">
+      <dt>Snapshot</dt><dd>2026-05-16</dd>
+      <dt>Current state</dt><dd>M5 shipped · M5.1 next</dd>
+      <dt>Repo</dt><dd class="muted">teamroom/teamroom</dd>
+      <dt>Live source of truth</dt>
+      <dd class="muted">
+        <a href="as-built/">docs/as-built/</a> · <a href="roadmap.md">roadmap.md</a> · <a href="memory/MEMORY.md">memory/</a>
+      </dd>
+    </dl>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main>
+    <article>
+
+      <!-- ====== OVERVIEW / HERO ====== -->
+      <section id="overview" class="hero">
+        <p class="eyebrow">Architecture &amp; design reference · snapshot</p>
+        <h1 class="display">A team of colleagues, not a bigger agent.</h1>
+        <p class="lede">
+          Team Room is a multi-agent harness shaped like a software delivery team.
+          Each agent has its own identity, container, mounts, credentials, and tools;
+          they coordinate through explicit, typed substrate — a mail system on an
+          event-bus backbone — rather than implicit shared state.
+        </p>
+
+        <div class="meta-strip">
+          <div>
+            <span class="label">Latest milestone</span>
+            <span class="value">M5 — LangGraph runtime</span>
+          </div>
+          <div>
+            <span class="label">Active agents</span>
+            <span class="value"><span style="color:var(--container)">studio-assistant</span> · <span style="color:var(--container)">claude-assistant</span></span>
+          </div>
+          <div>
+            <span class="label">Host language</span>
+            <span class="value">TypeScript (strict) · Node 22+</span>
+          </div>
+          <div>
+            <span class="label">Container runtime</span>
+            <span class="value">Docker</span>
+          </div>
+          <div>
+            <span class="label">Persistence</span>
+            <span class="value">SQLite (in-process)</span>
+          </div>
+        </div>
+
+        <div class="source-banner">
+          <strong>This is a snapshot.</strong> The authoritative current state lives in
+          <code>docs/as-built/</code> (each milestone freezes its architectural reality there)
+          and <code>docs/roadmap.md</code> (what's next). When this page disagrees with those,
+          they win — re-cut this page.
+        </div>
+      </section>
+
+      <!-- ====== THESIS ====== -->
+      <section id="thesis">
+        <p class="eyebrow">The thesis</p>
+        <h2>One assistant has limits a team doesn't.</h2>
+        <p>
+          The mental model is deliberate: <em>not</em> "a bigger agent" but
+          "a team of colleagues" — each narrow, each specialized, each accountable
+          for its own work, coordinating through <strong>explicit</strong> team infrastructure.
+          That word — explicit — is the line between Team Room and a swarm.
+        </p>
+        <p>
+          The honest finding from the multi-agent literature is that group chat,
+          hierarchical handoff, and debate rounds rarely earn their token cost.
+          What does earn it: <strong>narrow specialists with clear permission boundaries</strong>,
+          <strong>typed shared state with a reducer</strong>, and <strong>critic/reviewer
+          loops</strong>. Team Room's design is shaped around those findings rather than
+          around the more theatrical patterns.
+        </p>
+
+        <blockquote class="pull">
+          A retrospective is a structured message sent to the team topic. No hidden
+          coordination layer. Team ceremonies are messages, not magic.
+          <cite>— design principle #10</cite>
+        </blockquote>
+      </section>
+
+      <!-- ====== PRINCIPLES ====== -->
+      <section id="principles">
+        <p class="eyebrow">Design principles</p>
+        <h2>Ten rules that haven't moved.</h2>
+        <p>
+          These were locked at the M1 spec and have survived every milestone since.
+          Each card carries the rule and the <em>why</em> — the reason matters more
+          than the words because the why is what lets you judge edge cases later.
+        </p>
+
+        <div class="cards">
+          <div class="card">
+            <div class="num">01</div>
+            <p class="rule">The orchestrator stays procedural.</p>
+            <p class="why"><strong>Why:</strong> no LLM in the routing hot path. Deterministic, debuggable, replayable. All intelligence lives in containers; the daemon is the boring conveyor belt.</p>
+          </div>
+          <div class="card">
+            <div class="num">02</div>
+            <p class="rule">Agents run in isolated containers.</p>
+            <p class="why"><strong>Why:</strong> a fresh container per agent process gives filesystem, credential, and blast-radius isolation by construction. Borrowed from NanoClaw; unchanged.</p>
+          </div>
+          <div class="card">
+            <div class="num">03</div>
+            <p class="rule">Per-agent isolation by default.</p>
+            <p class="why"><strong>Why:</strong> own folder, own memory namespace, own tool config, own credentials. Sharing is a deliberate decision, never the default.</p>
+          </div>
+          <div class="card">
+            <div class="num">04</div>
+            <p class="rule">Shared resources are explicit and typed.</p>
+            <p class="why"><strong>Why:</strong> the codebase mount, the event bus, the mail substrate — each is a first-class primitive with a declared schema. Never an untyped folder you hope agents agree on.</p>
+          </div>
+          <div class="card">
+            <div class="num">05</div>
+            <p class="rule">Observability is a slice of every milestone.</p>
+            <p class="why"><strong>Why:</strong> not a milestone of its own. Each subsystem ships with logs, span-shaped events, and trace IDs from the day it lands.</p>
+          </div>
+          <div class="card">
+            <div class="num">06</div>
+            <p class="rule">Permission scoping at the credential layer.</p>
+            <p class="why"><strong>Why:</strong> the model proxy enforces "agent X may call provider Y." Defense at the boundary, not defense-in-depth scattered through every tool.</p>
+          </div>
+          <div class="card">
+            <div class="num">07</div>
+            <p class="rule">Multi-model from the start.</p>
+            <p class="why"><strong>Why:</strong> agents pick a provider per turn; the proxy resolves the routing token. The Anthropic / LM Studio / Ollama split exists because that contract was honored from M2.</p>
+          </div>
+          <div class="card">
+            <div class="num">08</div>
+            <p class="rule">Evaluations are per-agent.</p>
+            <p class="why"><strong>Why:</strong> each agent has its own scenarios and regressions. Team-level evals compose from agent-level ones — never the other way around. (Substrate landed; harness deferred to M9.)</p>
+          </div>
+          <div class="card">
+            <div class="num">09</div>
+            <p class="rule">Self-learning is bounded.</p>
+            <p class="why"><strong>Why:</strong> agents propose changes; changes are applied explicitly with outcome tracking. No silent self-modification, ever. (Substrate; M10.)</p>
+          </div>
+          <div class="card">
+            <div class="num">10</div>
+            <p class="rule">Team ceremonies are messages, not magic.</p>
+            <p class="why"><strong>Why:</strong> a retro is a structured message on the team topic. Coordination always flows through the visible substrate — there is no hidden layer.</p>
+          </div>
+        </div>
+
+        <h4>Five additional rules locked from the M1 spec</h4>
+        <div class="cards">
+          <div class="card">
+            <p class="rule">Deliberate coupling and extensibility.</p>
+            <p class="why">State what is shared and what is isolated <em>at every boundary</em>. Coupling is a first-class architectural concern, not an emergent property.</p>
+          </div>
+          <div class="card">
+            <p class="rule">Minimize long-running process dependencies.</p>
+            <p class="why">Prefer in-process or per-container children over separate services. SQLite over Postgres, an in-process EventBus over a broker, an in-container MCP child over a host-side daemon.</p>
+          </div>
+          <div class="card">
+            <p class="rule">See only as far as needed.</p>
+            <p class="why">Don't formalize on N=1. The OpenAI-compat adapter was extracted only when Ollama arrived as N=2. A generic <code>openai-compat</code> provider waits for N=3.</p>
+          </div>
+          <div class="card">
+            <p class="rule">Nothing silent, nothing inconsistent, nothing crashes.</p>
+            <p class="why">Global safety nets in the daemon; containers run to completion or the daemon kills them. Errors surface; degraded modes announce themselves; hung work is bounded.</p>
+          </div>
+          <div class="card">
+            <p class="rule">Design for testability via DI.</p>
+            <p class="why">Every effectful dependency behind an interface; tests use real in-memory implementations, never <code>vi.mock</code>. The integration harness composes the same modules production does.</p>
+          </div>
+          <div class="card">
+            <p class="rule">Default to the reference SDK for any third-party protocol.</p>
+            <p class="why">MCP, OAuth, OpenAI compat: protocols drift; SDKs absorb the drift. Hand-roll only with a documented blocker-grade reason.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== SYSTEM ARCHITECTURE ====== -->
+      <section id="architecture">
+        <p class="eyebrow">System architecture</p>
+        <h2>The host / container split.</h2>
+        <p>
+          The single most load-bearing seam in Team Room is the line between the
+          long-running host daemon and the per-agent containers. Every other
+          boundary defers to it. The daemon owns the database, the bus, the
+          dispatcher, the model proxy, and the WebSockets the world reaches in
+          through. Containers own the LLM and its tools, communicating outward
+          only through MCP (mail, filesystem) and HTTP (model proxy).
+        </p>
+
+        <div class="figure breakout">
+          <svg viewBox="0 0 1200 760" role="img" aria-labelledby="arch-title arch-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="arch-title">Team Room system architecture</title>
+            <desc id="arch-desc">Diagram showing the host process on the left containing the daemon's modules, and per-agent containers on the right containing the agent runtime and MCP clients. External actors (CLI, model providers, Docker) sit at the edges.</desc>
+
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#5b5b5b"/>
+              </marker>
+              <marker id="arrow-host" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1d4e89"/>
+              </marker>
+              <marker id="arrow-container" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#c0532f"/>
+              </marker>
+              <marker id="arrow-bus" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#5f6b3b"/>
+              </marker>
+            </defs>
+
+            <style>
+              .lbl   { font: 600 12px var(--sans, sans-serif); fill: #1a1a1a; }
+              .lbl-s { font: 500 10.5px var(--sans, sans-serif); fill: #1a1a1a; }
+              .meta  { font: 400 10px var(--mono, monospace); fill: #6e6a5c; letter-spacing: 0.04em; }
+              .grp   { font: 700 10.5px var(--mono, monospace); fill: #6e6a5c; letter-spacing: 0.12em; text-transform: uppercase; }
+              .legend-l { font: 500 11px var(--sans, sans-serif); fill: #1a1a1a; }
+            </style>
+
+            <!-- HOST GROUP -->
+            <rect x="40" y="80" width="620" height="640" rx="10" fill="#f3f7fc" stroke="#1d4e89" stroke-width="1.2"/>
+            <text x="56" y="105" class="grp" fill="#1d4e89">HOST · daemon process · 127.0.0.1</text>
+
+            <!-- INGRESS row: ChannelRegistry / ChatServer / QueryServer -->
+            <text x="56" y="135" class="grp">Ingress (channels)</text>
+            <rect x="56" y="148" width="180" height="56" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="146" y="170" class="lbl" text-anchor="middle">ChatServer</text>
+            <text x="146" y="187" class="meta" text-anchor="middle">WebSocket · chat.port</text>
+            <rect x="248" y="148" width="180" height="56" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="338" y="170" class="lbl" text-anchor="middle">QueryServer</text>
+            <text x="338" y="187" class="meta" text-anchor="middle">WebSocket · mail.port</text>
+            <rect x="440" y="148" width="180" height="56" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="530" y="170" class="lbl" text-anchor="middle">ChannelRegistry</text>
+            <text x="530" y="187" class="meta" text-anchor="middle">channel:cli · (telegram…)</text>
+
+            <!-- MAIL row -->
+            <text x="56" y="232" class="grp">Mail substrate</text>
+            <rect x="56" y="245" width="280" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="196" y="267" class="lbl" text-anchor="middle">MailDispatcher</text>
+            <text x="196" y="285" class="meta" text-anchor="middle">single entry · lenient parse / strict deliver</text>
+            <text x="196" y="300" class="meta" text-anchor="middle">cap: 40 mails / thread</text>
+
+            <rect x="348" y="245" width="272" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="484" y="267" class="lbl" text-anchor="middle">MailingListRegistry</text>
+            <text x="484" y="285" class="meta" text-anchor="middle">+ TriggerListener (bus → list:*)</text>
+            <text x="484" y="300" class="meta" text-anchor="middle">infra ready · 1 list seeded</text>
+
+            <!-- BUS -->
+            <text x="56" y="335" class="grp">In-process bus</text>
+            <rect x="56" y="348" width="564" height="48" rx="5" fill="#f4f6e6" stroke="#5f6b3b"/>
+            <text x="338" y="370" class="lbl" text-anchor="middle">EventBus  ·  mail.delivered  ·  mail.sent  ·  tool.call  ·  channel.cli.out</text>
+            <text x="338" y="386" class="meta" text-anchor="middle">notifications, not payloads · not durable · DB is the source of truth</text>
+
+            <!-- SESSIONS row -->
+            <text x="56" y="420" class="grp">Sessions &amp; runtime</text>
+            <rect x="56" y="433" width="180" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="146" y="453" class="lbl" text-anchor="middle">SessionManager</text>
+            <text x="146" y="470" class="meta" text-anchor="middle">subs: mail.delivered</text>
+            <text x="146" y="484" class="meta" text-anchor="middle">SessionTimerManager</text>
+
+            <rect x="248" y="433" width="180" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="338" y="453" class="lbl" text-anchor="middle">ContainerRunner</text>
+            <text x="338" y="470" class="meta" text-anchor="middle">DockerRunner (prod)</text>
+            <text x="338" y="484" class="meta" text-anchor="middle">FakeRunner (tests)</text>
+
+            <rect x="440" y="433" width="180" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="530" y="453" class="lbl" text-anchor="middle">MailMcpServer</text>
+            <text x="530" y="470" class="meta" text-anchor="middle">MCP HTTP · mail-mcp.port</text>
+            <text x="530" y="484" class="meta" text-anchor="middle">@modelcontextprotocol/sdk</text>
+
+            <!-- MODEL PROXY -->
+            <text x="56" y="520" class="grp">Credential isolation</text>
+            <rect x="56" y="533" width="564" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="338" y="555" class="lbl" text-anchor="middle">LocalModelProxy   ·   TokenRegistry   ·   ProviderAdapter[]</text>
+            <text x="338" y="573" class="meta" text-anchor="middle">routing token in (per turn) → real upstream credential out</text>
+            <text x="338" y="588" class="meta" text-anchor="middle">AnthropicAdapter (oauth | api-key)   ·   OpenAICompatAdapter (bearer | none)</text>
+
+            <!-- STORAGE -->
+            <text x="56" y="620" class="grp">Storage</text>
+            <rect x="56" y="633" width="280" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="196" y="655" class="lbl" text-anchor="middle">SQLite · WAL · :file:</text>
+            <text x="196" y="673" class="meta" text-anchor="middle">data/teamroom.db</text>
+            <text x="196" y="687" class="meta" text-anchor="middle">migrations/ · numbered SQL</text>
+
+            <rect x="348" y="633" width="272" height="64" rx="5" fill="#fff" stroke="#cfd9e8"/>
+            <text x="484" y="655" class="lbl" text-anchor="middle">AgentRepo · MessageRepo</text>
+            <text x="484" y="673" class="meta" text-anchor="middle">all writes from daemon · CLI reads OK</text>
+            <text x="484" y="687" class="meta" text-anchor="middle">soft-delete · archive · markRead</text>
+
+            <!-- CONTAINER GROUP -->
+            <rect x="720" y="80" width="440" height="500" rx="10" fill="#fbf2ec" stroke="#c0532f" stroke-width="1.2"/>
+            <text x="736" y="105" class="grp" fill="#c0532f">CONTAINER · per agent · per process</text>
+
+            <!-- main.ts -->
+            <rect x="736" y="125" width="408" height="50" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="940" y="148" class="lbl" text-anchor="middle">main.ts — stdin readline loop</text>
+            <text x="940" y="164" class="meta" text-anchor="middle">JSON wake envelope per line → worker.handleWake()</text>
+
+            <!-- worker -->
+            <rect x="736" y="190" width="408" height="80" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="940" y="212" class="lbl" text-anchor="middle">AgentWorker · buildWorker(provider)</text>
+            <text x="940" y="232" class="meta" text-anchor="middle">anthropic → AnthropicAgentWorker (claude-agent-sdk)</text>
+            <text x="940" y="248" class="meta" text-anchor="middle">lm-studio | ollama → LangGraphAgentWorker</text>
+            <text x="940" y="263" class="meta" text-anchor="middle">in-process BaseMessage[] · cap 40 · trim at HumanMessage</text>
+
+            <!-- MCP clients -->
+            <rect x="736" y="285" width="200" height="78" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="836" y="307" class="lbl" text-anchor="middle">MCP client (mail)</text>
+            <text x="836" y="324" class="meta" text-anchor="middle">HTTP → host MailMcpServer</text>
+            <text x="836" y="340" class="meta" text-anchor="middle">7 tools: list/get/send/reply</text>
+            <text x="836" y="354" class="meta" text-anchor="middle">mark_read/archive/delete</text>
+
+            <rect x="944" y="285" width="200" height="78" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="1044" y="307" class="lbl" text-anchor="middle">MCP client (filesystem)</text>
+            <text x="1044" y="324" class="meta" text-anchor="middle">stdio child · per container</text>
+            <text x="1044" y="340" class="meta" text-anchor="middle">@modelcontextprotocol/</text>
+            <text x="1044" y="354" class="meta" text-anchor="middle">server-filesystem</text>
+
+            <!-- LangChain LLM client -->
+            <rect x="736" y="378" width="408" height="60" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="940" y="400" class="lbl" text-anchor="middle">ChatOpenAI (LangGraph) | claude-agent-sdk</text>
+            <text x="940" y="418" class="meta" text-anchor="middle">→ TEAMROOM_MODEL_BASE_URL = host model proxy URL</text>
+            <text x="940" y="432" class="meta" text-anchor="middle">recursionLimit: 50 · maxRetries: 2</text>
+
+            <!-- mounts -->
+            <rect x="736" y="453" width="408" height="110" rx="5" fill="#fff" stroke="#e8c9b6"/>
+            <text x="940" y="473" class="lbl" text-anchor="middle">mounts &amp; env (set by daemon at spawn)</text>
+            <text x="940" y="492" class="meta" text-anchor="middle">/AGENTS.md   read-write · system prompt</text>
+            <text x="940" y="507" class="meta" text-anchor="middle">/store       read-write · per-agent scratch</text>
+            <text x="940" y="522" class="meta" text-anchor="middle">/codebase    read-write (optional, mount filtered if absent)</text>
+            <text x="940" y="540" class="meta" text-anchor="middle">env: TEAMROOM_PROVIDER · MODEL · MCP_URL · MCP_TOKEN ·</text>
+            <text x="940" y="555" class="meta" text-anchor="middle">     MODEL_BASE_URL · MODEL_API_TOKEN  (routing token)</text>
+
+            <!-- EXTERNAL: USER CLI (top-left edge) -->
+            <rect x="40" y="20" width="200" height="40" rx="5" fill="#f4ecf7" stroke="#6b4d8a"/>
+            <text x="140" y="44" class="lbl" text-anchor="middle" fill="#6b4d8a">User CLI · teamroom chat / send / inbox</text>
+
+            <!-- EXTERNAL: model providers (top-right) -->
+            <rect x="720" y="20" width="220" height="40" rx="5" fill="#f4ecf7" stroke="#6b4d8a"/>
+            <text x="830" y="44" class="lbl" text-anchor="middle" fill="#6b4d8a">Anthropic API · HTTPS</text>
+            <rect x="952" y="20" width="208" height="40" rx="5" fill="#f4ecf7" stroke="#6b4d8a"/>
+            <text x="1056" y="44" class="lbl" text-anchor="middle" fill="#6b4d8a">LM Studio · Ollama (localhost)</text>
+
+            <!-- EXTERNAL: docker (bottom right) -->
+            <rect x="720" y="610" width="440" height="40" rx="5" fill="#f4ecf7" stroke="#6b4d8a"/>
+            <text x="940" y="634" class="lbl" text-anchor="middle" fill="#6b4d8a">Docker daemon · container lifecycle</text>
+
+            <!-- EXTERNAL: codebase + per-agent store (bottom right under docker) -->
+            <rect x="720" y="660" width="440" height="50" rx="5" fill="#f4ecf7" stroke="#6b4d8a"/>
+            <text x="940" y="681" class="lbl" text-anchor="middle" fill="#6b4d8a">host filesystem</text>
+            <text x="940" y="699" class="meta" text-anchor="middle">codebase mount · agents/&lt;name&gt;/store · data/teamroom.db</text>
+
+            <!-- ==== ARROWS ==== -->
+            <!-- CLI <-> ChatServer (host edge) -->
+            <line x1="140" y1="60" x2="140" y2="148" stroke="#6b4d8a" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <text x="148" y="120" class="meta" fill="#6b4d8a">register / publish (WS)</text>
+
+            <!-- ChatServer -> Dispatcher -->
+            <line x1="146" y1="204" x2="146" y2="245" stroke="#1d4e89" stroke-width="1.4" marker-end="url(#arrow-host)"/>
+
+            <!-- QueryServer -> Storage (reads) -->
+            <line x1="338" y1="204" x2="338" y2="633" stroke="#1d4e89" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow-host)"/>
+            <text x="346" y="412" class="meta" fill="#1d4e89">read-only inbox/thread queries</text>
+
+            <!-- Dispatcher -> Storage (write) -->
+            <line x1="196" y1="309" x2="196" y2="633" stroke="#1d4e89" stroke-width="1.4" marker-end="url(#arrow-host)"/>
+            <text x="204" y="412" class="meta" fill="#1d4e89">insert message row</text>
+
+            <!-- Dispatcher -> Bus -->
+            <line x1="196" y1="309" x2="196" y2="348" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#arrow-bus)"/>
+
+            <!-- Bus -> SessionManager -->
+            <line x1="146" y1="396" x2="146" y2="433" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#arrow-bus)"/>
+            <text x="156" y="418" class="meta" fill="#5f6b3b">mail.delivered</text>
+
+            <!-- Bus -> ChatServer (channel.cli.out) — routed around the left margin so it doesn't
+                 overlap dispatcher/storage arrows -->
+            <path d="M 56 372 L 28 372 L 28 176 L 56 176" fill="none" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#arrow-bus)"/>
+            <text x="20" y="280" class="meta" fill="#5f6b3b" transform="rotate(-90 20 280)">channel.cli.out</text>
+
+            <!-- TriggerListener (lists) -> Bus (read) -->
+            <line x1="484" y1="309" x2="484" y2="348" stroke="#5f6b3b" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow-bus)"/>
+
+            <!-- SessionManager -> ContainerRunner -->
+            <line x1="236" y1="465" x2="248" y2="465" stroke="#1d4e89" stroke-width="1.4" marker-end="url(#arrow-host)"/>
+
+            <!-- ContainerRunner -> Docker -->
+            <line x1="338" y1="497" x2="338" y2="610" stroke="#1d4e89" stroke-width="1.4" marker-end="url(#arrow-host)"/>
+            <text x="346" y="556" class="meta" fill="#1d4e89">docker run / kill</text>
+
+            <!-- Docker -> Container (spawn): a single dashed curve from the docker box up into
+                 the container group; no rotated label, the dashed style + caption explain it -->
+            <path d="M 720 630 C 690 590, 690 480, 720 165" stroke="#6b4d8a" stroke-width="1.4" fill="none" stroke-dasharray="6 3" marker-end="url(#arrow)"/>
+
+            <!-- Container.MCP-mail -> MailMcpServer; arrow speaks for itself, both endpoints labeled -->
+            <line x1="736" y1="324" x2="620" y2="465" stroke="#c0532f" stroke-width="1.4" marker-end="url(#arrow-container)"/>
+
+            <!-- Container.LLM-client -> Model Proxy -->
+            <line x1="736" y1="408" x2="620" y2="565" stroke="#c0532f" stroke-width="1.4" marker-end="url(#arrow-container)"/>
+
+            <!-- Model Proxy -> external providers (no rotated label; the external boxes are
+                 self-labeling and the arrow's endpoints make the route obvious) -->
+            <path d="M 620 545 C 720 490, 760 200, 830 60" stroke="#1d4e89" stroke-width="1.4" fill="none" marker-end="url(#arrow-host)"/>
+
+            <!-- Container.fs-MCP -> host filesystem -->
+            <line x1="1044" y1="438" x2="1044" y2="660" stroke="#c0532f" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow-container)"/>
+            <text x="1052" y="558" class="meta" fill="#c0532f">/codebase · /store</text>
+
+            <!-- LEGEND -->
+            <g transform="translate(56, 730)">
+              <rect x="0" y="-4" width="14" height="14" fill="#1d4e89"/>
+              <text x="20" y="6" class="legend-l">host</text>
+              <rect x="80" y="-4" width="14" height="14" fill="#c0532f"/>
+              <text x="100" y="6" class="legend-l">container</text>
+              <rect x="180" y="-4" width="14" height="14" fill="#6b4d8a"/>
+              <text x="200" y="6" class="legend-l">external</text>
+              <rect x="270" y="-4" width="14" height="14" fill="#5f6b3b"/>
+              <text x="290" y="6" class="legend-l">bus event</text>
+              <line x1="380" y1="3" x2="420" y2="3" stroke="#5b5b5b" stroke-width="1" stroke-dasharray="4 3"/>
+              <text x="426" y="7" class="legend-l">spawn / read-only</text>
+            </g>
+          </svg>
+
+          <p class="caption">
+            <strong>Figure 1.</strong> Eight composed modules on the host;
+            two MCP clients plus an LLM client per container. The dispatcher is the
+            single entry point for every mail row, regardless of whether the source is
+            an agent (via MCP HTTP) or a human (via the chat WebSocket). Containers
+            never see real model credentials — only an ephemeral routing token the
+            proxy translates. Outbound CLI delivery goes back through the bus's
+            <code>channel.cli.out</code> event, which <code>ChatServer</code> subscribes to.
+            Docker's spawn arrow is dashed because it crosses the trust boundary; everything
+            inside the container is opaque to the host beyond the stdin/stdout protocol.
+          </p>
+        </div>
+
+        <h4>Why the host / container line is so load-bearing</h4>
+        <p>
+          The container contract is <strong>language-agnostic</strong>. The daemon
+          treats <code>agent-runtime/</code> as opaque beyond the stdin/stdout JSONL
+          envelope protocol. That gives Team Room two important affordances:
+          a Python or Rust runtime can replace the TypeScript one tomorrow without
+          touching the daemon, and the credential blast-radius is bounded at a real
+          OS process boundary, not a soft language one.
+        </p>
+      </section>
+
+      <!-- ====== SUBSYSTEMS ====== -->
+      <section id="subsystems">
+        <p class="eyebrow">Subsystems &amp; responsibilities</p>
+        <h2>What each piece owns.</h2>
+        <p>
+          Every multi-file module under <code>src/</code> declares its
+          contract in a README following a fixed shape: what it is, where it runs,
+          who uses it, what it depends on. Below: the fast tour, in roughly the
+          order the daemon composes them at boot.
+        </p>
+
+        <article class="subsys">
+          <header>
+            <h3>daemon <code>src/daemon/</code></h3>
+            <span class="where host">host · long-running</span>
+          </header>
+          <p>The composition root. <code>startDaemon</code> wires eight modules in a fixed order and opens four ports (mail-MCP, model-proxy, chat WS, mail WS). Procedurally boring on purpose — the daemon contains no LLM in the hot path. Global safety nets keep it alive through unhandled exceptions.</p>
+          <dl class="meta-row">
+            <dt>Composes</dt><dd>observability → storage → messaging → mcp-mail → model-proxy → session-management → channels → mail</dd>
+            <dt>Invariants</dt><dd>nothing silent · nothing inconsistent · nothing crashes</dd>
+            <dt>Entry</dt><dd><code>cli/serve.ts</code> (the daemon has no <code>main.ts</code> of its own)</dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>agent-runtime <code>src/agent-runtime/</code></h3>
+            <span class="where container">container · per agent</span>
+          </header>
+          <p>The shim that runs inside each agent container. Reads JSON wake envelopes from stdin one per line and dispatches to <code>worker.handleWake()</code>. Two worker implementations today, picked by <code>TEAMROOM_PROVIDER</code>.</p>
+          <dl class="meta-row">
+            <dt>Anthropic</dt><dd><code>AnthropicAgentWorker</code> — wraps <code>@anthropic-ai/claude-agent-sdk</code>; the SDK handles the tool-call loop internally.</dd>
+            <dt>LangGraph</dt><dd><code>LangGraphAgentWorker</code> — prebuilt <code>createReactAgent</code> + <code>@langchain/mcp-adapters</code>; holds bounded <code>BaseMessage[]</code> across wakes (cap 40, trim at HumanMessage boundary).</dd>
+            <dt>Boundary</dt><dd>language-agnostic — daemon never imports from this module.</dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>mail-dispatcher + mail-mcp <code>src/mail-dispatcher/ · src/mail-mcp/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>The mail substrate is Team Room's universal coordination primitive. <code>MailDispatcher</code> is the single entry point for creating mail rows: agents reach it via MCP tools (<code>mail.send</code>, <code>mail.reply</code>, …), the chat WebSocket reaches it via <code>publish</code>. <em>Lenient parse, strict deliver</em>: any well-formed address parses; unknown agent or list recipients are rejected at delivery.</p>
+          <dl class="meta-row">
+            <dt>Addresses</dt><dd><code>agent:&lt;name&gt;</code> · <code>list:&lt;name&gt;</code> · <code>channel:&lt;chan&gt;:&lt;ext-id&gt;</code></dd>
+            <dt>Tools</dt><dd>list, get, send, reply, mark_read, archive, delete (7)</dd>
+            <dt>Cap</dt><dd>40 mails per thread (<code>TEAMROOM_MAX_MAILS_PER_THREAD</code>)</dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>mailing-lists <code>src/mailing-lists/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>Loads <code>lists.yaml</code> into a registry and subscribes a <code>TriggerListener</code> to bus events that should fan out as mail to <code>list:&lt;name&gt;</code>. Mechanically functional; in live operation only one list (<code>list:harness-activity</code>) is seeded, and the publishers that would feed it (turn-event publication) aren't wired yet — see roadmap.</p>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>session-manager <code>src/session-manager/ · modules/session-management/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>Subscribes to <code>mail.delivered</code> on the bus. For each delivery to an agent address, ensures the container is up (spawning if needed via <code>ContainerRunner</code>), pushes a wake envelope down its stdin, and arms the <code>SessionTimerManager</code> to close stdin after idle minutes (default 30, tunable). One container per agent, kept warm across turns, killed cleanly on idle.</p>
+          <dl class="meta-row">
+            <dt>Subscribes</dt><dd><code>mail.delivered</code> · <code>mail.sent</code> · <code>tool.call</code> (observability)</dd>
+            <dt>Idle timer</dt><dd><code>TEAMROOM_SESSION_IDLE_MINUTES=30</code></dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>model-proxy <code>src/model-proxy/ · src/model-proxy/adapters/</code></h3>
+            <span class="where host">host · 127.0.0.1</span>
+          </header>
+          <p>An in-daemon HTTP listener bound to localhost on an OS-assigned port. Containers send all model traffic to it carrying only an ephemeral routing token; the proxy looks the token up, swaps it for the real upstream credential, and forwards the body bytes unchanged. Enforces <em>"agent X may call provider Y"</em> at the credential boundary.</p>
+          <dl class="meta-row">
+            <dt>Adapters</dt><dd><code>AnthropicAdapter</code> (oauth | api-key) · <code>OpenAICompatAdapter</code> (bearer | none)</dd>
+            <dt>Backends</dt><dd>Anthropic (HTTPS) · LM Studio (bearer) · Ollama (none)</dd>
+            <dt>Token mint</dt><dd>per turn, evicted at turn end</dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>channels <code>src/modules/channels/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>A channel is a routing prefix bound to an authentication policy. <code>ChannelRegistry</code> holds the valid set (today: just <code>cli</code>); <code>ChatServer</code> is the bus↔WebSocket bridge that lets the CLI (and future Telegram, Slack, voice gateways) speak to and through the mail substrate.</p>
+          <dl class="meta-row">
+            <dt>Protocol</dt><dd>register · publish · mail · event · error</dd>
+            <dt>Outbound</dt><dd><code>channel.cli.out</code> events route back to the right WS client</dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>container <code>src/container/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>A `ContainerRunner` interface (<code>spawn one turn, pipe stdin, collect JSONL, capture stderr/exit</code>) with a <code>DockerRunner</code> production impl and a <code>FakeRunner</code> for tests. The daemon never talks to Docker directly — everything goes through the seam, which makes turn processing fully testable without a real Docker daemon.</p>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>db <code>src/db/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p>SQLite, in-process, WAL mode. All writes happen in the daemon; CLI commands are readers. Schema is owned by numbered migration files under <code>migrations/</code>. Two repositories: <code>AgentRepo</code> and <code>MessageRepo</code>. The container never touches the DB.</p>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>bus <code>src/bus/</code></h3>
+            <span class="where host">host · in-process</span>
+          </header>
+          <p>Typed in-process EventBus. Emits notifications, not payloads — bodies live in the DB and subscribers fetch by ID. Not durable; crashes drop events. The DB covers durability for anything that needs it.</p>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>cli <code>src/cli/</code></h3>
+            <span class="where host">host · short-lived</span>
+          </header>
+          <p>The <code>teamroom</code> binary. Six subcommands; each one parses argv and delegates to a service function. <code>chat</code> holds a WebSocket open for interactive use; <code>serve</code> is the only one that runs the daemon in-process. Other commands discover the daemon's ports via the <code>data/ports/</code> file convention.</p>
+          <dl class="meta-row">
+            <dt>Commands</dt><dd><code>serve</code> · <code>chat</code> · <code>send</code> · <code>inbox</code> · <code>thread</code> · <code>status</code></dd>
+          </dl>
+        </article>
+
+        <article class="subsys">
+          <header>
+            <h3>agent-config + agent-spec <code>src/agent-config/ · src/agent-spec/</code></h3>
+            <span class="where host">host</span>
+          </header>
+          <p><code>loadAgentConfig</code> reads each <code>agents/&lt;name&gt;/</code> folder at daemon boot — the <code>agent.yaml</code>, <code>AGENTS.md</code>, <code>store/</code> — and validates required fields (<code>name</code>, <code>provider</code>, <code>model</code>, <code>image_tag</code>). <code>buildSpec</code> turns that config plus runtime context into the docker-run argv: image, mounts (<code>/AGENTS.md</code>, <code>/store</code>, optional <code>/codebase</code>), env, network.</p>
+        </article>
+      </section>
+
+      <!-- ====== TURN SEQUENCE ====== -->
+      <section id="turn">
+        <p class="eyebrow">A turn, end to end</p>
+        <h2>What happens between "you type a message" and "the agent replies."</h2>
+        <p>
+          One trip through the system from a human in the CLI to an agent reply,
+          assuming a LangGraph-backed agent talking to LM Studio. The Anthropic
+          path is shorter — the SDK handles the tool-loop internally — but the
+          mail/dispatcher/session/proxy pieces are all the same.
+        </p>
+
+        <div class="figure breakout">
+          <svg viewBox="0 0 1200 700" role="img" aria-labelledby="seq-title seq-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="seq-title">A turn end-to-end</title>
+            <desc id="seq-desc">Sequence diagram with seven actor lanes: User CLI, ChatServer, MailDispatcher, EventBus, SessionManager, Container worker, Model Proxy, and LM Studio. Numbered steps trace one round-trip.</desc>
+
+            <defs>
+              <marker id="sarrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1a1a1a"/>
+              </marker>
+              <marker id="sarrow-bus" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#5f6b3b"/>
+              </marker>
+            </defs>
+
+            <style>
+              .lane-h { font: 600 12px var(--sans, sans-serif); fill: #1a1a1a; }
+              .lane-sub { font: 400 10px var(--mono, monospace); fill: #6e6a5c; }
+              .step-n { font: 600 10.5px var(--mono, monospace); fill: #1d4e89; }
+              .step-l { font: 500 11.5px var(--sans, sans-serif); fill: #1a1a1a; }
+              .step-c { font: 400 10.5px var(--mono, monospace); fill: #6e6a5c; }
+            </style>
+
+            <!-- 8 lanes evenly: x = 80, 220, 360, 500, 640, 800, 970, 1110 -->
+            <!-- Lane heads -->
+            <g>
+              <rect x="20"  y="30" width="120" height="44" rx="4" fill="#f4ecf7" stroke="#6b4d8a"/>
+              <text x="80"  y="50" class="lane-h" text-anchor="middle" fill="#6b4d8a">User CLI</text>
+              <text x="80"  y="65" class="lane-sub" text-anchor="middle">teamroom chat</text>
+
+              <rect x="160" y="30" width="120" height="44" rx="4" fill="#e3ecf5" stroke="#1d4e89"/>
+              <text x="220" y="50" class="lane-h" text-anchor="middle" fill="#1d4e89">ChatServer</text>
+              <text x="220" y="65" class="lane-sub" text-anchor="middle">channels/</text>
+
+              <rect x="300" y="30" width="120" height="44" rx="4" fill="#e3ecf5" stroke="#1d4e89"/>
+              <text x="360" y="50" class="lane-h" text-anchor="middle" fill="#1d4e89">MailDispatcher</text>
+              <text x="360" y="65" class="lane-sub" text-anchor="middle">mail-dispatcher/</text>
+
+              <rect x="440" y="30" width="120" height="44" rx="4" fill="#ecedd9" stroke="#5f6b3b"/>
+              <text x="500" y="50" class="lane-h" text-anchor="middle" fill="#5f6b3b">EventBus</text>
+              <text x="500" y="65" class="lane-sub" text-anchor="middle">bus/</text>
+
+              <rect x="580" y="30" width="120" height="44" rx="4" fill="#e3ecf5" stroke="#1d4e89"/>
+              <text x="640" y="50" class="lane-h" text-anchor="middle" fill="#1d4e89">SessionManager</text>
+              <text x="640" y="65" class="lane-sub" text-anchor="middle">session-manager/</text>
+
+              <rect x="730" y="30" width="140" height="44" rx="4" fill="#fbf2ec" stroke="#c0532f"/>
+              <text x="800" y="50" class="lane-h" text-anchor="middle" fill="#c0532f">Container worker</text>
+              <text x="800" y="65" class="lane-sub" text-anchor="middle">LangGraphAgentWorker</text>
+
+              <rect x="900" y="30" width="140" height="44" rx="4" fill="#e3ecf5" stroke="#1d4e89"/>
+              <text x="970" y="50" class="lane-h" text-anchor="middle" fill="#1d4e89">ModelProxy</text>
+              <text x="970" y="65" class="lane-sub" text-anchor="middle">model-proxy/</text>
+
+              <rect x="1060" y="30" width="120" height="44" rx="4" fill="#f4ecf7" stroke="#6b4d8a"/>
+              <text x="1120" y="50" class="lane-h" text-anchor="middle" fill="#6b4d8a">LM Studio</text>
+              <text x="1120" y="65" class="lane-sub" text-anchor="middle">localhost:1234</text>
+            </g>
+
+            <!-- Lifelines -->
+            <g stroke="#d6d1c2" stroke-width="1" stroke-dasharray="3 3">
+              <line x1="80"   y1="80" x2="80"   y2="680"/>
+              <line x1="220"  y1="80" x2="220"  y2="680"/>
+              <line x1="360"  y1="80" x2="360"  y2="680"/>
+              <line x1="500"  y1="80" x2="500"  y2="680"/>
+              <line x1="640"  y1="80" x2="640"  y2="680"/>
+              <line x1="800"  y1="80" x2="800"  y2="680"/>
+              <line x1="970"  y1="80" x2="970"  y2="680"/>
+              <line x1="1120" y1="80" x2="1120" y2="680"/>
+            </g>
+
+            <!-- Step 1: CLI register/publish -> ChatServer -->
+            <line x1="84" y1="115" x2="216" y2="115" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="86" y="105" class="step-n">01</text>
+            <text x="116" y="105" class="step-l">register · publish "hello"</text>
+            <text x="116" y="128" class="step-c">WebSocket frame</text>
+
+            <!-- Step 2: ChatServer -> Dispatcher -->
+            <line x1="224" y1="155" x2="356" y2="155" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="226" y="145" class="step-n">02</text>
+            <text x="256" y="145" class="step-l">dispatcher.sendMail(from, to, body)</text>
+
+            <!-- Step 3: Dispatcher -> SQLite (self-call) -->
+            <path d="M 360 175 q 30 -10 30 15 q 0 10 -30 10" fill="none" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="396" y="180" class="step-n">03</text>
+            <text x="396" y="195" class="step-l">INSERT INTO messages</text>
+            <text x="396" y="208" class="step-c">turnId, threadId, addresses</text>
+
+            <!-- Step 4: Dispatcher -> Bus -->
+            <line x1="364" y1="230" x2="496" y2="230" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#sarrow-bus)"/>
+            <text x="366" y="220" class="step-n" fill="#5f6b3b">04</text>
+            <text x="396" y="220" class="step-l">emit mail.delivered{messageId}</text>
+
+            <!-- Step 5: Bus -> SessionManager -->
+            <line x1="504" y1="270" x2="636" y2="270" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#sarrow-bus)"/>
+            <text x="506" y="260" class="step-n" fill="#5f6b3b">05</text>
+            <text x="536" y="260" class="step-l">handler invoked (subscriber)</text>
+
+            <!-- Step 6: SessionManager -> Container (spawn / stdin) -->
+            <line x1="644" y1="310" x2="796" y2="310" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="646" y="300" class="step-n">06</text>
+            <text x="676" y="300" class="step-l">ensure container · stdin: WakeEnvelope</text>
+            <text x="676" y="324" class="step-c">{ kind:"mail.delivered", messageId, … }</text>
+
+            <!-- Step 7: Worker -> ModelProxy (LangGraph runs the loop with tools) -->
+            <line x1="804" y1="365" x2="966" y2="365" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="806" y="355" class="step-n">07</text>
+            <text x="836" y="355" class="step-l">POST /v1/chat/completions</text>
+            <text x="836" y="378" class="step-c">x-api-key: routing-token-Xyz · OpenAI-shape body</text>
+
+            <!-- Step 8: Proxy -> LM Studio -->
+            <line x1="974" y1="405" x2="1116" y2="405" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="976" y="395" class="step-n">08</text>
+            <text x="1006" y="395" class="step-l">forward · auth swapped</text>
+
+            <!-- Step 9: tool call back through MCP-mail -->
+            <line x1="796" y1="455" x2="364" y2="455" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="500" y="445" class="step-n">09</text>
+            <text x="528" y="445" class="step-l">MCP tool · mail.reply(threadId, body, ccAll)</text>
+            <text x="528" y="468" class="step-c">via container's mail MCP client → host MailMcpServer → dispatcher</text>
+
+            <!-- Step 10: Dispatcher emits mail.delivered for the reply -->
+            <line x1="364" y1="495" x2="496" y2="495" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#sarrow-bus)"/>
+            <text x="366" y="485" class="step-n" fill="#5f6b3b">10</text>
+            <text x="396" y="485" class="step-l">emit mail.delivered (reply addressed to channel:cli:don)</text>
+
+            <!-- Step 11: dispatcher emits channel.cli.out -> ChatServer -->
+            <path d="M 364 525 C 290 555, 220 555, 220 540" fill="none" stroke="#5f6b3b" stroke-width="1.4" marker-end="url(#sarrow-bus)"/>
+            <text x="270" y="555" class="step-n" fill="#5f6b3b">11</text>
+            <text x="300" y="555" class="step-l">channel.cli.out → ChatServer.routeCliDelivery</text>
+
+            <!-- Step 12: ChatServer -> CLI (mail message) -->
+            <line x1="216" y1="600" x2="84" y2="600" stroke="#1a1a1a" stroke-width="1.4" marker-end="url(#sarrow)"/>
+            <text x="86" y="590" class="step-n">12</text>
+            <text x="116" y="590" class="step-l">{ type:"mail", body, threadId } over WS</text>
+            <text x="116" y="613" class="step-c">CLI prints reply, REPL prompt returns</text>
+
+            <!-- Step 13: idle timer (background note) -->
+            <text x="640" y="660" class="step-n" fill="#a3540f" text-anchor="middle">★</text>
+            <text x="660" y="660" class="step-l" fill="#a3540f">SessionTimerManager arms 30-min idle close</text>
+            <text x="660" y="673" class="step-c">stdin closed at expiry → worker drains → container exits cleanly</text>
+          </svg>
+
+          <p class="caption">
+            <strong>Figure 2.</strong> The same lifecycle drives every turn — agent-to-human,
+            agent-to-agent, agent-to-list — because everything goes through
+            <code>MailDispatcher.sendMail()</code>. Adding a Telegram channel is a new
+            <code>ChannelRegistry</code> entry plus a separate gateway process; nothing
+            below ChatServer cares.
+          </p>
+        </div>
+      </section>
+
+      <!-- ====== MODULE DEPENDENCIES ====== -->
+      <section id="deps">
+        <p class="eyebrow">Module dependencies</p>
+        <h2>The compose graph (acyclic by construction).</h2>
+        <p>
+          <code>startDaemon</code> instantiates eight modules in this order. The
+          integration test harness composes six of them with test-friendly
+          substitutions and skips two that don't make sense in tests
+          (<code>observability</code> needs a controllable clock; <code>model-proxy</code>
+          isn't exercised by FakeRunner-based tests). Composition parity between
+          test and prod is structural, not aspirational.
+        </p>
+
+        <div class="figure">
+          <svg viewBox="0 0 980 520" role="img" aria-labelledby="dep-title dep-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="dep-title">Module dependency graph</title>
+            <desc id="dep-desc">Acyclic graph showing eight composed modules and their dependencies. Observability sits at the bottom; channels and mail sit at the top.</desc>
+            <defs>
+              <marker id="darrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#6e6a5c"/>
+              </marker>
+            </defs>
+            <style>
+              .nlbl { font: 600 13px var(--sans, sans-serif); fill: #1a1a1a; }
+              .nsub { font: 400 10.5px var(--mono, monospace); fill: #6e6a5c; }
+              .layer { font: 700 10.5px var(--mono, monospace); fill: #97927f; letter-spacing: 0.12em; text-transform: uppercase; }
+            </style>
+
+            <!-- layer labels -->
+            <text x="20" y="60"  class="layer">Top</text>
+            <text x="20" y="200" class="layer">Compose</text>
+            <text x="20" y="340" class="layer">Mid</text>
+            <text x="20" y="480" class="layer">Foundations</text>
+
+            <!-- nodes (8 total) -->
+            <!-- foundation -->
+            <rect x="380" y="450" width="200" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="480" y="472" class="nlbl" text-anchor="middle">observability</text>
+            <text x="480" y="488" class="nsub" text-anchor="middle">Clock · Logger · log file</text>
+
+            <!-- mid layer: storage, messaging, model-proxy -->
+            <rect x="120" y="320" width="180" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="210" y="342" class="nlbl" text-anchor="middle">storage</text>
+            <text x="210" y="358" class="nsub" text-anchor="middle">Db · migrations · repos</text>
+
+            <rect x="380" y="320" width="200" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="480" y="342" class="nlbl" text-anchor="middle">messaging</text>
+            <text x="480" y="358" class="nsub" text-anchor="middle">EventBus</text>
+
+            <rect x="660" y="320" width="200" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="760" y="342" class="nlbl" text-anchor="middle">model-proxy</text>
+            <text x="760" y="358" class="nsub" text-anchor="middle">TokenRegistry · adapters</text>
+
+            <!-- compose layer: mcp-mail, session-management -->
+            <rect x="200" y="180" width="220" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="310" y="202" class="nlbl" text-anchor="middle">mcp-mail</text>
+            <text x="310" y="218" class="nsub" text-anchor="middle">Dispatcher · ListRegistry · Server</text>
+
+            <rect x="540" y="180" width="220" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="650" y="202" class="nlbl" text-anchor="middle">session-management</text>
+            <text x="650" y="218" class="nsub" text-anchor="middle">SessionManager · Timer · Runner</text>
+
+            <!-- top: channels, mail -->
+            <rect x="220" y="40" width="220" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="330" y="62" class="nlbl" text-anchor="middle">channels</text>
+            <text x="330" y="78" class="nsub" text-anchor="middle">Registry · ChatServer (WS)</text>
+
+            <rect x="540" y="40" width="220" height="50" rx="6" fill="#fff" stroke="#1d4e89"/>
+            <text x="650" y="62" class="nlbl" text-anchor="middle">mail</text>
+            <text x="650" y="78" class="nsub" text-anchor="middle">QueryServer (WS)</text>
+
+            <!-- arrows: storage -> observability -->
+            <line x1="210" y1="370" x2="430" y2="450" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <!-- messaging -> observability -->
+            <line x1="480" y1="370" x2="480" y2="450" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <!-- model-proxy -> observability -->
+            <line x1="760" y1="370" x2="540" y2="450" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+
+            <!-- mcp-mail -> storage / messaging / observability -->
+            <line x1="270" y1="230" x2="220" y2="320" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <line x1="350" y1="230" x2="450" y2="320" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <line x1="280" y1="230" x2="430" y2="450" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+
+            <!-- session-management -> messaging / observability -->
+            <line x1="600" y1="230" x2="510" y2="320" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <line x1="700" y1="230" x2="540" y2="450" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+
+            <!-- channels -> messaging / mcp-mail / storage / observability -->
+            <line x1="320" y1="90" x2="320" y2="180" stroke="#6e6a5c" stroke-width="1.2" marker-end="url(#darrow)"/>
+            <line x1="350" y1="90" x2="450" y2="320" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+            <line x1="290" y1="90" x2="220" y2="320" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+
+            <!-- mail -> storage / observability -->
+            <line x1="640" y1="90" x2="270" y2="320" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+            <line x1="660" y1="90" x2="510" y2="450" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#darrow)"/>
+
+            <!-- legend -->
+            <g transform="translate(700, 470)">
+              <line x1="0" y1="0" x2="30" y2="0" stroke="#6e6a5c" stroke-width="1.2"/>
+              <text x="36" y="4" class="nsub">primary dep</text>
+              <line x1="0" y1="18" x2="30" y2="18" stroke="#6e6a5c" stroke-width="1" stroke-dasharray="3 3"/>
+              <text x="36" y="22" class="nsub">implicit (logger/clock)</text>
+            </g>
+          </svg>
+          <p class="caption">
+            <strong>Figure 3.</strong> Direction is "depends on." No cycles. The
+            <em>channels → mcp-mail</em> edge is the notable one: it forces inbound
+            CLI chat to go through the same dispatcher entry point as agent-originated
+            mail, which is what makes the substrate uniform.
+          </p>
+        </div>
+      </section>
+
+      <!-- ====== RUNTIME & CONFIG ====== -->
+      <section id="runtime">
+        <p class="eyebrow">Runtime &amp; configuration</p>
+        <h2>What the running system actually looks like.</h2>
+
+        <h4>Processes</h4>
+        <p>
+          One long-running daemon per host (started by <code>teamroom serve</code>) and
+          one container per agent, kept warm across turns and torn down on idle.
+          Channel gateways (the CLI today; future Telegram, Slack) are separate
+          short-lived processes that connect to the daemon's WebSockets.
+        </p>
+
+        <h4>Ports</h4>
+        <table>
+          <thead><tr><th>Port file</th><th>Surface</th><th>Protocol</th><th>Bind</th></tr></thead>
+          <tbody>
+            <tr><td><code>data/ports/mail-mcp.port</code></td><td>Agent-facing MCP</td><td>HTTP · MCP SDK <code>StreamableHTTP</code></td><td>(daemon-bound)</td></tr>
+            <tr><td><code>data/ports/chat.port</code></td><td>Channel clients (CLI now; future TG/Slack)</td><td>WebSocket (bidirectional)</td><td><code>127.0.0.1</code></td></tr>
+            <tr><td><code>data/ports/mail.port</code></td><td>Mail read queries (<code>inbox</code>, <code>thread</code>)</td><td>WebSocket (req/res)</td><td><code>127.0.0.1</code></td></tr>
+            <tr><td>(no port file)</td><td>Local model proxy</td><td>HTTP · OS-assigned port</td><td><code>127.0.0.1</code></td></tr>
+          </tbody>
+        </table>
+        <p class="note">
+          Port files exist so CLI tools and channel gateways can discover the
+          daemon without configuration. The model-proxy port is intentionally
+          private — only the daemon spawns containers that need it, and it injects
+          the URL via env at spawn time.
+        </p>
+
+        <h4>Container mounts</h4>
+        <table>
+          <thead><tr><th>Mount</th><th>Mode</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>/AGENTS.md</code></td><td>RW</td><td>System prompt; M2 changed RO → RW so future self-improvement (M10) can write here</td></tr>
+            <tr><td><code>/store</code></td><td>RW</td><td>Per-agent persistent scratch · Anthropic session-resume sidecar lives here</td></tr>
+            <tr><td><code>/codebase</code></td><td>RW (optional)</td><td>Filtered out at boot if not configured / missing — daemon degrades to mail-only capability gracefully</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Container env (set by the daemon at spawn)</h4>
+        <pre><code>TEAMROOM_PROVIDER       = anthropic | lm-studio | ollama
+TEAMROOM_MODEL          = claude-opus-4-7 | openai/gpt-oss-20b | …
+TEAMROOM_MODEL_BASE_URL = http://host.docker.internal:&lt;proxy-port&gt;
+TEAMROOM_MODEL_API_TOKEN= &lt;ephemeral routing token, evicted at turn end&gt;
+TEAMROOM_MCP_URL        = http://host.docker.internal:&lt;mail-mcp-port&gt;
+TEAMROOM_MCP_TOKEN      = &lt;per-container MCP auth token&gt;</code></pre>
+
+        <h4>Host env (<code>.env</code>, sourced by <code>teamroom serve</code>)</h4>
+        <table>
+          <thead><tr><th>Variable</th><th>Required</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>LM_STUDIO_API_TOKEN</code></td><td>for studio-assistant</td><td>LM Studio bearer (proxy substitutes)</td></tr>
+            <tr><td><code>LM_STUDIO_BASE_URL</code></td><td>—</td><td>Default <code>http://localhost:1234</code></td></tr>
+            <tr><td><code>OLLAMA_BASE_URL</code></td><td>—</td><td>Default <code>http://localhost:11434</code></td></tr>
+            <tr><td><code>CLAUDE_CODE_OAUTH_TOKEN</code></td><td>OR</td><td>Anthropic via Claude Code subscription (preferred)</td></tr>
+            <tr><td><code>ANTHROPIC_API_KEY</code></td><td>OR</td><td>Anthropic via metered API key (fallback)</td></tr>
+            <tr><td><code>TEAMROOM_SESSION_IDLE_MINUTES</code></td><td>—</td><td>Container idle close-stdin · default <code>30</code></td></tr>
+            <tr><td><code>TEAMROOM_MAX_MAILS_PER_THREAD</code></td><td>—</td><td>Dispatcher cap · default <code>40</code></td></tr>
+            <tr><td><code>TEAMROOM_CODEBASE_PATH</code></td><td>—</td><td>Absolute path mounted at <code>/codebase</code></td></tr>
+            <tr><td><code>TEAMROOM_USER</code></td><td>—</td><td>External-id for <code>channel:cli:&lt;user&gt;</code></td></tr>
+          </tbody>
+        </table>
+
+        <h4>Per-agent folder shape</h4>
+        <pre><code>agents/
+  studio-assistant/
+    agent.yaml      # name, provider, model, image_tag, subscriptions, allowed_tools
+    AGENTS.md       # system prompt (mounted into the container at /AGENTS.md)
+    Dockerfile      # builds teamroom-agent-studio-assistant:latest
+    store/          # per-agent persistent scratch (mounted at /store)</code></pre>
+
+        <pre><code># agents/studio-assistant/agent.yaml
+name: studio-assistant
+provider: lm-studio
+model: openai/gpt-oss-20b
+image_tag: teamroom-agent-studio-assistant:latest
+subscriptions: []
+
+# agents/claude-assistant/agent.yaml
+name: claude-assistant
+provider: anthropic
+model: claude-opus-4-7
+image_tag: teamroom-agent-claude-assistant:latest
+subscriptions: []
+allowed_tools: [Read, Write, Edit, Bash, Glob, Grep]</code></pre>
+
+        <h4>CLI surface</h4>
+        <table>
+          <thead><tr><th>Command</th><th>Purpose</th><th>Transport</th></tr></thead>
+          <tbody>
+            <tr><td><code>teamroom serve</code></td><td>Start the daemon (foreground, Ctrl+C stops)</td><td>process</td></tr>
+            <tr><td><code>teamroom status</code></td><td>PID + each port file + simple liveness</td><td>reads <code>data/ports/</code></td></tr>
+            <tr><td><code>teamroom send &lt;agent&gt; "&lt;text&gt;"</code></td><td>Fire-and-forget single message</td><td>chat WebSocket</td></tr>
+            <tr><td><code>teamroom chat &lt;agent&gt;</code></td><td>Interactive REPL · threadId reused for the session</td><td>chat WebSocket</td></tr>
+            <tr><td><code>teamroom inbox &lt;agent&gt;</code></td><td>Print agent's inbox as JSON-Lines</td><td>mail WebSocket</td></tr>
+            <tr><td><code>teamroom thread &lt;id&gt;</code></td><td>Print a thread by ID as JSON-Lines</td><td>mail WebSocket</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ====== TIMELINE ====== -->
+      <section id="timeline">
+        <p class="eyebrow">Milestone timeline</p>
+        <h2>Six milestones in five days, then a deliberate cool-down.</h2>
+        <p>
+          Each milestone established something load-bearing and then froze it
+          into an as-built. The cadence was unusually fast because each ship was
+          deliberately narrow — see <code>docs/retros/</code> for the per-milestone
+          reflection on what worked and what bit.
+        </p>
+
+        <div class="figure">
+          <svg viewBox="0 0 1000 360" role="img" aria-labelledby="tl-title tl-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="tl-title">Milestone timeline</title>
+            <desc id="tl-desc">Horizontal timeline showing M1 through M5 (shipped), M5.1 (next), and M6 through M10 (future).</desc>
+            <style>
+              .ml-name  { font: 600 12px var(--sans, sans-serif); fill: #1a1a1a; }
+              .ml-date  { font: 400 10px var(--mono, monospace); fill: #6e6a5c; }
+              .ml-tag   { font: 700 10px var(--mono, monospace); letter-spacing: 0.08em; text-transform: uppercase; }
+              .ml-blurb { font: 400 11px var(--sans, sans-serif); fill: #2a2a2a; }
+            </style>
+
+            <!-- timeline axis -->
+            <line x1="40" y1="180" x2="960" y2="180" stroke="#d6d1c2" stroke-width="1.2"/>
+            <polygon points="960,180 952,176 952,184" fill="#d6d1c2"/>
+
+            <!-- shipped tick marks (M1..M5: tightly clustered) -->
+            <!-- positions x: M1=80, M2=170, M3=260, M4=350, M4.5=440, M5=510, M5.1=620, M6=720, M7=800, M8=860, M9=910, M10=945 -->
+
+            <!-- shipped band -->
+            <rect x="40" y="170" width="490" height="20" fill="#e3ecf5" opacity="0.6"/>
+            <text x="40" y="160" class="ml-tag" fill="#1d4e89">SHIPPED · 2026-04-18 → 04-22</text>
+
+            <!-- next band -->
+            <rect x="540" y="170" width="120" height="20" fill="#fbf2ec" opacity="0.6"/>
+            <text x="540" y="160" class="ml-tag" fill="#c0532f">NEXT</text>
+
+            <!-- future band -->
+            <rect x="670" y="170" width="290" height="20" fill="#ece4f3" opacity="0.6"/>
+            <text x="670" y="160" class="ml-tag" fill="#6b4d8a">FUTURE</text>
+
+            <!-- M1 above -->
+            <line x1="80" y1="170" x2="80" y2="120" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="80" cy="180" r="4" fill="#1d4e89"/>
+            <text x="80" y="110" class="ml-name" text-anchor="middle">M1</text>
+            <text x="80" y="95"  class="ml-date" text-anchor="middle">04-18</text>
+            <text x="80" y="200" class="ml-blurb" text-anchor="middle">one agent</text>
+            <text x="80" y="214" class="ml-blurb" text-anchor="middle">that works</text>
+
+            <!-- M2 below -->
+            <line x1="170" y1="190" x2="170" y2="240" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="170" cy="180" r="4" fill="#1d4e89"/>
+            <text x="170" y="258" class="ml-name" text-anchor="middle">M2</text>
+            <text x="170" y="272" class="ml-date" text-anchor="middle">04-19</text>
+            <text x="170" y="288" class="ml-blurb" text-anchor="middle">model proxy</text>
+            <text x="170" y="302" class="ml-blurb" text-anchor="middle">multi-provider</text>
+
+            <!-- M3 above -->
+            <line x1="260" y1="170" x2="260" y2="120" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="260" cy="180" r="4" fill="#1d4e89"/>
+            <text x="260" y="110" class="ml-name" text-anchor="middle">M3</text>
+            <text x="260" y="95"  class="ml-date" text-anchor="middle">04-20</text>
+            <text x="260" y="200" class="ml-blurb" text-anchor="middle">team substrate</text>
+            <text x="260" y="214" class="ml-blurb" text-anchor="middle">(narrowed)</text>
+
+            <!-- M4 below -->
+            <line x1="350" y1="190" x2="350" y2="240" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="350" cy="180" r="4" fill="#1d4e89"/>
+            <text x="350" y="258" class="ml-name" text-anchor="middle">M4</text>
+            <text x="350" y="272" class="ml-date" text-anchor="middle">04-21</text>
+            <text x="350" y="288" class="ml-blurb" text-anchor="middle">agent mail on</text>
+            <text x="350" y="302" class="ml-blurb" text-anchor="middle">event-bus backbone</text>
+
+            <!-- M4.5 above -->
+            <line x1="440" y1="170" x2="440" y2="120" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="440" cy="180" r="4" fill="#1d4e89"/>
+            <text x="440" y="110" class="ml-name" text-anchor="middle">M4.5</text>
+            <text x="440" y="95"  class="ml-date" text-anchor="middle">04-22</text>
+            <text x="440" y="200" class="ml-blurb" text-anchor="middle">channels +</text>
+            <text x="440" y="214" class="ml-blurb" text-anchor="middle">compose pattern</text>
+
+            <!-- M5 below -->
+            <line x1="510" y1="190" x2="510" y2="240" stroke="#1d4e89" stroke-width="1.2"/>
+            <circle cx="510" cy="180" r="5" fill="#1d4e89" stroke="#fff" stroke-width="2"/>
+            <text x="510" y="258" class="ml-name" text-anchor="middle">M5</text>
+            <text x="510" y="272" class="ml-date" text-anchor="middle">04-22</text>
+            <text x="510" y="288" class="ml-blurb" text-anchor="middle">LangGraph runtime +</text>
+            <text x="510" y="302" class="ml-blurb" text-anchor="middle">MCP filesystem</text>
+
+            <!-- M5.1 above (NEXT) -->
+            <line x1="620" y1="170" x2="620" y2="120" stroke="#c0532f" stroke-width="1.4"/>
+            <circle cx="620" cy="180" r="5" fill="#c0532f"/>
+            <text x="620" y="110" class="ml-name" text-anchor="middle" fill="#c0532f">M5.1</text>
+            <text x="620" y="95"  class="ml-date" text-anchor="middle">next</text>
+            <text x="620" y="200" class="ml-blurb" text-anchor="middle" fill="#c0532f">run_shell + git + rg</text>
+
+            <!-- M6 below -->
+            <line x1="720" y1="190" x2="720" y2="240" stroke="#6b4d8a" stroke-width="1.2"/>
+            <circle cx="720" cy="180" r="4" fill="#6b4d8a"/>
+            <text x="720" y="258" class="ml-name" text-anchor="middle" fill="#6b4d8a">M6</text>
+            <text x="720" y="272" class="ml-date" text-anchor="middle">future</text>
+            <text x="720" y="288" class="ml-blurb" text-anchor="middle">multi-harness</text>
+            <text x="720" y="302" class="ml-blurb" text-anchor="middle">DeepAgents · Hermes</text>
+
+            <!-- M7 above -->
+            <line x1="800" y1="170" x2="800" y2="120" stroke="#6b4d8a" stroke-width="1.2"/>
+            <circle cx="800" cy="180" r="4" fill="#6b4d8a"/>
+            <text x="800" y="110" class="ml-name" text-anchor="middle" fill="#6b4d8a">M7</text>
+            <text x="800" y="95"  class="ml-date" text-anchor="middle">future</text>
+            <text x="800" y="200" class="ml-blurb" text-anchor="middle">per-agent</text>
+            <text x="800" y="214" class="ml-blurb" text-anchor="middle">memory</text>
+
+            <!-- M8 below -->
+            <line x1="860" y1="190" x2="860" y2="240" stroke="#6b4d8a" stroke-width="1.2"/>
+            <circle cx="860" cy="180" r="4" fill="#6b4d8a"/>
+            <text x="860" y="258" class="ml-name" text-anchor="middle" fill="#6b4d8a">M8</text>
+            <text x="860" y="272" class="ml-date" text-anchor="middle">future</text>
+            <text x="860" y="288" class="ml-blurb" text-anchor="middle">scheduling</text>
+
+            <!-- M9 above -->
+            <line x1="910" y1="170" x2="910" y2="120" stroke="#6b4d8a" stroke-width="1.2"/>
+            <circle cx="910" cy="180" r="4" fill="#6b4d8a"/>
+            <text x="910" y="110" class="ml-name" text-anchor="middle" fill="#6b4d8a">M9</text>
+            <text x="910" y="200" class="ml-blurb" text-anchor="middle">evals</text>
+
+            <!-- M10 below -->
+            <line x1="950" y1="190" x2="950" y2="240" stroke="#6b4d8a" stroke-width="1.2"/>
+            <circle cx="950" cy="180" r="4" fill="#6b4d8a"/>
+            <text x="950" y="258" class="ml-name" text-anchor="middle" fill="#6b4d8a">M10</text>
+            <text x="950" y="288" class="ml-blurb" text-anchor="middle">ceremonies +</text>
+            <text x="950" y="302" class="ml-blurb" text-anchor="middle">self-learning</text>
+          </svg>
+          <p class="caption">
+            <strong>Figure 4.</strong> The original M1-context milestone numbering changed
+            during execution: M3 sharpened the "team substrate" thesis into "agent mail
+            on an event-bus backbone" — which made mail (M4) the obvious next foundation.
+            Memory and scheduling slid right because they want the communication
+            substrate underneath them, not next to them.
+          </p>
+        </div>
+
+        <h4>Notable shape changes since the original plan</h4>
+        <ul class="bare">
+          <li><strong>M3 narrowed.</strong> The original "team substrate" milestone fanned out into too many subsystems; it shipped narrowed, with mail as a separate thicker M4.</li>
+          <li><strong>M4.5 inserted.</strong> The mail substrate from M4 exposed an inconsistency between test composition and prod composition; M4.5 was the "fix the harness so this can never recur" milestone, plus the channel-architecture refactor and the MCP-SDK retrofit.</li>
+          <li><strong>M5 confirmed the direction.</strong> The LangGraph runtime is now <em>the</em> shape for non-Anthropic workers, not a future direction. The two-worker shape (Anthropic + LangGraph) replaces the single-runtime placeholder from M1.</li>
+          <li><strong>M6 added (multi-harness).</strong> Originally implicit; promoted to a milestone once DeepAgents and Hermes appeared as concrete external harnesses worth integrating.</li>
+        </ul>
+      </section>
+
+      <!-- ====== CAPABILITIES ====== -->
+      <section id="capabilities">
+        <p class="eyebrow">Capabilities today</p>
+        <h2>What works now, what's deliberately deferred.</h2>
+        <p>
+          The honest snapshot. Things on the right are not "broken" — most are
+          backlog items with explicit triggers (a concrete need that hasn't
+          arrived yet). The roadmap's <code>## Backlog</code> section has the
+          full, current list with triggers.
+        </p>
+
+        <div class="two-col">
+          <div class="col-good">
+            <h3>Can do today</h3>
+            <ul class="bare">
+              <li>Run two agents (<code>studio-assistant</code> on LM Studio, <code>claude-assistant</code> on Anthropic) concurrently against the same daemon.</li>
+              <li>Send a CLI message to an agent via <code>chat</code>, get a reply, and continue the thread interactively.</li>
+              <li>Have agents send mail to each other (<code>mail.send</code>, <code>mail.reply</code>, <code>cc</code>, threading).</li>
+              <li>Read, write, edit, list, and search files under <code>/codebase</code> and <code>/store</code> from the LangGraph agent (via in-container filesystem MCP child).</li>
+              <li>Persist Claude session resume state across container turns (Anthropic worker, sidecar in <code>/store</code>).</li>
+              <li>Hold bounded conversation context across wakes within a container (LangGraph worker, cap 40, trimmed at HumanMessage boundaries).</li>
+              <li>Route every model call through the credential proxy — containers never see real API keys.</li>
+              <li>Inspect the daemon: PID + ports via <code>teamroom status</code>, inbox via <code>teamroom inbox</code>, threads via <code>teamroom thread</code>.</li>
+              <li>Mailing-list infrastructure exists (<code>list:&lt;name&gt;</code> addressing, registry, trigger listener) and is wired end-to-end mechanically.</li>
+              <li>Run the integration harness with composition parity to production (no mocks; real in-memory implementations of every effectful dep).</li>
+            </ul>
+          </div>
+
+          <div class="col-warn">
+            <h3>Deferred / known limits</h3>
+            <ul class="bare">
+              <li><strong>Shell, git, ripgrep tooling</strong> — M5.1, immediately next. Filesystem MCP gives filename search but not content grep.</li>
+              <li><strong>Per-agent memory</strong> — M7. Until then, "memory" means "the bounded message array inside one container's lifetime."</li>
+              <li><strong>Scheduling / cron</strong> — M8.</li>
+              <li><strong>Evals framework</strong> — M9. Today: unit + manual acceptance only.</li>
+              <li><strong>Self-learning + ceremonies</strong> — M10.</li>
+              <li><strong>Second channel</strong> (Telegram, Slack, voice) — deferred until a concrete need; CLI is the only channel today.</li>
+              <li><strong>Mailing-list publishers</strong> — registry works but <code>list:harness-activity</code> is silent because turn-event publication isn't wired.</li>
+              <li><strong>Durable event bus</strong> — current bus is in-process and ephemeral; crashes drop events. Mail bodies are durable (DB).</li>
+              <li><strong>Streaming model responses</strong> — proxy buffers full responses to extract usage. SSE pipe deferred.</li>
+              <li><strong>Session reattach on daemon restart</strong> — restart kills live containers; mid-turn state is lost (mail content preserved).</li>
+              <li><strong>Mail attachments / structured payloads</strong> — body-only TEXT today. JSON blobs and file refs deferred.</li>
+              <li><strong>Per-agent container idle tuning</strong> — single global default (30 min); per-agent override deferred.</li>
+              <li><strong>Multi-model per agent</strong> — agents declare one model in <code>agent.yaml</code>; per-request selection deferred until a concrete need.</li>
+              <li><strong>Live-model E2E test</strong> — manual acceptance only; the fix is real evals (M9).</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== POINTERS ====== -->
+      <section id="next">
+        <p class="eyebrow">Where to go next</p>
+        <h2>If this page is your re-entry, these are the next reads.</h2>
+        <p>
+          This file is a snapshot. The live source of truth is split across a
+          handful of curated docs. Open them in roughly this order when you
+          re-engage with the project.
+        </p>
+
+        <div class="pointer-grid">
+          <a class="pointer" href="../AGENTS.md">
+            <span class="kind">read first</span>
+            <span class="name">AGENTS.md</span>
+            <span class="desc">Standing instructions for AI assistants. Reading order, principles, working practices, the <code>## Related</code> README convention.</span>
+          </a>
+          <a class="pointer" href="memory/MEMORY.md">
+            <span class="kind">bias layer</span>
+            <span class="name">docs/memory/MEMORY.md</span>
+            <span class="desc">The session-start memory index. Each entry carries the <em>why</em>, not just the rule.</span>
+          </a>
+          <a class="pointer" href="ways-of-working.md">
+            <span class="kind">process</span>
+            <span class="name">docs/ways-of-working.md</span>
+            <span class="desc">Reflection rhythms, knowledge-base model, memory-type mapping, document inventory.</span>
+          </a>
+          <a class="pointer" href="roadmap.md">
+            <span class="kind">live · what's next</span>
+            <span class="name">docs/roadmap.md</span>
+            <span class="desc">Living milestone table + backlog with triggers. Updated at every milestone close.</span>
+          </a>
+          <a class="pointer" href="as-built/">
+            <span class="kind">live · what shipped</span>
+            <span class="name">docs/as-built/</span>
+            <span class="desc">One frozen as-built per milestone. The architectural reality of each ship — never edited after close.</span>
+          </a>
+          <a class="pointer" href="retros/">
+            <span class="kind">reflection</span>
+            <span class="name">docs/retros/</span>
+            <span class="desc">Per-milestone retro: keep doing · stop or change · promote · commit to memory.</span>
+          </a>
+          <a class="pointer" href="runbooks/">
+            <span class="kind">how-to</span>
+            <span class="name">docs/runbooks/</span>
+            <span class="desc">Step-by-step procedures: anthropic-auth, smoke-test, running-tests, inspecting-bus-events, agent-onboarding, adding-a-migration.</span>
+          </a>
+          <a class="pointer" href="tabled.md">
+            <span class="kind">parking lot</span>
+            <span class="name">docs/tabled.md</span>
+            <span class="desc">Epiphanies and follow-ups captured mid-task without derailing it. Swept at every milestone close.</span>
+          </a>
+          <a class="pointer" href="../src/README.md">
+            <span class="kind">codebase</span>
+            <span class="name">src/README.md</span>
+            <span class="desc">Module index. Every multi-file module under <code>src/</code> has a README — follow the <code>## Related</code> links to navigate the knowledge graph.</span>
+          </a>
+          <a class="pointer" href="../team-room-context.md">
+            <span class="kind">history</span>
+            <span class="name">team-room-context.md</span>
+            <span class="desc">Frozen original brainstorm. The vision and motivation that shaped M1. Don't edit.</span>
+          </a>
+        </div>
+
+        <p class="note" style="margin-top: 28px;">
+          This page lives at <code>docs/architecture.html</code>. If you're reading
+          it after a long gap and something here is wrong, the as-builts and
+          roadmap are correct — re-cut the page rather than patching it.
+        </p>
+      </section>
+
+    </article>
+  </main>
+</div>
+</body>
+</html>

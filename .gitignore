@@ -8,3 +8,4 @@ agents/*/store/*
 .DS_Store
 .env
 .env.local
+.dmux/
