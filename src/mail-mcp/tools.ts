@@ -46,6 +46,9 @@ export class MailMcpTools {
 
   get(ctx: ToolContext, input: { id: string }): Message {
     this.activity(ctx, "mail.get");
+    if (!input.id) {
+      throw new Error("mail_get requires an 'id' parameter. First call mail_list() to see available messages, then call mail_get({id: '...'}) with the id from the result.");
+    }
     return this.scopedGet(ctx, input.id);
   }
 

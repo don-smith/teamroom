@@ -44,7 +44,7 @@ const MAIL_TOOL_DESCRIPTORS = [
   },
   {
     name: "mail.get",
-    description: "Get a single mail by id from your inbox.",
+    description: "Get a single mail by id from your inbox. Call mail.list first to obtain the message id.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" } },

@@ -29,6 +29,7 @@ async function callMcp(args: {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      accept: "application/json, text/event-stream",
       "x-teamroom-mcp-token": args.mcpToken,
     },
     body: JSON.stringify({
@@ -91,7 +92,7 @@ export function buildPiMailTools(args: BuildPiMailToolsArgs): ToolDefinition[] {
       name: "mail_get",
       mcpName: "mail.get",
       label: "Get mail",
-      description: "Get a single Team Room mail by id from your inbox.",
+      description: "Get a single Team Room mail by id from your inbox. Call mail_list first to obtain message ids.",
       parameters: Type.Object({ id: Type.String() }, { additionalProperties: false }),
     }),
     tool({

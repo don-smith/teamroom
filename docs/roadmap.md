@@ -12,12 +12,12 @@
 | M4 | Agent mail — email on an event-bus backbone | Shipped | 2026-04-21 | [As-built](as-built/2026-04-21-teamroom-m4.md) |
 | M4.5 | AI-native harness — channel architecture + composition refactor + MCP SDK retrofit | Shipped | 2026-04-22 | [As-built](as-built/2026-04-22-teamroom-m4.5.md) |
 | M5 | LangGraph agent runtime — studio-assistant on LangGraph + MCP filesystem | Shipped | 2026-04-22 | [As-built](as-built/2026-04-22-teamroom-m5.md) |
-| **M5.1** | **LangGraph filesystem/shell tooling — hand-rolled `run_shell` + `apk add ripgrep git`** | **Next** | — | Mini-milestone immediately following M5: gives the LangGraph agent a bash/git/rg capability surface the MCP filesystem server alone doesn't cover. Scoped to a single hand-rolled LangChain `tool()` with timeout + output cap + stdin-closed + cwd-pinned safety rails, plus two binaries added to the studio-assistant image. |
+| M5.1 | LangGraph filesystem/shell tooling (LangGraph runtime removed — not applicable) | **Obsoleted** | — | LangGraph runtime was removed during persona realignment; this work is no longer relevant. |
 | M6 | DeepAgents runtime + Archie architect | Shipped | 2026-06-07 | [As-built](as-built/2026-06-07-teamroom-m6.md) |
-| Persona <br>realignment | 4 core agents, 2 runtimes, OpenRouter-only | Shipped | 2026-06-18 | (plan in `.myflow/artifacts/plans/`) |
+| Persona <br>realignment | 4 core agents, 2 runtimes, OpenRouter-only | Shipped | 2026-06-19 | [As-built](as-built/2026-06-19-teamroom-persona-realignment.md) |
 | M7 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4), AI-native harness (M4.5), the LangGraph runtime (M5), and Archie/DeepAgents (M6). Memory substrate is the load-bearing dependency for durable agent personas — once it lands, personas can hold state across containers and the "architect has seen this codebase for weeks" type of role becomes real. |
 | M8 | Scheduling | Future | — | Originally M5 in `team-room-context §7`. |
-| M9 | Evaluations | Future | — | Originally M6 in `team-room-context §7`. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer — called out in M5 as-built §5 under known limitations. |
+| M9 | Evaluations — agent-level + process-level, eval provider selection | Future | — | Originally M6 in `team-room-context §7`. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer. Encompasses agent-level evals (task completion, response quality) and process-level evals (pipeline effectiveness). Eval provider selection (MLflow, LangSmith, or other) is an open decision. |
 | M10 | Team ceremonies + self-learning | Future | — | Originally M7 in `team-room-context §7`. |
 
 ## Why this file exists
@@ -56,9 +56,8 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 - **Cap-warning feature.** When a thread nears the cap (default 40 post-M4.5), agents get no signal. The last 10 messages should include a `warning: "thread_approaching_cap"` + `messagesRemaining` field in `mail.send` / `mail.reply` responses so agents can wrap up gracefully. Trigger: sooner is better; ~50 lines + test + AGENTS.md update.
 - **`ccAll` default on reply.** When a thread has multiple participants, `mail.reply` should default `ccAll: true` so secondary participants aren't silently dropped. Trigger: same milestone as cap-warning.
 - **CLI `cc` support.** The `teamroom chat` REPL has no way to set `cc` on a publish, even though the WebSocket protocol accepts `cc: string[]`. A slash-command or header-style syntax needed. Trigger: human-driven multi-party threads.
-- **System prompts for mail-aware agents.** Claude-assistant and other agents need system prompts that explicitly teach inbox-check → reply → peer-mail patterns. Content evolves with use; expect prompt iteration over several milestones.
-- **Model-size vs. tool-surface floor characterization.** Gemma-4-e4b (4B) couldn't reliably drive the 20-tool ReAct surface exposed to studio-assistant (7 mail + 13 filesystem); GPT-OSS-20b handled it cleanly. Somewhere between 4B and 20B there's a reliability floor we haven't characterized. Trigger: next time we add a small-model agent, or when evals (M9) land and we can measure this quantitatively.
-- **`WAKE_PROMPT` duplication in the in-process messages array.** Every wake pushes the same literal `HumanMessage(WAKE_PROMPT)`. After N wakes the array contains N identical directives. Not observed as a problem in M5 acceptance (GPT-OSS-20b), but a candidate cause if multi-turn small-model flows start failing. Fix candidates: per-wake trace id in the prompt, or fresh messages array per wake. Trigger: observed failure, or adding a smaller model.
+- **System prompts for mail-aware agents.** All agents need system prompts that explicitly teach inbox-check → reply → peer-mail patterns. Content evolves with use; expect prompt iteration over several milestones.
+
 
 ### Agent personas and runtimes
 
@@ -66,15 +65,16 @@ Team Room is premised on runtime-agnostic personas: different implementations (C
 
 Named personas we've identified so far. Each is a slot to fill, not a build task on its own — they land as the surrounding substrate (memory, scheduling) enables them.
 
-- **Archie — the architect.** Holds and tracks the project's architecture, notices smells, suggests improvements over time. Candidate first real agent role; originally tabled during M4.5 retro reflection and now targeted for M6 on DeepAgents.
+- **Archie — the architect.** ✅ **Shipped (M6).** Holds and tracks the project's architecture, notices smells, suggests improvements over time.
+- **Doc — the doctor / health monitor.** ✅ **Shipped (persona realignment).** Runs tests, checks for failures, keeps the team informed.
+- **Micah — the mechanic / coder.** ✅ **Shipped (persona realignment).** Implements changes, writes tests, fixes bugs. Renamed from pi-coder.
+- **Hisa — the historian.** Partially filled by Libby (librarian, shipped in persona realignment). The historian role adds temporality — git archaeology, decision-trace reconstruction, connecting past epiphanies to present constraints. Backed by vector store / graph DB / Super Memory in M7.
 - **Pam — the product manager.**
 - **Dev — the developer.**
 - **Desi — the designer.**
-- **Doc — the QA / tester.**
 - **Eve — the eavesdropper.**
-- **Hisa — the historian.** Complements the as-built / retro practice; formalizing the memory-from-history role once M7 memory lands.
 
-Runtime triggers: M6 lands [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) as the first external-runtime proof. Subsequent runtime additions are individual mini-milestones or follow-ons once the plug-in pattern is proven.
+Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie. Persona realignment narrowed to two runtimes (Pi, DeepAgents). Subsequent runtime additions are individual mini-milestones, evaluated against the two-runtime production shape.
 
 ### Mail substrate evolution
 
@@ -91,14 +91,12 @@ Runtime triggers: M6 lands [DeepAgents](https://docs.langchain.com/oss/javascrip
 - **Model-proxy log readability.** Full request/response bodies in JSONL make the daemon log hard to scan. Options: truncate long fields, verbose-mode flag, `teamroom logs` pretty-printer subcommand, or split high-volume spans to a separate file. Trigger: anyone debugging LLM interactions and finding raw logs unreadable.
 - **`teamroom status` enrichment.** Currently shows PID + port files. Could add active session count, per-agent state, last-mail-delivered timestamp, connected channel clients, MCP server health. Trigger: operators wanting a quick health check beyond log grepping.
 - **Agent-container observability.** When a container runs but produces no visible progress, there's no way to tell why — tool calls are captured at the daemon side but container runtime output (wake received, LLM start/done, errors) is on stderr, returned only at exit. Options: `{type:"log"}` stdout envelopes from the runtime forwarded by the session manager; or an MCP logging tool so agents log structured events from inside the turn. Trigger: next time a container is stuck and the cause is unclear.
-- **Ollama live acceptance.** M5 wired the Ollama adapter end-to-end (runtime branch, daemon adapter, env tunable) but didn't run a live-Ollama acceptance scenario. Test-side coverage protects against code regression; "it actually works against Ollama" is unproven. Trigger: next time someone is set up with Ollama running locally.
 - **Per-wake `AbortSignal` wall-clock cap.** `RECURSION_LIMIT: 50` bounds step count; wall clock can still run away on a slow upstream. Deferred until a runaway is observed in production.
 
 ### Future infrastructure
 
 - **Additional MCP servers (memory, scheduling).** M4 shipped mail MCP; M5 added filesystem MCP (in-container stdio child). Subsequent milestones (M7 memory, M8 scheduling) add their own MCP servers using the same patterns — either daemon-hosted HTTP (shared state) or per-container stdio (agent-local). Trigger: each respective milestone.
 - **Generic `openai-compat` provider.** After M5, `lm-studio` + `ollama` share `OpenAICompatAdapter`. A generic `openai-compat` provider absorbs any third concrete backend (Codex, hosted OpenAI, vLLM, self-hosted proxy). Trigger: third concrete backend forces the shape; `see_only_as_far_as_needed` bars premature extraction.
-- **`LM_STUDIO_API_TOKEN` optionality.** After M5's `OpenAICompatAdapter` with a `none` auth mode, `LM_STUDIO_API_TOKEN` is only meaningful when LM Studio is token-protected. `src/cli/serve.ts` still requires it. Trigger: onboarding friction, or anyone running LM Studio without the token gate.
 - **Mail-MCP / daemon coupling architectural review.** The mail-MCP HTTP server lives in-process with the daemon (same trust boundary). Running it as a separately-addressable surface (for multi-host deployment, or hosting mail without sessions) is unexplored. Trigger: a deployment scenario needing that separation, or a security review of the in-process trust boundary.
 - **Multi-model per-agent and per-request model selection.** Agents will eventually have access to multiple models and choose per-request, with per-agent skill arrays mapping work types to models. `agent.yaml` carries a future-list-shape comment. Trigger: a concrete agent with a real per-call model-selection need.
 - **Streaming model responses.** Proxy buffers the full response before replying (required for `extractUsage`). Streaming requires SSE pipe, usage parsing from `message_stop`, `deadlineMs` in addition to idle timeout, and possible container↔proxy transport re-evaluation. Trigger: an agent surface needing realtime streaming (long completions, voice, etc.).
@@ -106,9 +104,7 @@ Runtime triggers: M6 lands [DeepAgents](https://docs.langchain.com/oss/javascrip
 ### Code quality
 
 - **WebSocket protocol parser dedup.** `src/modules/channels/protocol.ts` and `src/modules/mail/protocol.ts` share validation scaffolding (object-shape narrowing, type-discrimination, error message style). A shared `src/modules/protocol-helpers.ts` with generic narrowing helpers would shrink both. Pure cleanup; no behavior change. Trigger: third WebSocket protocol, or a non-trivial change to one of the two parsers where the duplication makes the diff awkward.
-- **Rewrite `docs/runbooks/agent-onboarding.md` for M5 reality.** Still documents `provider: anthropic | lm-studio` (no `ollama`), wrong CLI subcommands (`teamroom send --agent`, `teamroom tail` — neither exists), references "M3+ skill assignments." Flagged in M5 final code review; user elected to push to the next milestone touching agent onboarding. Trigger: next agent added to the team, or any onboarding friction.
-- **Extract `composeMailTestHarness()` helper.** `src/agent-runtime/langgraph-worker.test.ts` composes its own in-process mail stack (storage + messaging + mcp-mail + MailMcpServer); so do `src/mail-mcp/server.test.ts`, `src/modules/mcp-mail/mcp-mail.test.ts`, and others. `feedback_teamroom_composition_parity.md` memory called out the smell. Pure cleanup; would pay down debt across 5+ call sites. Trigger: next worker test that needs a mail harness, or a non-trivial change to one existing harness that makes divergence a bug risk.
-- **Dead type exports in `src/agent-runtime/anthropic-llm-client.ts`.** `ConversationRole`, `ConversationMessage`, `LlmCreateArgs`, `LlmCreateResult` have no external callers after the M5 AgentWorker refactor. Only `LlmClient` is consumed externally. Remove next time the file is touched.
+- **Extract `composeMailTestHarness()` helper.** `src/mail-mcp/server.test.ts`, `src/modules/mcp-mail/mcp-mail.test.ts`, and others each compose their own in-process mail stack. `feedback_teamroom_composition_parity.md` memory called out the smell. Pure cleanup; would pay down debt across 4+ call sites. Trigger: next test that needs a mail harness, or a non-trivial change to one existing harness.
 
 ## Related
 
