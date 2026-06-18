@@ -9,45 +9,66 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 - **Docker Desktop running.** The test builds agent images and runs containers that reach back to the host via `host.docker.internal`.
 - **`.env` file** at repo root containing `OPENROUTER_API_KEY=<key>`.
 - **Bun 1.3+ installed**; `bun install` has run.
-- **Agent images built** for the agents under test (e.g. `teamroom-agent-micah:latest`, `teamroom-agent-archie:latest`).
+- **Agent images built:** `bun run docker:build` (builds all 4 agents) or individual `bun run docker:build:micah`, etc.
 - **Branch in the state you want to test.** Data is transient.
+
+## Scripts reference
+
+All CLI and Docker commands are available as npm scripts:
+
+| Command | What it does |
+|---------|-------------|
+| `bun run cli serve` | Run the daemon in the foreground |
+| `bun run cli send <agent> <message>` | Send a message to an agent |
+| `bun run cli chat <agent>` | Start an interactive chat session |
+| `bun run cli inbox <agent>` | Show an agent's inbox |
+| `bun run cli thread <id>` | View a thread |
+| `bun run cli status` | Show daemon status |
+| `bun run docker:build` | Build all 4 agent Docker images |
+| `bun run docker:build:micah` | Build Micah's image |
+| `bun run docker:build:doc` | Build Doc's image |
+| `bun run docker:build:archie` | Build Archie's image |
+| `bun run docker:build:libby` | Build Libby's image |
+
+Always run CLI commands from the repo root (`/Users/don/projects/teamroom/teamroom`).
 
 ## Manual smoke test steps
 
-1. **Start the daemon.**
+1. **Build agent images (one-time per code change).**
+   ```bash
+   bun run docker:build
+   ```
+
+2. **Start the daemon (in its own terminal window).**
    ```bash
    rm -rf data
-   bun src/cli/main.ts serve
+   bun run cli serve
    ```
 
-2. **In a second terminal, send messages to each agent.**
+3. **In a second terminal, send test messages to all 4 agents.**
    ```bash
-   bun src/cli/main.ts send micah "Reply with the word 'micah-ok' exactly"
-   bun src/cli/main.ts send archie "Reply with the word 'archie-ok' exactly"
+   bun run cli send micah "Reply with exactly: micah-ok"
+   bun run cli send doc "Reply with exactly: doc-ok"
+   bun run cli send archie "Reply with exactly: archie-ok"
+   bun run cli send libby "Reply with exactly: libby-ok"
    ```
 
-3. **Resolve thread IDs and verify replies.**
+4. **Wait 60-90 seconds, then verify replies.**
    ```bash
-   for agent in micah archie; do
-     echo "=== $agent ==="
-     THREAD_ID=$(sqlite3 data/teamroom.db \
-       "SELECT thread_id FROM messages WHERE agent_id='$agent' AND direction='in' ORDER BY created_at DESC LIMIT 1")
-     bun src/cli/main.ts thread "$THREAD_ID"
-   done
+   sqlite3 data/teamroom.db \
+     "SELECT agent_id, direction, body, created_at FROM messages WHERE direction='out' ORDER BY created_at DESC"
    ```
-   Poll until each thread shows an outbound row containing the expected marker.
+   Each agent should have an `out` row with its marker word.
 
-4. **Verify proxy spans in the daemon log.**
-   ```bash
-   LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
-   grep '"event":"model.call.completed"' "$LOG" | jq .
-   ```
+5. **Stop the daemon** with `Ctrl+C` in its terminal window.
 
-5. **Stop the daemon** with `Ctrl+C`.
+### Alternative: interactive chat
 
-## Interpreting the log
+```bash
+bun run cli chat micah "Check unread mail and report back"
+```
 
-Useful greps:
+## Verifying proxy spans
 
 ```bash
 LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
@@ -55,9 +76,42 @@ LOG=$(ls -1t data/logs/teamroom-*.jsonl | head -1)
 grep '"event":"model\.' "$LOG" | jq .
 # Just the OpenRouter calls:
 grep '"event":"model.call.completed"' "$LOG" | grep '"provider":"openrouter"' | jq .
-# Reconstruct a full turn by traceId:
-grep '"traceId":"<the trace id>"' "$LOG" | jq .
 ```
+
+## Running Team Room as a macOS service (launchd)
+
+To have Team Room start automatically when you log in:
+
+1. **Install the CLI globally** (one-time):
+   ```bash
+   bun run install-cli
+   # This creates ~/.local/bin/teamroom → src/cli/main.ts
+   # The launchd plist expects this exact path
+   ```
+
+2. **Copy and customize the launchd plist:**
+   ```bash
+   cp scripts/teamroom.plist ~/Library/LaunchAgents/dev.teamroom.daemon.plist
+   # Edit the file to match your repo path, username, and teamroom binary location
+   # The plist's ProgramArguments must point at the same binary that install-cli creates
+   ```
+
+3. **Load the service:**
+   ```bash
+   launchctl load ~/Library/LaunchAgents/dev.teamroom.daemon.plist
+   ```
+
+4. **Verify it's running:**
+   ```bash
+   launchctl list | grep teamroom
+   bun run cli status
+   ```
+
+5. **Stop / start / unload:**
+   ```bash
+   launchctl unload ~/Library/LaunchAgents/dev.teamroom.daemon.plist   # stop
+   launchctl load ~/Library/LaunchAgents/dev.teamroom.daemon.plist      # start
+   ```
 
 ## Troubleshooting
 
@@ -74,5 +128,5 @@ grep '"traceId":"<the trace id>"' "$LOG" | jq .
 
 - `docs/runbooks/running-tests.md` — fast in-memory suite; different purpose.
 - `docs/runbooks/manual-cli-testing.md` — run the pieces by hand instead of scripted.
-- `docs/runbooks/anthropic-auth.md` — credential setup (superseded; now just OpenRouter).
 - `docs/specs/2026-04-18-m2-model-abstraction-design.md` — §4 data flow, §6 auth modes, §8 observability.
+- `scripts/teamroom.plist` — launchd service definition for auto-start on macOS.

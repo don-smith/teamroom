@@ -9,3 +9,4 @@ agents/*/store/*
 .env
 .env.local
 .dmux/
+.myflow/

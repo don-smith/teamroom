@@ -11,7 +11,13 @@
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "install-cli": "bun scripts/install-cli.ts ~/.local/bin --force",
+    "cli": "bun src/cli/main.ts",
+    "cli:serve": "bun src/cli/main.ts serve",
+    "docker:build": "bun run docker:build:micah && bun run docker:build:doc && bun run docker:build:archie && bun run docker:build:libby",
+    "docker:build:micah": "docker build -t teamroom-agent-micah:latest -f agents/micah/Dockerfile .",
+    "docker:build:doc": "docker build -t teamroom-agent-doc:latest -f agents/doc/Dockerfile .",
     "docker:build:archie": "test -f vendor/deepagents/libs/deepagents/pyproject.toml || (echo 'DeepAgents submodule not initialized; run: git submodule update --init --recursive' && exit 1) && docker build -t teamroom-agent-archie:latest -f agents/archie/Dockerfile .",
+    "docker:build:libby": "test -f vendor/deepagents/libs/deepagents/pyproject.toml || (echo 'DeepAgents submodule not initialized; run: git submodule update --init --recursive' && exit 1) && docker build -t teamroom-agent-libby:latest -f agents/libby/Dockerfile .",
     "docker:test:archie": "docker run --rm --entrypoint python -v \"$PWD/agents/archie/shim_test.py:/app/shim_test.py\" teamroom-agent-archie:latest -m pytest /app/shim_test.py -v"
   },
   "dependencies": {
@@ -27,6 +33,7 @@
     "chokidar": "^4.0.1",
     "commander": "^12.1.0",
     "openai": "^6.34.0",
+    "pi-mcp-adapter": "^2.10.0",
     "typebox": "^1.1.24",
     "ws": "^8.20.0",
     "yaml": "^2.6.0"
