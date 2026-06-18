@@ -78,17 +78,32 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
         model=make_model(),
         tools=tools,
         system_prompt=LIBBY_PROMPT,
-        backend=FilesystemBackend(allowed_directories=["/codebase", "/store"]),
+        backend=FilesystemBackend(root_dir="/codebase", virtual_mode=False),
         checkpointer=checkpointer,
-        recursion_limit=PER_WAKE_RECURSION_LIMIT,
     )
     return agent, mcp_client
 
 
+def checkpoint_thread_id(envelope: dict) -> str:
+    """Derive a stable thread id from the wake envelope."""
+    events = envelope.get("events", [])
+    for e in events:
+        if isinstance(e, dict) and e.get("type") == "mail.delivered":
+            return e.get("threadId", "") or e.get("messageId", "default")
+    return "default"
+
+
 async def run_wake(agent, event: dict):
-    text = f"You received a Team Room wake notification. Check unread mail first."
-    msg = {"role": "user", "content": text}
-    result = await agent.ainvoke({"messages": [msg]})
+    thread_id = checkpoint_thread_id(event)
+    wake_prompt = "You received a Team Room wake notification. Check unread mail first."
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": PER_WAKE_RECURSION_LIMIT,
+    }
+    result = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": wake_prompt}]},
+        config=config,
+    )
     return result
 
 
