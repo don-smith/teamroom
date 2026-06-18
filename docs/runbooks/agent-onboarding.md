@@ -4,22 +4,16 @@
 
 ## Runtime vs. provider vs. persona
 
-- **Runtime** is how the agent runs inside its container. Current values: `anthropic`, `langgraph`, `pi`, `deepagents`.
-- **Provider** is the model backend routed through Team Room's model proxy. Current values: `anthropic`, `lm-studio`, `ollama`, `openai`, `openrouter`.
-- **Persona** is the team role: e.g. Archie the architect, Pi Coder the coding teammate, Claude Assistant the assistant.
-
-Runtime and provider are intentionally separate. A DeepAgents runtime can use OpenRouter; a Pi runtime can use an OpenAI-compatible provider; Anthropic-specific runtime behavior stays isolated to Anthropic agents.
+- **Runtime** is how the agent runs inside its container. Current values: `pi`, `deepagents`.
+- **Provider** is the model backend routed through Team Room's model proxy. Current values: `openrouter`.
+- **Persona** is the team role: e.g. Archie the architect, Micah the coder, Doc the health monitor, Libby the librarian.
 
 ## What you need before starting
 
-- A short agent name, e.g. `archie` or `pi-coder`.
+- A short agent name, e.g. `archie`, `micah`, `doc`, or `libby`.
 - A persona reason: what role does this agent fill that an existing agent does not?
-- A runtime choice: `anthropic`, `langgraph`, `pi`, or `deepagents`.
-- A provider/model choice and credentials in `.env`:
-  - `OPENROUTER_API_KEY` for `provider: openrouter`.
-  - `OPENAI_TOKEN` for `provider: openai`.
-  - `LM_STUDIO_API_TOKEN` / `LM_STUDIO_BASE_URL` for `provider: lm-studio`.
-  - Anthropic credentials per [`anthropic-auth.md`](anthropic-auth.md).
+- A runtime choice: `pi` or `deepagents`.
+- `OPENROUTER_API_KEY` in `.env`.
 - A lifecycle decision:
   - `session` for on-demand containers with idle timeout.
   - `persistent` for always-on team members like Archie.
@@ -38,8 +32,8 @@ Runtime and provider are intentionally separate. A DeepAgents runtime can use Op
 
    ```yaml
    name: <name>
-   runtime: deepagents | langgraph | pi | anthropic
-   provider: openrouter | openai | lm-studio | ollama | anthropic
+   runtime: pi | deepagents
+   provider: openrouter
    model: <model-id>
    image_tag: teamroom-agent-<name>:latest
    lifecycle: session | persistent
@@ -72,10 +66,8 @@ Runtime and provider are intentionally separate. A DeepAgents runtime can use Op
 
    Use an existing runtime as the closest model:
 
-   - `agents/archie/Dockerfile` for DeepAgents/Python.
-   - `agents/pi-coder/Dockerfile` for Pi.
-   - `agents/studio-assistant/Dockerfile` for LangGraph/OpenAI-compatible agents.
-   - `agents/claude-assistant/Dockerfile` for Anthropic/Claude SDK agents.
+   - `agents/archie/Dockerfile` or `agents/libby/Dockerfile` for DeepAgents/Python.
+   - `agents/micah/Dockerfile` or `agents/doc/Dockerfile` for Pi.
 
 5. **Build the image.**
 
@@ -171,7 +163,7 @@ Archie has an Archie-only safety net: if a reply-required DeepAgents wake ends w
 
 ## Related
 
+- [`manual-cli-testing.md`](manual-cli-testing.md) — interactive single-turn testing.
 - [`smoke-test.md`](smoke-test.md) — end-to-end verification of the full stack.
-- [`anthropic-auth.md`](anthropic-auth.md) — Anthropic credential setup.
 - [`../as-built/`](../as-built/) — shipped architecture records.
 - [`../roadmap.md`](../roadmap.md) — future persona/runtime backlog.
