@@ -16,8 +16,6 @@ Mechanics in the `epiphany-tabling` skill (imported workflow skill package).
 
 - **M6 landing paused at Step 1: RESOLVED.** Land Step 1 complete (production audit + 3 commits: G2 blockers, docs sweep, as-built). Proceeding through Steps 2-10.
 
-- **Archie-only fallback reply should become a generic runtime contract.** Land Step 2 observation: the shim's safety-net fallback (`fallback_mail_reply` in `agents/archie/shim.py`) is intentionally Archie-only per M6 spec §4.1. At N=2 this is correct, but when a second `deepagents`-based agent joins the team, the fallback should be promoted to a generic runtime concern (session-manager or runtime contract) rather than copied per-shim. Next destination: revisit during next deepagents agent onboarding; likely belongs in a runtime-contract spec update.
-
 - ~~**Consolidate agent runtimes to DeepAgents + Pi, provider backbone to OpenRouter.**~~ **RESOLVED — shipped in persona realignment (2026-06-18).** Plan in `.myflow/artifacts/plans/2026-06-18_22-37-10_teamroom-persona-realignment.md`.
 
 - **Per-agent volume mount permissions (two-part).** Land Step 3 security audit: `/codebase`, `/AGENTS.md`, and `/store` are all mounted `readOnly: false` regardless of persona. Next destination: spec for mount-perms config field + agent-onboarding runbook update; likely pre-M7 cleanup or M7 persona-maturity pass.
