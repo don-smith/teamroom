@@ -22,20 +22,22 @@ function isMailDeliveredEvent(event: string | MailDeliveredEvent): event is Mail
 function wakePrompt(wake: WakeEnvelope): string {
   const mail = [...wake.events].reverse().find(isMailDeliveredEvent);
   if (!mail) {
-    return "You received a Team Room wake notification. First check unread mail with mail_list({ unreadOnly: true }), then read relevant messages with mail_get. Reply in-thread with mail_reply when responding to a request, or use mail_send for a new thread. If a coding task is requested, inspect and edit the mounted codebase as needed. If nothing is actionable, end your turn without sending mail.";
+    return "You received a Team Room wake notification. First check unread mail with mail_list({ unreadOnly: true }), then read relevant messages with mail_get. Reply in-thread with mail_reply when responding to a request, or use mail_send for a new thread. If a coding task is requested, inspect and edit the mounted codebase as needed. If nothing is actionable, end your turn without sending mail. IMPORTANT: Use the available tools (mail_list, mail_get, mail_reply, etc.) to act. Do not just produce text — call the tools.";
   }
   const from = sanitizeMailFrom(mail.from);
   if (mail.replyExpected) {
-    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail_get, do any needed work, then reply in-thread with mail_reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+    return `You received Team Room mail that requires a reply. Thread id: ${mail.threadId}. From: ${from}. First call mail_list({unreadOnly: true}) to see your unread messages. Then from the list result use the returned 'id' to call mail_get({id: "..."}) to read the message body. Then reply in-thread with mail_reply({id: "...", body: "your reply here"}). Final assistant text is diagnostic only and is not delivered to Team Room. Do not call mail_get without an id.`;
   }
-  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail_get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail_get if useful. Send mail only if doing so adds value; otherwise end without replying. IMPORTANT: Use tools to act. Do not just reason about what to do.`;
 }
 
 const TEAMROOM_APPEND_PROMPT = `You run inside Team Room as a general coding teammate.
 On every wake, check unread Team Room mail first.
 Use mail_reply for in-thread responses and mail_send only for new threads.
 Your working directory is /codebase when present. Use read, write, edit, and bash for coding tasks.
-Do not expose secrets or credentials.`;
+Do not expose secrets or credentials.
+
+CRITICAL: You are connected to tools including mail_list, mail_get, mail_reply, mail_send, mail_mark_read, mail_archive, and mail_delete. You must call these tools to act — do not just produce text describing what you would do. If a mail requires a reply, call mail_get then mail_reply.`;
 
 const TEAMROOM_PI_MAIL_TOOL_NAMES = [
   "mail_list",

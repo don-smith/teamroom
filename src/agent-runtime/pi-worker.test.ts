@@ -77,9 +77,10 @@ describe("PiAgentWorker", () => {
     await worker.handleWake({ type: "wake", events: [event] });
 
     expect(prompts[0]).toMatch(/requires a reply/);
-    expect(prompts[0]).toMatch(/Message id: msg-1/);
+    expect(prompts[0]).toMatch(/call mail_list/);
     expect(prompts[0]).toMatch(/Thread id: thread-1/);
     expect(prompts[0]).toMatch(/From: channel:cli:don/);
+    expect(prompts[0]).toMatch(/Do not call mail_get without an id/);
   });
 
   it("uses the no-reply prompt when replyExpected is false", async () => {
