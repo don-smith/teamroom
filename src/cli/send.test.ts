@@ -22,6 +22,7 @@ describe("teamroom send (channel-based)", () => {
       name: "alice", model: "m", imageTag: "img", provider: "anthropic", runtime: "anthropic",
       configPath: "/a", agentsMdPath: "/a/AGENTS.md", storePath: "/a/store",
       subscriptions: [], allowedTools: [],
+      lifecycle: "session",
     };
     messaging = composeMessaging({ logger });
     let n = 0;

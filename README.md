@@ -6,7 +6,7 @@ A multi-agent harness modeled after a software delivery team.
 
 ## Current state
 
-Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, filesystem MCP access, and LM Studio/Ollama adapter consolidation. This branch extends that shape with a Bun-first runtime/tooling path and a Pi SDK based general coding teammate, `pi-coder`, while preserving Team Room's central model-proxy credential routing. Agents communicate through the mail substrate (dispatcher -> session-management -> MCP/tools); `chat`, `send`, `inbox`, and `thread` are the main CLI surfaces. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
+Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, filesystem MCP access, and LM Studio/Ollama adapter consolidation. The current `main` line adds a Bun-first runtime/tooling path and a Pi SDK based general coding teammate, `pi-coder`. This branch is M6 in-flight work for a DeepAgents runtime and Archie architect agent, while preserving Team Room's central model-proxy credential routing. Agents communicate through the mail substrate (dispatcher -> session-management -> MCP/tools); `chat`, `send`, `inbox`, and `thread` are the main CLI surfaces. See [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md) for credential setup.
 
 - Latest as-built: [`docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md`](docs/as-built/2026-05-17-bun-runtime-and-pi-coder.md).
 - Prior Pi/OpenAI landing: [`docs/as-built/2026-05-16-pi-coder-openai.md`](docs/as-built/2026-05-16-pi-coder-openai.md).
@@ -16,6 +16,8 @@ Milestone 5 shipped the LangGraph runtime for local/OpenAI-compatible agents, fi
 ## Install the CLI
 
 Prerequisites: Bun 1.3+, Docker Desktop running, LM Studio running locally with a model loaded, Anthropic credentials discoverable (Claude Code OAuth or `ANTHROPIC_API_KEY` — see [`docs/runbooks/anthropic-auth.md`](docs/runbooks/anthropic-auth.md)), and a directory on your `PATH` that you control (e.g. `~/bin`). If you want to run `pi-coder`, also set `OPENAI_TOKEN` for the hosted OpenAI provider.
+
+> **Submodules.** Team Room vendors external agent runtime/framework source (currently DeepAgents) under `vendor/`. When cloning fresh, use `git clone --recurse-submodules <url>`. If you already cloned without, run `git submodule update --init --recursive` once. Submodule pointers are bumped in explicit commits (`chore(vendor): bump <name> to <tag>`); there's no auto-update.
 
 ```bash
 # 1. Dependencies

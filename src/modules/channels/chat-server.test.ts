@@ -50,6 +50,7 @@ describe("ChatServer", () => {
       storePath: "/a/store",
       subscriptions: [],
       allowedTools: [],
+      lifecycle: "session",
     };
     messaging = composeMessaging({ logger });
     let n = 0;

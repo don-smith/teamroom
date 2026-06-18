@@ -1,6 +1,6 @@
 export type MessageDirection = "in" | "out";
-export type Provider = "anthropic" | "lm-studio" | "ollama" | "openai";
-export type AgentRuntime = "anthropic" | "langgraph" | "pi";
+export type Provider = "anthropic" | "lm-studio" | "ollama" | "openai" | "openrouter";
+export type AgentRuntime = "anthropic" | "langgraph" | "pi" | "deepagents";
 
 export interface Agent {
   id: string;
@@ -44,6 +44,15 @@ export interface Message {
 export type MessageCreateInput =
   & Omit<Message, "topic" | "fromAgentId" | "conversationId">
   & Partial<Pick<Message, "topic" | "fromAgentId" | "conversationId">>;
+
+export interface MailDeliveredEvent {
+  type: "mail.delivered";
+  to: string;
+  messageId: string;
+  threadId: string;
+  from: string;
+  replyExpected: boolean;
+}
 
 export interface BusEvent {
   id: string;

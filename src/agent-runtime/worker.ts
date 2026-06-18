@@ -1,3 +1,5 @@
+import type { MailDeliveredEvent } from "../types.js";
+
 /**
  * Agent runtime worker abstraction. One worker per container.
  * The container's stdin loop drives `handleWake(wake)` once per inbound
@@ -8,8 +10,8 @@
 
 export interface WakeEnvelope {
   type: "wake";
-  /** Informational tags — the agent's system prompt tells it what to check. */
-  events: string[];
+  /** Informational wake events. Older callers may send string tags; newer mail wakes include structured delivery metadata. */
+  events: Array<string | MailDeliveredEvent>;
 }
 
 export interface AgentWorker {
@@ -30,6 +32,7 @@ function runtimeFromEnv(): { runtime: string; source: "TEAMROOM_RUNTIME" | "TEAM
     case "lm-studio":
     case "ollama":
     case "openai":
+    case "openrouter":
       return { runtime: "langgraph", source: "TEAMROOM_PROVIDER" };
     default:
       throw new Error(`unknown TEAMROOM_PROVIDER: '${provider}'`);
@@ -51,6 +54,10 @@ export async function buildWorker(): Promise<AgentWorker> {
       const { PiAgentWorker } = await import("./pi-worker.js");
       return PiAgentWorker.create();
     }
+    case "deepagents":
+      throw new Error(
+        `runtime '${runtime}' is implemented by agents/archie/shim.py; the TypeScript worker factory does not build it`,
+      );
     default:
       throw new Error(`unknown ${source}: '${runtime}'`);
   }

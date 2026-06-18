@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadAgentConfig } from "./agent-config.js";
@@ -30,6 +30,8 @@ describe("loadAgentConfig", () => {
     expect(cfg.model).toBe("claude-opus-4-7");
     expect(cfg.imageTag).toBe("teamroom-agent-studio-assistant:latest");
     expect(cfg.provider).toBe("lm-studio");
+    expect(cfg.runtime).toBe("langgraph");
+    expect(cfg.lifecycle).toBe("session");
     expect(cfg.configPath).toBe(agentDir);
     expect(cfg.agentsMdPath).toBe(join(agentDir, "AGENTS.md"));
     expect(cfg.storePath).toBe(join(agentDir, "store"));
@@ -62,6 +64,17 @@ describe("loadAgentConfig", () => {
       runtime: "pi",
       provider: "openai",
       model: "openai/gpt-5.5",
+    });
+  });
+
+  it("loads the real Archie agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/archie"));
+    expect(cfg).toMatchObject({
+      name: "archie",
+      runtime: "deepagents",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
+      lifecycle: "persistent",
     });
   });
 });
@@ -128,6 +141,49 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
     );
     const cfg2 = loadAgentConfig(agentDir);
     expect(cfg2.allowedTools).toEqual([]);
+  });
+});
+
+describe("loadAgentConfig — lifecycle field", () => {
+  let base: string;
+  let agentDir: string;
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
+    agentDir = join(base, "a");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(agentDir, "store"), { recursive: true });
+    writeFileSync(join(agentDir, "AGENTS.md"), "# test");
+  });
+
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("defaults lifecycle to 'session' when omitted", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.lifecycle).toBe("session");
+  });
+
+  it("parses lifecycle: persistent", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: persistent\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.lifecycle).toBe("persistent");
+  });
+
+  it("rejects unknown lifecycle values", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: forever\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/lifecycle.*'session'.*'persistent'.*got 'forever'/);
   });
 });
 
@@ -198,6 +254,16 @@ describe("loadAgentConfig — provider field", () => {
     expect(cfg.provider).toBe("openai");
     expect(cfg.runtime).toBe("pi");
   });
+
+  it("accepts provider: openrouter", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: t\nprovider: openrouter\nruntime: deepagents\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.runtime).toBe("deepagents");
+  });
 });
 
 describe("loadAgentConfig — runtime field", () => {
@@ -240,6 +306,12 @@ describe("loadAgentConfig — runtime field", () => {
       "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
     );
     expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\n",
+    );
+    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
   });
 
   it("accepts explicit runtime: pi with an existing model provider", () => {
@@ -253,12 +325,23 @@ describe("loadAgentConfig — runtime field", () => {
     expect(cfg.model).toBe("claude-opus-4-7");
   });
 
+  it("accepts explicit runtime: deepagents with an existing model provider", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: archie\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: openrouter\nlifecycle: persistent\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.runtime).toBe("deepagents");
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.lifecycle).toBe("persistent");
+  });
+
   it("rejects unknown runtime values", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
       "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: anthropic\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi.*deepagents/);
   });
 
   it("rejects runtime: anthropic with a non-anthropic provider", () => {
@@ -276,4 +359,32 @@ describe("loadAgentConfig — runtime field", () => {
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
   });
+
+  it("rejects runtime: pi with provider: openrouter", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: z\nruntime: pi\nprovider: openrouter\n",
+    );
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
+  });
+});
+
+describe("loadAgentConfig — every checked-in agent.yaml loads", () => {
+  const agentsDir = join(process.cwd(), "agents");
+  if (!existsSync(agentsDir)) {
+    it.skip("no agents/ directory", () => {});
+  } else {
+    const entries = readdirSync(agentsDir)
+      .map((name) => join(agentsDir, name))
+      .filter((full) => statSync(full).isDirectory());
+    for (const full of entries) {
+      const name = full.split("/").pop() ?? full;
+      it(`loads agents/${name}/agent.yaml without runtime/provider mismatch`, () => {
+        const cfg = loadAgentConfig(full);
+        expect(cfg.name).toBe(name);
+        expect(cfg.runtime).toBeDefined();
+        expect(cfg.provider).toBeDefined();
+      });
+    }
+  }
 });

@@ -49,6 +49,7 @@ async function startMailHarness(): Promise<{
     runtime: "langgraph",
     subscriptions: [],
     allowedTools: [],
+    lifecycle: "session",
   };
   const agentConfigs = new Map<string, AgentConfig>([
     [

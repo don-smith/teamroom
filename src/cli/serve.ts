@@ -17,7 +17,7 @@ export async function serve(): Promise<void> {
   loadEnvFile(root);
 
   const providers = discoverConfiguredProviders(agentsDir);
-  const { lmStudioToken, openaiToken } = resolveServeProviderTokens(providers, process.env);
+  const { lmStudioToken, openaiToken, openrouterToken } = resolveServeProviderTokens(providers, process.env);
 
   const anthropic = discoverAnthropic();
 
@@ -29,7 +29,7 @@ export async function serve(): Promise<void> {
       // (host.docker.internal only resolves *inside* containers — that hostname
       // is what the container uses to reach the proxy, not the other way round.)
       upstreamUrl: process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234",
-      realKey: lmStudioToken,
+      realKey: lmStudioToken ?? "",
     },
     ollama: {
       // Same host-side reasoning as LM Studio above — proxy runs on host, so
@@ -39,6 +39,10 @@ export async function serve(): Promise<void> {
     openai: {
       upstreamUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com",
       realKey: openaiToken ?? "",
+    },
+    openrouter: {
+      upstreamUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api",
+      realKey: openrouterToken ?? "",
     },
     anthropic,
   });
@@ -56,9 +60,10 @@ export async function serve(): Promise<void> {
 export function resolveServeProviderTokens(
   providers: readonly Provider[],
   env: Record<string, string | undefined>,
-): { lmStudioToken: string; openaiToken: string | null } {
-  const lmStudioToken = env.LM_STUDIO_API_TOKEN;
-  if (!lmStudioToken) {
+): { lmStudioToken: string | null; openaiToken: string | null; openrouterToken: string | null } {
+  const needsLmStudio = providers.includes("lm-studio");
+  const lmStudioToken = env.LM_STUDIO_API_TOKEN ?? null;
+  if (needsLmStudio && !lmStudioToken) {
     throw new Error("LM_STUDIO_API_TOKEN missing from .env");
   }
 
@@ -68,7 +73,13 @@ export function resolveServeProviderTokens(
     throw new Error("OPENAI_TOKEN missing from .env");
   }
 
-  return { lmStudioToken, openaiToken };
+  const needsOpenRouter = providers.includes("openrouter");
+  const openrouterToken = env.OPENROUTER_API_KEY ?? null;
+  if (needsOpenRouter && !openrouterToken) {
+    throw new Error("OPENROUTER_API_KEY missing from .env");
+  }
+
+  return { lmStudioToken, openaiToken, openrouterToken };
 }
 
 function discoverConfiguredProviders(agentsDir: string): Provider[] {

@@ -64,7 +64,16 @@ describe("MailDispatcher — agent recipient", () => {
     expect(rows[0]!.to).toEqual(["agent:claude-assistant"]);
     expect(rows[0]!.body).toBe("hi");
     expect(rows[0]!.threadId).toBe(result.threadId);
-    expect(events).toEqual([{ to: "claude-assistant" }]);
+    expect(events).toEqual([
+      {
+        type: "mail.delivered",
+        to: "claude-assistant",
+        messageId: result.rowIds[0],
+        threadId: result.threadId,
+        from: "channel:cli:don",
+        replyExpected: true,
+      },
+    ]);
   });
 
   it("mints a fresh thread_id when none is provided", () => {
@@ -110,13 +119,15 @@ describe("MailDispatcher — agent recipient", () => {
     expect(sent).toEqual([]);
   });
 
-  it("sets to[] on every recipient row after list expansion", () => {
-    const { dispatcher, messageRepo } = makeHarness({
+  it("sets to[] on every recipient row after list expansion and does not expect replies from list fanout", () => {
+    const { dispatcher, messageRepo, bus } = makeHarness({
       knownAgents: ["A", "B", "C"],
       knownLists: { team: ["A", "B", "C"] },
       maxMailsPerThread: 0,
     });
 
+    const events: unknown[] = [];
+    bus.subscribe("mail.delivered", (p) => events.push(p));
     dispatcher.sendMail({ from: "agent:A", to: ["list:team"], body: "announce" });
     for (const who of ["A", "B", "C"]) {
       const rows = messageRepo.listInbox(who, {});
@@ -124,6 +135,14 @@ describe("MailDispatcher — agent recipient", () => {
       expect(rows[0]!.to!.slice().sort()).toEqual(["agent:A", "agent:B", "agent:C"]);
       expect(rows[0]!.body).toBe("announce");
     }
+    expect(events).toHaveLength(3);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ to: "A", replyExpected: false }),
+        expect.objectContaining({ to: "B", replyExpected: false }),
+        expect.objectContaining({ to: "C", replyExpected: false }),
+      ]),
+    );
   });
 });
 

@@ -14,6 +14,7 @@ function cfg(name: string, subs: string[]): AgentConfig {
     storePath: "/x/store",
     subscriptions: subs,
     allowedTools: [],
+    lifecycle: "session",
   };
 }
 

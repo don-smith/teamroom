@@ -5,7 +5,9 @@ import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MultiServerMCPClient, type Connection } from "@langchain/mcp-adapters";
+import type { MailDeliveredEvent } from "../types.js";
 import type { AgentWorker, WakeEnvelope } from "./worker.js";
+import { sanitizeMailFrom } from "./sanitize-from.js";
 
 /**
  * LangGraph-backed agent worker for OpenAI-compatible providers (lm-studio,
@@ -18,8 +20,21 @@ import type { AgentWorker, WakeEnvelope } from "./worker.js";
 const DEFAULT_SYSTEM_PROMPT =
   "You are an agent running inside the Team Room harness. On wake, check your inbox via the mail.* MCP tools and respond to any unread mail.";
 
-const WAKE_PROMPT =
-  "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+function isMailDeliveredEvent(event: string | MailDeliveredEvent): event is MailDeliveredEvent {
+  return typeof event === "object" && event.type === "mail.delivered";
+}
+
+function wakePrompt(wake: WakeEnvelope): string {
+  const mail = [...wake.events].reverse().find(isMailDeliveredEvent);
+  if (!mail) {
+    return "You received a wake notification — new activity in your environment. Check your inbox with mail.list (unreadOnly=true), read anything relevant with mail.get, and reply or send new mail as appropriate. If there is nothing actionable, end your turn without replying.";
+  }
+  const from = sanitizeMailFrom(mail.from);
+  if (mail.replyExpected) {
+    return `You received Team Room mail that requires a reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get, do any needed work, then reply in-thread with mail.reply. Final assistant text is diagnostic only and is not delivered to Team Room.`;
+  }
+  return `You received Team Room mail with no required reply. Message id: ${mail.messageId}. Thread id: ${mail.threadId}. From: ${from}. Read it with mail.get if useful. Send mail only if doing so adds value; otherwise end without replying.`;
+}
 
 const MAX_MESSAGES = 40;
 /**
@@ -32,8 +47,11 @@ const MAX_MESSAGES = 40;
  * default and leaves room for a few fumbles without capping a real flow.
  * Observed during M5 acceptance: 10 was too tight — a simple "summarise
  * README" flow hit the cap and the graph returned a WAKE_PROMPT echo.
+ *
+ * Operators can override via `TEAMROOM_LANGGRAPH_RECURSION_LIMIT` for local
+ * models that need more or less headroom.
  */
-const RECURSION_LIMIT = 50;
+const RECURSION_LIMIT = Number(process.env.TEAMROOM_LANGGRAPH_RECURSION_LIMIT) || 50;
 const MAX_RETRIES = 2;
 
 export interface LangGraphAgentWorkerOpts {
@@ -197,8 +215,8 @@ export class LangGraphAgentWorker implements AgentWorker {
     return new LangGraphAgentWorker(opts, agent, mcpClient, tools);
   }
 
-  async handleWake(_wake: WakeEnvelope): Promise<void> {
-    this.messages.push(new HumanMessage(WAKE_PROMPT));
+  async handleWake(wake: WakeEnvelope): Promise<void> {
+    this.messages.push(new HumanMessage(wakePrompt(wake)));
     try {
       const result = await this.agent.invoke(
         { messages: this.messages },

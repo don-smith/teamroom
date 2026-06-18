@@ -17,9 +17,10 @@ The source tree is split by runtime responsibility. Most of it runs on the **hos
 - [`modules/`](modules/README.md) — compose-pattern module factories: `observability`, `storage`, `messaging`, `mcp-mail`, `model-proxy`, `session-management`, `channels`, `mail`.
 - [`cli/`](cli/README.md) — `teamroom` binary (`serve`, `send`, `chat`, `inbox`, `thread`, `status`).
 - [`agent-runtime/`](agent-runtime/README.md) — the shim that runs *inside* each agent container.
+- [`agents/archie/shim.py`](../agents/archie/shim.py) — the DeepAgents runtime, implemented in Python (external to this TypeScript module).
 
 ## Related
 
 - **Parent:** [repo root](../README.md)
 - **As-built:** [M1](../docs/as-built/2026-04-18-teamroom-m1.md) — §2 architecture, §3 key decisions, §4 adaptations.
-- **Practices:** [ways-of-working](../docs/ways-of-working.md)
+- **Architecture diagram:** [docs/architecture.html](../docs/architecture.html) — interactive Mermaid.js diagrams of the full system.

@@ -10,7 +10,9 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "install-cli": "bun scripts/install-cli.ts ~/.local/bin --force"
+    "install-cli": "bun scripts/install-cli.ts ~/.local/bin --force",
+    "docker:build:archie": "test -f vendor/deepagents/libs/deepagents/pyproject.toml || (echo 'DeepAgents submodule not initialized; run: git submodule update --init --recursive' && exit 1) && docker build -t teamroom-agent-archie:latest -f agents/archie/Dockerfile .",
+    "docker:test:archie": "docker run --rm --entrypoint python -v \"$PWD/agents/archie/shim_test.py:/app/shim_test.py\" teamroom-agent-archie:latest -m pytest /app/shim_test.py -v"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",

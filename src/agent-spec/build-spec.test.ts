@@ -15,6 +15,7 @@ describe("buildSpec", () => {
     storePath: "/agents/alice/store",
     subscriptions: [],
     allowedTools: ["mail.send"],
+    lifecycle: "session",
   };
 
   it("constructs a DockerRunSpec with mail-MCP URL, model proxy URL, and tokens", () => {
@@ -88,6 +89,38 @@ describe("buildSpec", () => {
       agentId: "pi-coder",
       provider: "openai",
       model: "openai/gpt-5.5",
+    });
+  });
+
+  it("supports the DeepAgents runtime while preserving provider for token routing", () => {
+    const tokenRegistry = new TokenRegistry(() => "archie-proxy-token");
+    const archie: AgentConfig = {
+      ...cfg,
+      name: "archie",
+      model: "deepseek/deepseek-v4-flash",
+      imageTag: "teamroom-agent-archie:latest",
+      provider: "openrouter",
+      runtime: "deepagents",
+      lifecycle: "persistent",
+    };
+    const spec = buildSpec({
+      agentId: "archie",
+      mcpToken: "mcp-tok",
+      agentConfigs: new Map([["archie", archie]]),
+      tokenRegistry,
+      modelBaseUrl: "http://proxy",
+      mailPort: 9000,
+      codebasePath: null,
+      genId: () => "trace-1",
+    });
+
+    expect(spec.env.TEAMROOM_RUNTIME).toBe("deepagents");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("openrouter");
+    expect(spec.env.TEAMROOM_MODEL_API_TOKEN).toBe("archie-proxy-token");
+    expect(tokenRegistry.lookup("archie-proxy-token")).toMatchObject({
+      agentId: "archie",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
     });
   });
 

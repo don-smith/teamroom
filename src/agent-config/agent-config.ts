@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 import YAML from "yaml";
 import type { AgentRuntime, Provider } from "../types.js";
 
+export type AgentLifecycle = "session" | "persistent";
+
 export interface AgentConfig {
   name: string;
   model: string;
@@ -14,6 +16,7 @@ export interface AgentConfig {
   storePath: string;      // absolute path to store/
   subscriptions: string[];
   allowedTools: string[];
+  lifecycle: AgentLifecycle;
 }
 
 export function loadAgentConfig(agentDir: string): AgentConfig {
@@ -34,11 +37,11 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
   if (provider === undefined || provider === null) {
-    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', or 'openai')`);
+    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter')`);
   }
-  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai") {
+  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai" && provider !== "openrouter") {
     throw new Error(
-      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', or 'openai' (got '${String(provider)}')`,
+      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter' (got '${String(provider)}')`,
     );
   }
 
@@ -59,7 +62,18 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   }
   const allowedTools = parseStringArray(parsed, "allowed_tools");
 
-  return { name, model, imageTag, provider, runtime, configPath, agentsMdPath, storePath, subscriptions, allowedTools };
+  const lifecycleRaw = parsed.lifecycle;
+  let lifecycle: AgentLifecycle = "session";
+  if (lifecycleRaw !== undefined && lifecycleRaw !== null) {
+    if (lifecycleRaw !== "session" && lifecycleRaw !== "persistent") {
+      throw new Error(
+        `agent.yaml 'lifecycle' must be 'session' or 'persistent' (got '${String(lifecycleRaw)}')`,
+      );
+    }
+    lifecycle = lifecycleRaw;
+  }
+
+  return { name, model, imageTag, provider, runtime, configPath, agentsMdPath, storePath, subscriptions, allowedTools, lifecycle };
 }
 
 function inferRuntime(provider: Provider): AgentRuntime {
@@ -69,15 +83,16 @@ function inferRuntime(provider: Provider): AgentRuntime {
     case "lm-studio":
     case "ollama":
     case "openai":
+    case "openrouter":
       return "langgraph";
   }
 }
 
 function parseRuntime(value: unknown, provider: Provider): AgentRuntime {
   if (value === undefined || value === null) return inferRuntime(provider);
-  if (value !== "anthropic" && value !== "langgraph" && value !== "pi") {
+  if (value !== "anthropic" && value !== "langgraph" && value !== "pi" && value !== "deepagents") {
     throw new Error(
-      `agent.yaml 'runtime' must be 'anthropic', 'langgraph', or 'pi' (got '${String(value)}')`,
+      `agent.yaml 'runtime' must be 'anthropic', 'langgraph', 'pi', or 'deepagents' (got '${String(value)}')`,
     );
   }
   return value;
@@ -100,6 +115,14 @@ function validateRuntimeProvider(runtime: AgentRuntime, provider: Provider): voi
       }
       return;
     case "pi":
+      if (provider === "openrouter") {
+        throw new Error(
+          `agent.yaml runtime/provider mismatch: runtime '${runtime}' does not support provider '${provider}'`,
+        );
+      }
+      return;
+    case "deepagents":
+      // DeepAgents shim supports every provider Team Room can proxy today.
       return;
   }
 }

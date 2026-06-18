@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { DockerRunner } from "../container/docker-runner.js";
 import type { DockerRunSpec } from "../container/docker-command.js";
+import type { ContainerRunner } from "../container/container-runner.js";
 import { killStaleTeamroomContainers } from "../container/kill-stale.js";
 import { loadAgentConfig, type AgentConfig } from "../agent-config/agent-config.js";
 import { installSafetyNets } from "./safety-nets.js";
@@ -53,6 +54,10 @@ export interface DaemonOptions {
     upstreamUrl: string; // host-side URL for the OpenAI-compatible API
     realKey: string;
   };
+  openrouter: {
+    upstreamUrl: string; // host-side URL for the OpenRouter OpenAI-compatible API
+    realKey: string;
+  };
   anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -64,6 +69,11 @@ export interface DaemonOptions {
    * Also reads TEAMROOM_SESSION_IDLE_MINUTES if unset.
    */
   sessionIdleMinutes?: number;
+  /**
+   * Container runner. Defaults to {@link DockerRunner}. Exposed for tests
+   * that need to simulate spawn failures or inspect container interactions.
+   */
+  runner?: ContainerRunner;
 }
 
 export interface StartedDaemon {
@@ -111,17 +121,19 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     maxMailsPerThread,
   });
 
-  // --- 7. Model proxy ---
+  // --- 7. Codebase-mount resolution ---
+  const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
+  validateCodebaseRequiredRuntimes(agentConfigs, codebasePath);
+
+  // --- 8. Model proxy ---
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
     lmStudio: opts.lmStudio,
     ollama: opts.ollama,
     openai: opts.openai,
+    openrouter: opts.openrouter,
     anthropic: opts.anthropic,
   });
-
-  // --- 8. Codebase-mount resolution ---
-  const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
 
   // --- 9. Mail MCP server (with late-bound token resolver) ---
   let resolveMcpToken: (t: string) => string | null = () => null;
@@ -139,7 +151,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // --- 10. Session management ---
   const idleMinutes = opts.sessionIdleMinutes ?? readNonNegativeIntEnv("TEAMROOM_SESSION_IDLE_MINUTES", 30);
   obs.rootLogger.info("session idle config", { idleMinutes });
-  const runner = new DockerRunner();
+  const runner = opts.runner ?? new DockerRunner();
   const sessionMgmt = composeSessionManagement({
     messaging,
     logger: obs.rootLogger,
@@ -155,6 +167,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
       genId,
     }),
     genToken: () => randomUUID(),
+    agentConfigs,
   });
   resolveMcpToken = (t) => sessionMgmt.sessionManager.resolveToken(t);
 
@@ -162,15 +175,47 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // see in the daemon log when agents send/receive mail and call MCP tools.
   // (composeSessionManagement consumes the same events for timer-reset; this
   // adds a parallel logging consumer with no behavioral effect.)
-  messaging.eventBus.subscribe<{ to: string }>("mail.delivered", (p) => {
-    obs.rootLogger.info("mail.delivered", { to: p.to });
-  });
-  messaging.eventBus.subscribe<{ from: string }>("mail.sent", (p) => {
-    obs.rootLogger.info("mail.sent", { from: p.from });
-  });
-  messaging.eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
-    obs.rootLogger.info("tool.call", { agentId: p.agentId, tool: p.tool });
-  });
+  const busLogUnsubscribes: Array<() => void> = [];
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{ to: string; messageId?: string; threadId?: string; replyExpected?: boolean }>("mail.delivered", (p) => {
+      obs.rootLogger.info("mail.delivered", {
+        to: p.to,
+        messageId: p.messageId,
+        threadId: p.threadId,
+        replyExpected: p.replyExpected,
+      });
+    }),
+  );
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{ from: string }>("mail.sent", (p) => {
+      obs.rootLogger.info("mail.sent", { from: p.from });
+    }),
+  );
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{ agentId: string; tool: string }>("tool.call", (p) => {
+      obs.rootLogger.info("tool.call", { agentId: p.agentId, tool: p.tool });
+    }),
+  );
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{
+      agentId: string;
+      messageId?: string;
+      threadId?: string;
+      invalidToolCalls?: Array<{ name?: string; id?: string; error?: string }>;
+    }>("agent.tool_call.invalid", (p) => {
+      obs.rootLogger.warn("agent.tool_call.invalid", p);
+    }),
+  );
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{
+      agentId: string;
+      messageId?: string;
+      threadId?: string;
+      reason?: string;
+    }>("agent.reply_required.fallback_used", (p) => {
+      obs.rootLogger.warn("agent.reply_required.fallback_used", p);
+    }),
+  );
 
   // --- 11. Channels (chat WebSocket on its own port) ---
   const channels = await composeChannels({
@@ -200,6 +245,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const stop = async () => {
     if (stopped) return;
     stopped = true;
+    for (const unsub of busLogUnsubscribes) {
+      unsub();
+    }
+    busLogUnsubscribes.length = 0;
     await sessionMgmt.stop();
     await channels.stop();
     deletePortFile(opts.dataDir, "chat");
@@ -246,6 +295,17 @@ function discoverAgentConfigs(
     logger.info("agent registered", { agentName: cfg.name });
   }
   return agentConfigs;
+}
+
+function validateCodebaseRequiredRuntimes(agentConfigs: Map<string, AgentConfig>, codebasePath: string | null): void {
+  if (codebasePath !== null) return;
+  const requiringCodebase = Array.from(agentConfigs.values())
+    .filter((cfg) => cfg.runtime === "deepagents")
+    .map((cfg) => cfg.name);
+  if (requiringCodebase.length === 0) return;
+  throw new Error(
+    `TEAMROOM_CODEBASE_PATH is required for runtime: deepagents agents (${requiringCodebase.join(", ")})`,
+  );
 }
 
 function resolveCodebasePath(dataDir: string, logger: Logger): string | null {

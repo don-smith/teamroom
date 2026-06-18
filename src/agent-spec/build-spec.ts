@@ -35,7 +35,7 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
   if (args.codebasePath) {
     mounts.push({ hostPath: args.codebasePath, containerPath: "/codebase", readOnly: false });
   }
-  return {
+  const spec: DockerRunSpec = {
     imageTag: cfg.imageTag,
     name: `teamroom-${args.agentId}-${args.mcpToken.slice(0, 8)}`,
     mounts,
@@ -58,4 +58,5 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
       "teamroom-agent-id": args.agentId,
     },
   };
+  return spec;
 }

@@ -5,6 +5,7 @@ import { JsonLinesLogger } from "../../logger/logger.js";
 import { ControllableClock } from "../../clock/clock.js";
 import { composeMcpMail } from "./mcp-mail.js";
 import type { AgentConfig } from "../../agent-config/agent-config.js";
+import type { MailDeliveredEvent } from "../../types.js";
 
 describe("composeMcpMail", () => {
   const logger = new JsonLinesLogger(new ControllableClock("2026-04-20T00:00:00Z"), () => {}, { component: "test" });
@@ -19,6 +20,7 @@ describe("composeMcpMail", () => {
     storePath: "/a/store",
     subscriptions: [],
     allowedTools: [],
+    lifecycle: "session",
   };
 
   it("exposes dispatcher, mailing-list registry, and mcp tools wired to the bus", () => {
@@ -56,9 +58,9 @@ describe("composeMcpMail", () => {
       maxMailsPerThread: 10,
     });
 
-    const deliveredTargets: string[] = [];
-    messaging.eventBus.subscribe<{ to: string }>("mail.delivered", ({ to }) => {
-      deliveredTargets.push(to);
+    const deliveries: MailDeliveredEvent[] = [];
+    messaging.eventBus.subscribe<MailDeliveredEvent>("mail.delivered", (payload) => {
+      deliveries.push(payload);
     });
 
     mcpMail.dispatcher.sendMail({
@@ -68,7 +70,16 @@ describe("composeMcpMail", () => {
       threadId: null,
     });
 
-    expect(deliveredTargets).toEqual(["bob"]);
+    expect(deliveries).toEqual([
+      {
+        type: "mail.delivered",
+        to: "bob",
+        messageId: "id-2",
+        threadId: "id-1",
+        from: "agent:alice",
+        replyExpected: true,
+      },
+    ]);
     expect(storage.messageRepo.listInbox("bob", { includeArchived: false }).length).toBe(1);
     storage.close();
   });
