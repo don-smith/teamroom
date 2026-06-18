@@ -18,29 +18,9 @@ export interface PiModelConfig {
 }
 
 export function buildPiModelConfig(args: BuildPiModelConfigArgs): PiModelConfig {
-  const providerId = args.provider === "openai" ? "openai" : `teamroom-${args.provider}`;
+  const providerId = "teamroom-openrouter";
   const cleanBase = args.baseUrl.replace(/\/$/, "");
-
-  if (args.provider === "anthropic") {
-    return {
-      providerId,
-      modelId: args.model,
-      modelsJson: {
-        providers: {
-          [providerId]: {
-            baseUrl: cleanBase,
-            api: "anthropic-messages",
-            apiKey: args.apiToken,
-            models: [{ id: args.model }],
-          },
-        },
-      },
-    };
-  }
-
-  const modelId = args.provider === "openai"
-    ? args.model.replace(/^openai\//, "")
-    : args.model;
+  const modelId = args.model;
 
   return {
     providerId,

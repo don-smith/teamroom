@@ -37,11 +37,11 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   const imageTag = requireString(parsed, "image_tag");
   const provider = parsed.provider;
   if (provider === undefined || provider === null) {
-    throw new Error(`agent.yaml missing 'provider' (expected 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter')`);
+    throw new Error(`agent.yaml missing 'provider' (expected 'openrouter')`);
   }
-  if (provider !== "anthropic" && provider !== "lm-studio" && provider !== "ollama" && provider !== "openai" && provider !== "openrouter") {
+  if (provider !== "openrouter") {
     throw new Error(
-      `agent.yaml 'provider' must be 'anthropic', 'lm-studio', 'ollama', 'openai', or 'openrouter' (got '${String(provider)}')`,
+      `agent.yaml 'provider' must be 'openrouter' (got '${String(provider)}')`,
     );
   }
 
@@ -76,55 +76,23 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   return { name, model, imageTag, provider, runtime, configPath, agentsMdPath, storePath, subscriptions, allowedTools, lifecycle };
 }
 
-function inferRuntime(provider: Provider): AgentRuntime {
-  switch (provider) {
-    case "anthropic":
-      return "anthropic";
-    case "lm-studio":
-    case "ollama":
-    case "openai":
-    case "openrouter":
-      return "langgraph";
-  }
-}
-
-function parseRuntime(value: unknown, provider: Provider): AgentRuntime {
-  if (value === undefined || value === null) return inferRuntime(provider);
-  if (value !== "anthropic" && value !== "langgraph" && value !== "pi" && value !== "deepagents") {
+function parseRuntime(value: unknown, _provider: Provider): AgentRuntime {
+  if (value === undefined || value === null) {
     throw new Error(
-      `agent.yaml 'runtime' must be 'anthropic', 'langgraph', 'pi', or 'deepagents' (got '${String(value)}')`,
+      `agent.yaml 'runtime' is required when provider is 'openrouter'. Must be 'pi' or 'deepagents'.`,
+    );
+  }
+  if (value !== "pi" && value !== "deepagents") {
+    throw new Error(
+      `agent.yaml 'runtime' must be 'pi' or 'deepagents' (got '${String(value)}')`,
     );
   }
   return value;
 }
 
-function validateRuntimeProvider(runtime: AgentRuntime, provider: Provider): void {
-  switch (runtime) {
-    case "anthropic":
-      if (provider !== "anthropic") {
-        throw new Error(
-          `agent.yaml runtime/provider mismatch: runtime '${runtime}' requires provider 'anthropic' (got '${provider}')`,
-        );
-      }
-      return;
-    case "langgraph":
-      if (provider === "anthropic") {
-        throw new Error(
-          `agent.yaml runtime/provider mismatch: runtime '${runtime}' does not support provider '${provider}'`,
-        );
-      }
-      return;
-    case "pi":
-      if (provider === "openrouter") {
-        throw new Error(
-          `agent.yaml runtime/provider mismatch: runtime '${runtime}' does not support provider '${provider}'`,
-        );
-      }
-      return;
-    case "deepagents":
-      // DeepAgents shim supports every provider Team Room can proxy today.
-      return;
-  }
+function validateRuntimeProvider(_runtime: AgentRuntime, _provider: Provider): void {
+  // Both 'pi' and 'deepagents' runtimes accept OpenRouter as the sole provider.
+  // No restrictions needed with the consolidated provider set.
 }
 
 function requireString(parsed: Record<string, unknown>, field: string): string {

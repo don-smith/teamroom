@@ -6,10 +6,10 @@ import type { AgentConfig } from "../agent-config/agent-config.js";
 describe("buildSpec", () => {
   const cfg: AgentConfig = {
     name: "alice",
-    model: "claude-opus-4-7",
+    model: "deepseek/deepseek-v4-flash",
     imageTag: "teamroom-agent-alice:latest",
-    provider: "anthropic",
-    runtime: "anthropic",
+    provider: "openrouter",
+    runtime: "pi",
     configPath: "/agents/alice",
     agentsMdPath: "/agents/alice/AGENTS.md",
     storePath: "/agents/alice/store",
@@ -34,12 +34,11 @@ describe("buildSpec", () => {
     expect(spec.imageTag).toBe("teamroom-agent-alice:latest");
     expect(spec.name).toContain("teamroom-alice-mcp-tok-");
     expect(spec.env.TEAMROOM_AGENT_NAME).toBe("alice");
-    expect(spec.env.TEAMROOM_RUNTIME).toBe("anthropic");
-    expect(spec.env.TEAMROOM_PROVIDER).toBe("anthropic");
+    expect(spec.env.TEAMROOM_RUNTIME).toBe("pi");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("openrouter");
     expect(spec.env.TEAMROOM_MCP_URL).toBe("http://host.docker.internal:7777/mcp");
     expect(spec.env.TEAMROOM_MCP_TOKEN).toBe("mcp-tok-abcdef12");
     expect(spec.env.TEAMROOM_MODEL_BASE_URL).toBe("http://host.docker.internal:9000");
-    expect(spec.env.ANTHROPIC_BASE_URL).toBe("http://host.docker.internal:9000");
     expect(spec.env.TEAMROOM_ALLOWED_TOOLS).toBe("mail.send");
     expect(spec.mounts.find((m) => m.containerPath === "/codebase")).toBeDefined();
     expect(spec.mounts.find((m) => m.containerPath === "/AGENTS.md")).toBeDefined();
@@ -61,14 +60,14 @@ describe("buildSpec", () => {
     expect(spec.mounts.find((m) => m.containerPath === "/codebase")).toBeUndefined();
   });
 
-  it("uses runtime for worker selection while preserving provider for token routing", () => {
+  it("sets runtime and provider env vars for pi agents", () => {
     const tokenRegistry = new TokenRegistry(() => "proxy-token");
     const piCfg: AgentConfig = {
       ...cfg,
       name: "pi-coder",
       runtime: "pi",
-      provider: "openai",
-      model: "openai/gpt-5.5",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
       imageTag: "teamroom-agent-pi-coder:latest",
     };
     const spec = buildSpec({
@@ -83,12 +82,12 @@ describe("buildSpec", () => {
     });
 
     expect(spec.env.TEAMROOM_RUNTIME).toBe("pi");
-    expect(spec.env.TEAMROOM_PROVIDER).toBe("openai");
-    expect(spec.env.TEAMROOM_MODEL).toBe("openai/gpt-5.5");
+    expect(spec.env.TEAMROOM_PROVIDER).toBe("openrouter");
+    expect(spec.env.TEAMROOM_MODEL).toBe("deepseek/deepseek-v4-flash");
     expect(tokenRegistry.lookup("proxy-token")).toMatchObject({
       agentId: "pi-coder",
-      provider: "openai",
-      model: "openai/gpt-5.5",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
     });
   });
 

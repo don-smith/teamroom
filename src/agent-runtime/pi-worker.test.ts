@@ -108,7 +108,7 @@ describe("PiAgentWorker", () => {
     expect(prompts[0]).not.toMatch(/requires a reply/);
   });
 
-  it("rejects openrouter as a Pi provider", async () => {
+  it("accepts openrouter as a Pi provider", async () => {
     const prev = process.env.TEAMROOM_PROVIDER;
     process.env.TEAMROOM_PROVIDER = "openrouter";
     process.env.TEAMROOM_MODEL = "deepseek/deepseek-v4-flash";
@@ -117,7 +117,9 @@ describe("PiAgentWorker", () => {
     process.env.TEAMROOM_MCP_URL = "http://localhost/mcp";
     process.env.TEAMROOM_MCP_TOKEN = "mcp-tok";
     try {
-      await expect(PiAgentWorker.create()).rejects.toThrow(/unsupported TEAMROOM_PROVIDER/);
+      // Should not throw about unsupported provider — PiAgentWorker.create() will
+      // fail for other reasons (no actual Pi session) but the provider check passes.
+      await expect(PiAgentWorker.create()).rejects.not.toThrow(/unsupported TEAMROOM_PROVIDER/);
     } finally {
       if (prev === undefined) delete process.env.TEAMROOM_PROVIDER;
       else process.env.TEAMROOM_PROVIDER = prev;

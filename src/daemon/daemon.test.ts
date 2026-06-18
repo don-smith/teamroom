@@ -21,14 +21,14 @@ describe("daemon shutdown", () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  const baseDaemonOpts = {
+    openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
+  };
+
   it("unlinks the PID file on clean stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
     const pidFile = join(dataDir, "teamroom.pid");
     expect(existsSync(pidFile)).toBe(true);
@@ -39,11 +39,7 @@ describe("daemon shutdown", () => {
   it("stop() is idempotent", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
     await daemon.stop();
     await expect(daemon.stop()).resolves.toBeUndefined();
@@ -52,18 +48,13 @@ describe("daemon shutdown", () => {
   it("stop() succeeds even if PID file was removed externally", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
     unlinkSync(join(dataDir, "teamroom.pid"));
     await expect(daemon.stop()).resolves.toBeUndefined();
   });
 
   it("exposes a mailing-list registry reflecting agent subscriptions", async () => {
-    // lists.yaml at repoRoot so the agent's subscription resolves.
     writeFileSync(
       join(root, "lists.yaml"),
       "lists:\n  - name: team-wide\n    triggers: []\n",
@@ -74,16 +65,12 @@ describe("daemon shutdown", () => {
     writeFileSync(join(agentDir, "AGENTS.md"), "# sub-agent");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: sub-agent\nmodel: m\nimage_tag: t\nprovider: lm-studio\nsubscriptions:\n  - list:team-wide\n",
+      "name: sub-agent\nmodel: m\nimage_tag: t\nprovider: openrouter\nruntime: pi\nsubscriptions:\n  - list:team-wide\n",
     );
 
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
 
     try {
@@ -101,27 +88,19 @@ describe("daemon shutdown", () => {
     writeFileSync(join(agentDir, "AGENTS.md"), "# Archie");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: archie\nruntime: deepagents\nprovider: anthropic\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-archie:latest\nlifecycle: persistent\n",
+      "name: archie\nruntime: deepagents\nprovider: openrouter\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-archie:latest\nlifecycle: persistent\n",
     );
 
     await expect(startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     })).rejects.toThrow(/TEAMROOM_CODEBASE_PATH.*deepagents.*archie/);
   });
 
   it("writes the mail-server port to data/ports/mail-mcp.port and clears it on stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
     const portFile = join(dataDir, "ports", "mail-mcp.port");
     expect(existsSync(portFile)).toBe(true);
@@ -134,18 +113,12 @@ describe("daemon shutdown", () => {
   it("removes daemon bus logging subscribers on stop", async () => {
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
     });
     const before = daemon.eventBus.subscriberCount("mail.delivered");
     expect(before).toBeGreaterThan(0);
     await daemon.stop();
     const after = daemon.eventBus.subscriberCount("mail.delivered");
-    // composeSessionManagement's subscription is not removed by stop(), but the
-    // daemon's own logging subscriber is.
     expect(after).toBe(before - 1);
   });
 
@@ -167,17 +140,11 @@ describe("daemon shutdown", () => {
 
     const daemon = await startDaemon({
       dataDir, agentsDir,
-      lmStudio: { upstreamUrl: "http://example.invalid", realKey: "x" },
-      ollama: { upstreamUrl: "http://example.invalid" },
-      openai: { upstreamUrl: "http://example.invalid", realKey: "openai-test" },
-      openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
-      anthropic: null,
+      ...baseDaemonOpts,
       runner,
     });
 
     try {
-      // Boot-spawn failure should not prevent daemon start; the agent simply
-      // has no live session yet.
       expect(daemon.sessionManager.hasSession("archie")).toBe(false);
     } finally {
       await daemon.stop();

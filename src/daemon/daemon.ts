@@ -29,36 +29,15 @@ import type { Clock } from "../clock/clock.js";
 import type { Logger } from "../logger/logger.js";
 import type { Db } from "../db/database.js";
 
-/**
- * Anthropic credentials. OAuth is preferred; API key is the fallback. `null` in
- * {@link DaemonOptions} means the Anthropic adapter is not configured — turns for
- * `provider: anthropic` agents will be refused.
- */
-export type AnthropicCreds =
-  | { mode: "api-key"; apiKey: string }
-  | { mode: "oauth"; oauthToken: string };
-
 export interface DaemonOptions {
   dataDir: string;   // e.g. <repo>/data
   agentsDir: string; // e.g. <repo>/agents
   /** Path to `lists.yaml`. Defaults to <agentsDir>/../lists.yaml. */
   listsYamlPath?: string;
-  lmStudio: {
-    upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:1234
-    realKey: string;     // bearer token for the upstream LM Studio endpoint
-  };
-  ollama: {
-    upstreamUrl: string; // container-side URL, e.g. http://host.docker.internal:11434
-  };
-  openai: {
-    upstreamUrl: string; // host-side URL for the OpenAI-compatible API
-    realKey: string;
-  };
   openrouter: {
-    upstreamUrl: string; // host-side URL for the OpenRouter OpenAI-compatible API
+    upstreamUrl: string; // host-side URL for the OpenRouter API
     realKey: string;
   };
-  anthropic: AnthropicCreds | null;
   turnTimeoutMs?: number;
   pollIntervalMs?: number;
   /** Port to bind the mail MCP HTTP server. 0 = ephemeral. */
@@ -128,11 +107,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   // --- 8. Model proxy ---
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
-    lmStudio: opts.lmStudio,
-    ollama: opts.ollama,
-    openai: opts.openai,
     openrouter: opts.openrouter,
-    anthropic: opts.anthropic,
   });
 
   // --- 9. Mail MCP server (with late-bound token resolver) ---

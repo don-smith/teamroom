@@ -47,8 +47,6 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
       TEAMROOM_MODEL: cfg.model,
       TEAMROOM_MODEL_BASE_URL: args.modelBaseUrl,
       TEAMROOM_MODEL_API_TOKEN: proxyToken,
-      ANTHROPIC_BASE_URL: args.modelBaseUrl,
-      ANTHROPIC_AUTH_TOKEN: proxyToken,
       TEAMROOM_ALLOWED_TOOLS: cfg.allowedTools.join(","),
       TEAMROOM_MCP_URL: `http://host.docker.internal:${args.mailPort}/mcp`,
       TEAMROOM_MCP_TOKEN: args.mcpToken,

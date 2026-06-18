@@ -23,21 +23,21 @@ async function withEnv(
 }
 
 describe("buildWorker", () => {
-  it("uses TEAMROOM_RUNTIME when present", async () => {
-    await withEnv({ TEAMROOM_RUNTIME: "bogus", TEAMROOM_PROVIDER: "anthropic" }, async () => {
+  it("requires TEAMROOM_RUNTIME", async () => {
+    await withEnv({ TEAMROOM_RUNTIME: undefined }, async () => {
       await expect(buildWorker()).rejects.toThrow(/TEAMROOM_RUNTIME/);
     });
   });
 
-  it("falls back to TEAMROOM_PROVIDER for old containers", async () => {
-    await withEnv({ TEAMROOM_RUNTIME: undefined, TEAMROOM_PROVIDER: "bogus" }, async () => {
-      await expect(buildWorker()).rejects.toThrow(/TEAMROOM_PROVIDER/);
+  it("rejects unknown runtime values", async () => {
+    await withEnv({ TEAMROOM_RUNTIME: "bogus" }, async () => {
+      await expect(buildWorker()).rejects.toThrow(/TEAMROOM_RUNTIME/);
     });
   });
 
-  it("throws if neither TEAMROOM_RUNTIME nor TEAMROOM_PROVIDER is set", async () => {
-    await withEnv({ TEAMROOM_RUNTIME: undefined, TEAMROOM_PROVIDER: undefined }, async () => {
-      await expect(buildWorker()).rejects.toThrow(/TEAMROOM_PROVIDER/);
+  it("throws for deepagents runtime (implemented by shim.py)", async () => {
+    await withEnv({ TEAMROOM_RUNTIME: "deepagents" }, async () => {
+      await expect(buildWorker()).rejects.toThrow(/shim\.py/);
     });
   });
 });

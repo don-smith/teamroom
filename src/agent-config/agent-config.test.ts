@@ -10,13 +10,13 @@ describe("loadAgentConfig", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
-    agentDir = join(base, "studio-assistant");
+    agentDir = join(base, "test-agent");
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(join(agentDir, "store"), { recursive: true });
-    writeFileSync(join(agentDir, "AGENTS.md"), "# Assistant prompt");
+    writeFileSync(join(agentDir, "AGENTS.md"), "# Agent prompt");
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: studio-assistant\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-studio-assistant:latest\nprovider: lm-studio\n",
+      "name: test-agent\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-test:latest\nprovider: openrouter\nruntime: deepagents\n",
     );
   });
 
@@ -24,17 +24,27 @@ describe("loadAgentConfig", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  it("loads a valid agent config", () => {
+  it("loads a valid agent config with deepagents runtime", () => {
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.name).toBe("studio-assistant");
-    expect(cfg.model).toBe("claude-opus-4-7");
-    expect(cfg.imageTag).toBe("teamroom-agent-studio-assistant:latest");
-    expect(cfg.provider).toBe("lm-studio");
-    expect(cfg.runtime).toBe("langgraph");
+    expect(cfg.name).toBe("test-agent");
+    expect(cfg.model).toBe("deepseek/deepseek-v4-flash");
+    expect(cfg.imageTag).toBe("teamroom-agent-test:latest");
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.runtime).toBe("deepagents");
     expect(cfg.lifecycle).toBe("session");
     expect(cfg.configPath).toBe(agentDir);
     expect(cfg.agentsMdPath).toBe(join(agentDir, "AGENTS.md"));
     expect(cfg.storePath).toBe(join(agentDir, "store"));
+  });
+
+  it("loads a valid agent config with pi runtime", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      "name: pi-agent\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-pi:latest\nprovider: openrouter\nruntime: pi\n",
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.runtime).toBe("pi");
   });
 
   it("rejects when agent.yaml is missing", () => {
@@ -53,17 +63,17 @@ describe("loadAgentConfig", () => {
   });
 
   it("rejects when required yaml fields are missing", () => {
-    writeFileSync(join(agentDir, "agent.yaml"), "name: studio-assistant\n");
+    writeFileSync(join(agentDir, "agent.yaml"), "name: test-agent\n");
     expect(() => loadAgentConfig(agentDir)).toThrow(/model|image_tag/);
   });
 
-  it("loads the real pi-coder agent config", () => {
-    const cfg = loadAgentConfig(join(process.cwd(), "agents/pi-coder"));
+  it("loads the real micah agent config", () => {
+    const cfg = loadAgentConfig(join(process.cwd(), "agents/micah"));
     expect(cfg).toMatchObject({
-      name: "pi-coder",
+      name: "micah",
       runtime: "pi",
-      provider: "openai",
-      model: "openai/gpt-5.5",
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4-flash",
     });
   });
 
@@ -85,7 +95,7 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
-    agentDir = join(base, "studio-assistant");
+    agentDir = join(base, "test-agent");
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(join(agentDir, "store"), { recursive: true });
     writeFileSync(join(agentDir, "AGENTS.md"), "# test");
@@ -98,14 +108,14 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
   it("parses list:* subscriptions (defaults to empty)", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - list:harness-activity\n  - list:team-wide\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\nsubscriptions:\n  - list:harness-activity\n  - list:team-wide\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.subscriptions).toEqual(["list:harness-activity", "list:team-wide"]);
 
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\n",
     );
     const cfg2 = loadAgentConfig(agentDir);
     expect(cfg2.subscriptions).toEqual([]);
@@ -114,15 +124,15 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
   it("rejects non-string subscription entries", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - list:ok\n  - 42\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\nsubscriptions:\n  - list:ok\n  - 42\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/subscriptions.*must be a string/);
   });
 
-  it("rejects non-list:* subscriptions (M4: only list:<name> allowed)", () => {
+  it("rejects non-list:* subscriptions", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nsubscriptions:\n  - bare-name\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\nsubscriptions:\n  - bare-name\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/list:<name>/);
   });
@@ -130,14 +140,14 @@ describe("loadAgentConfig — subscriptions and allowed_tools", () => {
   it("parses allowed_tools as string[] (defaults to empty)", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nallowed_tools:\n  - Read\n  - Write\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\nallowed_tools:\n  - Read\n  - Write\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.allowedTools).toEqual(["Read", "Write"]);
 
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\n",
     );
     const cfg2 = loadAgentConfig(agentDir);
     expect(cfg2.allowedTools).toEqual([]);
@@ -163,7 +173,7 @@ describe("loadAgentConfig — lifecycle field", () => {
   it("defaults lifecycle to 'session' when omitted", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.lifecycle).toBe("session");
@@ -172,7 +182,7 @@ describe("loadAgentConfig — lifecycle field", () => {
   it("parses lifecycle: persistent", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: persistent\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: deepagents\nlifecycle: persistent\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.lifecycle).toBe("persistent");
@@ -181,7 +191,7 @@ describe("loadAgentConfig — lifecycle field", () => {
   it("rejects unknown lifecycle values", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nlifecycle: forever\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\nlifecycle: forever\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/lifecycle.*'session'.*'persistent'.*got 'forever'/);
   });
@@ -193,7 +203,7 @@ describe("loadAgentConfig — provider field", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "teamroom-agent-"));
-    agentDir = join(base, "studio-assistant");
+    agentDir = join(base, "test-agent");
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(join(agentDir, "store"), { recursive: true });
     writeFileSync(join(agentDir, "AGENTS.md"), "# test");
@@ -206,10 +216,10 @@ describe("loadAgentConfig — provider field", () => {
   it("returns provider when present", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\nruntime: pi\n",
     );
     const cfg = loadAgentConfig(agentDir);
-    expect(cfg.provider).toBe("anthropic");
+    expect(cfg.provider).toBe("openrouter");
   });
 
   it("throws when provider is missing", () => {
@@ -220,10 +230,10 @@ describe("loadAgentConfig — provider field", () => {
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
 
-  it("throws when provider is not in the allowed set", () => {
+  it("throws when provider is not openrouter", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\nruntime: pi\n",
     );
     expect(() => loadAgentConfig(agentDir)).toThrow(/provider/);
   });
@@ -231,31 +241,12 @@ describe("loadAgentConfig — provider field", () => {
   it("echoes the offending provider value in the error message", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: bespoke\n",
+      "name: x\nmodel: y\nimage_tag: z\nprovider: lm-studio\nruntime: pi\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'bespoke'/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/got 'lm-studio'/);
   });
 
-  it("accepts provider: ollama", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      `name: x\nmodel: m\nimage_tag: t\nprovider: ollama\nsubscriptions: []\n`,
-    );
-    const cfg = loadAgentConfig(agentDir);
-    expect(cfg.provider).toBe("ollama");
-  });
-
-  it("accepts provider: openai", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      `name: x\nmodel: openai/gpt-5.5\nimage_tag: t\nprovider: openai\nruntime: pi\nsubscriptions: []\n`,
-    );
-    const cfg = loadAgentConfig(agentDir);
-    expect(cfg.provider).toBe("openai");
-    expect(cfg.runtime).toBe("pi");
-  });
-
-  it("accepts provider: openrouter", () => {
+  it("accepts provider: openrouter with deepagents runtime", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
       `name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: t\nprovider: openrouter\nruntime: deepagents\nsubscriptions: []\n`,
@@ -263,6 +254,16 @@ describe("loadAgentConfig — provider field", () => {
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.provider).toBe("openrouter");
     expect(cfg.runtime).toBe("deepagents");
+  });
+
+  it("accepts provider: openrouter with pi runtime", () => {
+    writeFileSync(
+      join(agentDir, "agent.yaml"),
+      `name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: t\nprovider: openrouter\nruntime: pi\nsubscriptions: []\n`,
+    );
+    const cfg = loadAgentConfig(agentDir);
+    expect(cfg.provider).toBe("openrouter");
+    expect(cfg.runtime).toBe("pi");
   });
 });
 
@@ -282,53 +283,28 @@ describe("loadAgentConfig — runtime field", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  it("infers runtime from provider when runtime is omitted", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: anthropic\n",
-    );
-    expect(loadAgentConfig(agentDir).runtime).toBe("anthropic");
-
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: lm-studio\n",
-    );
-    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
-
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: ollama\n",
-    );
-    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
-
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nprovider: openai\n",
-    );
-    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
-
+  it("throws when runtime is omitted (must be explicit with openrouter-only provider)", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
       "name: x\nmodel: y\nimage_tag: z\nprovider: openrouter\n",
     );
-    expect(loadAgentConfig(agentDir).runtime).toBe("langgraph");
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*required/);
   });
 
-  it("accepts explicit runtime: pi with an existing model provider", () => {
+  it("accepts explicit runtime: pi", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: pi-coder\nmodel: claude-opus-4-7\nimage_tag: teamroom-agent-pi-coder:latest\nruntime: pi\nprovider: anthropic\n",
+      "name: pi-agent\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-pi:latest\nruntime: pi\nprovider: openrouter\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.runtime).toBe("pi");
-    expect(cfg.provider).toBe("anthropic");
-    expect(cfg.model).toBe("claude-opus-4-7");
+    expect(cfg.provider).toBe("openrouter");
   });
 
-  it("accepts explicit runtime: deepagents with an existing model provider", () => {
+  it("accepts explicit runtime: deepagents", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: archie\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-archie:latest\nruntime: deepagents\nprovider: openrouter\nlifecycle: persistent\n",
+      "name: deep-agent\nmodel: deepseek/deepseek-v4-flash\nimage_tag: teamroom-agent-deep:latest\nruntime: deepagents\nprovider: openrouter\nlifecycle: persistent\n",
     );
     const cfg = loadAgentConfig(agentDir);
     expect(cfg.runtime).toBe("deepagents");
@@ -339,33 +315,9 @@ describe("loadAgentConfig — runtime field", () => {
   it("rejects unknown runtime values", () => {
     writeFileSync(
       join(agentDir, "agent.yaml"),
-      "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: anthropic\n",
+      "name: x\nmodel: y\nimage_tag: z\nruntime: bespoke\nprovider: openrouter\n",
     );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*anthropic.*langgraph.*pi.*deepagents/);
-  });
-
-  it("rejects runtime: anthropic with a non-anthropic provider", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: openai/gpt-5.5\nimage_tag: z\nruntime: anthropic\nprovider: openai\n",
-    );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
-  });
-
-  it("rejects runtime: langgraph with provider: anthropic", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: claude-opus-4-7\nimage_tag: z\nruntime: langgraph\nprovider: anthropic\n",
-    );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
-  });
-
-  it("rejects runtime: pi with provider: openrouter", () => {
-    writeFileSync(
-      join(agentDir, "agent.yaml"),
-      "name: x\nmodel: deepseek/deepseek-v4-flash\nimage_tag: z\nruntime: pi\nprovider: openrouter\n",
-    );
-    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*provider/);
+    expect(() => loadAgentConfig(agentDir)).toThrow(/runtime.*must be.*pi.*deepagents/);
   });
 });
 

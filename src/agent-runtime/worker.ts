@@ -18,38 +18,17 @@ export interface AgentWorker {
   handleWake(wake: WakeEnvelope): Promise<void>;
 }
 
-function runtimeFromEnv(): { runtime: string; source: "TEAMROOM_RUNTIME" | "TEAMROOM_PROVIDER" } {
+function runtimeFromEnv(): string {
   const runtime = process.env.TEAMROOM_RUNTIME;
-  if (runtime) return { runtime, source: "TEAMROOM_RUNTIME" };
-
-  const provider = process.env.TEAMROOM_PROVIDER;
-  if (!provider) {
-    throw new Error("TEAMROOM_PROVIDER is required");
+  if (!runtime) {
+    throw new Error("TEAMROOM_RUNTIME is required");
   }
-  switch (provider) {
-    case "anthropic":
-      return { runtime: "anthropic", source: "TEAMROOM_PROVIDER" };
-    case "lm-studio":
-    case "ollama":
-    case "openai":
-    case "openrouter":
-      return { runtime: "langgraph", source: "TEAMROOM_PROVIDER" };
-    default:
-      throw new Error(`unknown TEAMROOM_PROVIDER: '${provider}'`);
-  }
+  return runtime;
 }
 
 export async function buildWorker(): Promise<AgentWorker> {
-  const { runtime, source } = runtimeFromEnv();
+  const runtime = runtimeFromEnv();
   switch (runtime) {
-    case "anthropic": {
-      const { AnthropicAgentWorker } = await import("./anthropic-worker.js");
-      return AnthropicAgentWorker.create();
-    }
-    case "langgraph": {
-      const { LangGraphAgentWorker } = await import("./langgraph-worker.js");
-      return LangGraphAgentWorker.create();
-    }
     case "pi": {
       const { PiAgentWorker } = await import("./pi-worker.js");
       return PiAgentWorker.create();
@@ -59,6 +38,6 @@ export async function buildWorker(): Promise<AgentWorker> {
         `runtime '${runtime}' is implemented by agents/archie/shim.py; the TypeScript worker factory does not build it`,
       );
     default:
-      throw new Error(`unknown ${source}: '${runtime}'`);
+      throw new Error(`unknown TEAMROOM_RUNTIME: '${runtime}'`);
   }
 }
