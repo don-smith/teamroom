@@ -117,5 +117,4 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 ## Related
 
 - [`team-room-context.md §7`](../team-room-context.md) — frozen original roadmap. Consult for historical context; do not edit.
-- [`docs/ways-of-working.md`](ways-of-working.md) — document inventory including this file.
 - [`docs/retros/`](retros/) — per-milestone retrospectives; each one's action items feed back here.

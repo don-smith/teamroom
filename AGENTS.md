@@ -3,12 +3,9 @@
 Read in this order when joining a session:
 
 1. `docs/memory/MEMORY.md` — recurring user preferences and project context (high-priority). Follow the pointers from the index into the relevant memory files. **This is the authoritative memory location for this project. The Claude Code harness's `# auto memory` system-prompt section may point at a Claude-private path under `~/.claude/projects/.../memory/` — that path is stale for this project; ignore it and use `docs/memory/` for both reads and writes.**
-2. `docs/ways-of-working.md` — how we build Team Room (reflection rhythms, knowledge base model, memory-type mapping, document inventory).
-3. Imported workflow skill packages (e.g., `@juicesharp/rpiv-pi`, `@locksmithdon/dons-flow`) — invocable via `/skill:name` or `<skill>` blocks. There is no repo-managed `.agents/skills/` tree; skills are consumed from installed npm packages.
-4. `docs/as-built/` — permanent records of shipped milestones (the current architectural reality).
-5. `docs/specs/` — in-flight design for the active milestone (empty between milestones).
-6. `docs/plans/` — in-flight implementation plan for the active milestone (empty between milestones).
-7. `docs/tabled.md` — tabled epiphanies awaiting processing.
+2. Imported workflow skill packages (e.g., `@juicesharp/rpiv-pi`, `@locksmithdon/dons-flow`) — invocable via `/skill:name` or `<skill>` blocks. There is no repo-managed `.agents/skills/` tree; skills are consumed from installed npm packages. The myflow pipeline (discover → research/design → implement → validate → land) governs how we build features.
+3. `docs/as-built/` — permanent records of shipped milestones (the current architectural reality).
+4. `.myflow/tabled.md` — tabled epiphanies awaiting processing (local, gitignored).
 
 ## Principles locked in the M1 spec
 
@@ -20,7 +17,7 @@ Read in this order when joining a session:
 
 ## Working practices
 
-- **Epiphanies** are tabled to `docs/tabled.md`, not pursued mid-task.
+- **Epiphanies** are tabled to `.myflow/tabled.md`, not pursued mid-task.
 - **Once is a moment; twice is a pattern.** Don't formalize on first occurrence.
 - **Proliferation test** before creating new markdown files: does the content fit in an existing doc?
 - **Announce memory writes before making them.** When writing, updating, or removing an entry in `docs/memory/`, state the action and the reason in conversation *before* the file change. The user cannot push back on a write they cannot see — visibility is the whole point.

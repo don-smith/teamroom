@@ -6,7 +6,7 @@
 > reasoning) so I can extrapolate to edge cases rather than pattern-match a
 > bullet.
 >
-> **What this is not.** Process content (→ `docs/ways-of-working.md`).
+> **What this is not.** Process content (→ imported workflow skill packages).
 > Procedures (→ `docs/runbooks/`). Tactical capabilities (→ imported workflow skill packages such as `@juicesharp/rpiv-pi` and `@locksmithdon/dons-flow`).
 > Anything derivable from current code or docs. Conversation-scoped state
 > (→ plans / tasks).
