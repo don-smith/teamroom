@@ -1,4 +1,4 @@
-import { Bot, GrammyError } from "grammy";
+import { Bot, GrammyError, InputFile } from "grammy";
 import https from "node:https";
 import OpenAI from "openai";
 import type { MessageRepo } from "../db/message-repo.js";
@@ -58,18 +58,19 @@ export class TelegramGateway {
    */
   async start(): Promise<void> {
     for (const entry of this.deps.bots) {
-      const token = process.env[entry.tokenEnvVar]!;
-      const bot = new Bot(token, {
-        client: {
-          baseFetchConfig: {
-            // Force IPv4 — broken IPv6 routing (e.g. WireGuard/Tailscale split
-            // tunnels) causes Node.js Happy Eyeballs to hang on the IPv6 attempt
-            // before failing over. Nanoclaw lesson learned.
-            agent: new https.Agent({ family: 4, keepAlive: true }),
-            compress: true,
+      try {
+        const token = process.env[entry.tokenEnvVar]!;
+        const bot = new Bot(token, {
+          client: {
+            baseFetchConfig: {
+              // Force IPv4 — broken IPv6 routing (e.g. WireGuard/Tailscale split
+              // tunnels) causes Node.js Happy Eyeballs to hang on the IPv6 attempt
+              // before failing over. Nanoclaw lesson learned.
+              agent: new https.Agent({ family: 4, keepAlive: true }),
+              compress: true,
+            },
           },
-        },
-      });
+        });
 
       // Inbound text messages
       bot.on("message:text", async (ctx) => {
@@ -184,20 +185,41 @@ export class TelegramGateway {
       });
 
       // Start long-polling (grammy manages reconnection and offset internally)
-      await bot.start({
+      // Fire bot.start() without awaiting — grammy's polling loop keeps the
+      // promise pending indefinitely. Instead, wait for the onStart callback
+      // which fires after init + deleteWebhook complete.
+      const { promise: botReady, resolve: resolveBotReady, reject: rejectBotReady } = Promise.withResolvers<void>();
+      // Timeout guard: if a bot's initialization hangs, don't block the daemon
+      const timeout = setTimeout(() =>
+        rejectBotReady(new Error(`bot.start() timed out for ${entry.agent}`)), 30_000,
+      );
+      bot.start({
         onStart: (botInfo) => {
+          clearTimeout(timeout);
+          resolveBotReady();
           this.deps.logger.info("telegram.bot_started", {
             agent: entry.agent,
             username: botInfo.username,
           });
         },
+      }).catch((err) => {
+        clearTimeout(timeout);
+        // If onStart already resolved, rejecting is a no-op (promise settled)
+        rejectBotReady(err);
       });
+      await botReady;
 
-      this.instances.push({
-        agent: entry.agent,
-        bot,
-        stop: () => bot.stop(),
-      });
+        this.instances.push({
+          agent: entry.agent,
+          bot,
+          stop: () => bot.stop(),
+        });
+      } catch (err) {
+        this.deps.logger.error("telegram.bot_init_failed", {
+          agent: entry.agent,
+          error: String(err),
+        });
+      }
     }
 
     // Subscribe to channel.out for outbound delivery to Telegram channels
@@ -296,7 +318,7 @@ export class TelegramGateway {
     await this.sendText(inst.bot, chatId, text);
 
     // Fire-and-forget TTS for voice-originated threads
-    if (this.voiceThreadIds.has(payload.threadId) && text.length >= 200) {
+    if (this.voiceThreadIds.has(payload.threadId)) {
       this.ttsSendVoice(inst.bot, chatId, text, payload.threadId).catch((err) => {
         this.deps.logger.warn("telegram.outbound.tts_fallback", {
           threadId: payload.threadId,
@@ -352,7 +374,7 @@ export class TelegramGateway {
         input: text,
       });
       const audioBuffer = Buffer.from(await mp3.arrayBuffer());
-      await bot.api.sendVoice(chatId, new Blob([audioBuffer], { type: "audio/mpeg" }));
+      await bot.api.sendVoice(chatId, new InputFile(audioBuffer, "voice.mp3"));
     } catch (err) {
       // TTS failure is non-blocking — text was already delivered
       this.deps.logger.warn("telegram.outbound.tts_failed", {

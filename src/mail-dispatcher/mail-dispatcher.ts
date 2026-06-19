@@ -167,7 +167,7 @@ export class MailDispatcher {
   }
 
   private fromCreatesReplyExpectation(from: string): boolean {
-    return this.safeParseFrom(from)?.kind === "agent" || from.startsWith("channel:cli:");
+    return this.safeParseFrom(from)?.kind === "agent" || this.safeParseFrom(from)?.kind === "channel";
   }
 
   private safeParseFrom(from: string): Address | null {

@@ -20,6 +20,9 @@ import { composeModelProxy } from "../modules/model-proxy/model-proxy.js";
 import { composeSessionManagement } from "../modules/session-management/session-management.js";
 import { composeChannels } from "../modules/channels/channels.js";
 import { composeMail } from "../modules/mail/mail.js";
+import { composeTelegram } from "../gateways/telegram-gateway.js";
+import { loadTelegramYaml } from "../gateways/telegram-config.js";
+import OpenAI from "openai";
 import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { MailingListRegistry } from "../mailing-lists/registry.js";
@@ -53,6 +56,8 @@ export interface DaemonOptions {
    * that need to simulate spawn failures or inspect container interactions.
    */
   runner?: ContainerRunner;
+  /** Path to telegram.yaml. Defaults to <agentsDir>/../telegram.yaml. */
+  telegramYamlPath?: string;
 }
 
 export interface StartedDaemon {

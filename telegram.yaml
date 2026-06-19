@@ -12,5 +12,5 @@
 bots:
   - agent: doc
     tokenEnvVar: TELEGRAM_TOKEN_DOC
-  - agent: libby
-    tokenEnvVar: TELEGRAM_TOKEN_LIBBY
+  - agent: archie
+    tokenEnvVar: TELEGRAM_TOKEN_ARCHIE
