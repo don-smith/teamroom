@@ -46,8 +46,8 @@ describe("composeChannels", () => {
     expect(channels.registry.listChannels()).toContain("cli");
   });
 
-  it("the registry has cli pre-registered", () => {
+  it("the registry has cli and telegram pre-registered", () => {
     expect(channels.registry.has("cli")).toBe(true);
-    expect(channels.registry.has("telegram")).toBe(false);
+    expect(channels.registry.has("telegram")).toBe(true);
   });
 });

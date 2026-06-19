@@ -28,6 +28,7 @@ export interface ChannelsDeps {
 export async function composeChannels(deps: ChannelsDeps): Promise<Channels> {
   const registry = new ChannelRegistry();
   registry.register("cli");
+  registry.register("telegram");
 
   const server = new ChatServer({
     storage: deps.storage,
