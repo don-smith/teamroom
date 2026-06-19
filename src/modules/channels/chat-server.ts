@@ -40,17 +40,23 @@ export class ChatServer {
     this.wss = new WebSocketServer({ server: this.http });
     this.wss.on("connection", (ws) => this.handleConnection(ws));
 
-    // Subscribe to channel.cli.out for cli-addressed outbound mail.
-    // The dispatcher publishes this event (with messageId) whenever a message
-    // is delivered to a channel:cli:<externalId> recipient. Capture the
-    // unsubscribe handle so stop() can release it — without this, repeated
-    // start/stop cycles on a shared bus would accumulate stale subscribers.
+    // Subscribe to channel.out for channel-addressed outbound mail.
+    // The dispatcher publishes this event (with messageId + channel field)
+    // whenever a message is delivered to a channel:<channel>:<externalId>
+    // recipient. We filter to channel === "cli" — other subscribers (Telegram
+    // gateway) handle their own channels.
     this.unsubscribe = this.opts.messaging.eventBus.subscribe<{
+      channel: string;
       user: string;
       messageId: string;
       agentId: string;
       threadId: string;
-    }>("channel.cli.out", (payload) => this.routeCliDelivery(payload));
+      from: string;
+      to: string[];
+    }>("channel.out", (payload) => {
+      if (payload.channel !== "cli") return;
+      this.routeCliDelivery(payload);
+    });
 
     // Localhost-only by design — auth lives in the channel registry policy,
     // not at the network layer (M4.5 spec §External surfaces).
@@ -161,15 +167,18 @@ export class ChatServer {
   }
 
   /**
-   * Routes a channel.cli.out event to the matching registered WebSocket client.
-   * The dispatcher publishes this event for every message delivered to a
-   * channel:cli:<externalId> recipient.
+   * Routes a channel.out event for channel="cli" to the matching registered
+   * WebSocket client. The dispatcher publishes this event for every message
+   * delivered to a channel:cli:<externalId> recipient.
    */
   private routeCliDelivery(payload: {
+    channel: string;
     user: string;
     messageId: string;
     agentId: string;
     threadId: string;
+    from: string;
+    to: string[];
   }): void {
     const target = [...this.connections].find(
       (c) => c.channel === "cli" && c.externalId === payload.user,

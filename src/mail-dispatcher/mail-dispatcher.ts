@@ -12,7 +12,7 @@ import { parseAddress, formatAddress, type Address } from "./address.js";
  *   4. Insert one row per expanded recipient. All rows share identical
  *      `to`, `from`, `cc`, `subject`, `body`, `thread_id` — only `agent_id`
  *      and per-row state differ. This preserves group-discussion semantics.
- *   5. Publish `mail.delivered` / `channel.cli.out` per row; `mail.sent`
+ *   5. Publish `mail.delivered` / `channel.out` per row; `mail.sent`
  *      once for the sender (if the sender is an agent).
  */
 
@@ -111,16 +111,16 @@ export class MailDispatcher {
           replyExpected: delivery.replyExpected,
         };
         this.deps.bus.publish("mail.delivered", payload);
-      } else if (addr.kind === "channel" && addr.channel === "cli") {
-        // CLI outbound rows carry the full mail envelope so that the
-        // ChatServer can forward it over WebSocket without additional lookups.
-        // We still scope the row to the sending agent via agent_id (or the
-        // sender address verbatim when the sender is channel:cli:* or 'system').
+      } else if (addr.kind === "channel") {
+        // Channel outbound rows carry the full mail envelope so that the
+        // channel subscriber (ChatServer, Telegram gateway, etc.) can
+        // forward it without additional lookups. The channel name in the
+        // payload lets subscribers filter to their own channel.
         const senderLabel = this.senderLabel(input.from);
         this.deps.messageRepo.create({
           id,
           agentId: senderLabel,
-          channel: "cli",
+          channel: addr.channel,
           direction: "out",
           body: input.body,
           traceId: id,
@@ -130,10 +130,8 @@ export class MailDispatcher {
           to: toStrings,
           cc: ccStrings,
         });
-        // Include the row id so ChatServer can forward channel.cli.out events
-        // to the registered WebSocket client without racing to find the most
-        // recent row. Also include from/to strings for the full envelope.
-        this.deps.bus.publish("channel.cli.out", {
+        this.deps.bus.publish("channel.out", {
+          channel: addr.channel,
           user: addr.externalId,
           messageId: id,
           agentId: senderLabel,

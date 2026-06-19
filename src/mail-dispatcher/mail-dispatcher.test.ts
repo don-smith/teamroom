@@ -147,10 +147,10 @@ describe("MailDispatcher — agent recipient", () => {
 });
 
 describe("MailDispatcher — cli recipient", () => {
-  it("inserts a CLI outbound row, no email row, publishes channel.cli.out", () => {
+  it("inserts a CLI outbound row, no email row, publishes channel.out", () => {
     const { dispatcher, messageRepo, bus } = makeHarness();
     const out: unknown[] = [];
-    bus.subscribe("channel.cli.out", (p) => out.push(p));
+    bus.subscribe("channel.out", (p) => out.push(p));
 
     dispatcher.sendMail({
       from: "agent:claude-assistant",
@@ -165,6 +165,7 @@ describe("MailDispatcher — cli recipient", () => {
     expect(cliRows[0]!.direction).toBe("out");
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
+      channel: "cli",
       user: "don",
       agentId: "claude-assistant",
       messageId: cliRows[0]!.id,
