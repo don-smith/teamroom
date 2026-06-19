@@ -115,11 +115,29 @@ describe("daemon shutdown", () => {
       dataDir, agentsDir,
       ...baseDaemonOpts,
     });
-    const before = daemon.eventBus.subscriberCount("mail.delivered");
-    expect(before).toBeGreaterThan(0);
+    const beforeMail = daemon.eventBus.subscriberCount("mail.delivered");
+    expect(beforeMail).toBeGreaterThan(0);
+    const beforeChOut = daemon.eventBus.subscriberCount("channel.out");
+    expect(beforeChOut).toBeGreaterThan(0);
     await daemon.stop();
-    const after = daemon.eventBus.subscriberCount("mail.delivered");
-    expect(after).toBe(before - 1);
+    const afterMail = daemon.eventBus.subscriberCount("mail.delivered");
+    expect(afterMail).toBe(beforeMail - 1);
+    const afterChOut = daemon.eventBus.subscriberCount("channel.out");
+    // Bus logging subscriber is removed, plus any channel.out subscribers
+    // cleaned by sessionMgmt.stop() — just verify it dropped.
+    expect(afterChOut).toBeLessThan(beforeChOut);
+  });
+
+  it("registers a channel.out bus logging subscriber for observability when telegram.yaml is absent", async () => {
+    const daemon = await startDaemon({
+      dataDir, agentsDir,
+      ...baseDaemonOpts,
+    });
+    try {
+      expect(daemon.eventBus.subscriberCount("channel.out")).toBeGreaterThan(0);
+    } finally {
+      await daemon.stop();
+    }
   });
 
   it("starts even when a persistent agent's boot-spawn fails", async () => {

@@ -100,6 +100,36 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     maxMailsPerThread,
   });
 
+  // --- 6. Telegram gateway ---
+  let telegramStop: (() => Promise<void>) | undefined;
+  const telegramYamlPath = opts.telegramYamlPath ?? join(opts.agentsDir, "..", "telegram.yaml");
+  if (existsSync(telegramYamlPath)) {
+    const telegramConfig = loadTelegramYaml(telegramYamlPath);
+    // OpenAI client is created lazily — voice features fail gracefully when
+    // the key is absent, but we warn at startup so operators know.
+    const openaiKey = process.env.TEAMROOM_OPENAI_API_KEY;
+    if (!openaiKey) {
+      obs.rootLogger.warn("telegram: TEAMROOM_OPENAI_API_KEY not set — voice disabled");
+    }
+    const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : undefined;
+    const telegram = composeTelegram({
+      messageRepo: storage.messageRepo,
+      bus: messaging.eventBus,
+      dispatcher: mcpMail.dispatcher,
+      logger: obs.rootLogger,
+      bots: telegramConfig.bots,
+      genId,
+      openai,
+    });
+    await telegram.start();
+    telegramStop = () => telegram.stop();
+    obs.rootLogger.info("telegram gateway started", {
+      botCount: telegramConfig.bots.length,
+    });
+  } else {
+    obs.rootLogger.info("telegram gateway skipped (no telegram.yaml)");
+  }
+
   // --- 7. Codebase-mount resolution ---
   const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
   validateCodebaseRequiredRuntimes(agentConfigs, codebasePath);
@@ -191,6 +221,16 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
       obs.rootLogger.warn("agent.reply_required.fallback_used", p);
     }),
   );
+  busLogUnsubscribes.push(
+    messaging.eventBus.subscribe<{ channel: string; messageId: string; agentId: string; user: string }>("channel.out", (p) => {
+      obs.rootLogger.info("channel.out", {
+        channel: p.channel,
+        messageId: p.messageId,
+        agentId: p.agentId,
+        user: p.user,
+      });
+    }),
+  );
 
   // --- 11. Channels (chat WebSocket on its own port) ---
   const channels = await composeChannels({
@@ -226,6 +266,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     busLogUnsubscribes.length = 0;
     await sessionMgmt.stop();
     await channels.stop();
+    if (telegramStop) await telegramStop();
     deletePortFile(opts.dataDir, "chat");
     await mail.stop();
     deletePortFile(opts.dataDir, "mail");

@@ -1,0 +1,16 @@
+# Telegram bot-to-agent mappings.
+# Each entry pairs a Telegram bot (identified by its token env var) with a
+# Team Room agent. The human DMs the bot and messages route to the agent.
+#
+# Bot tokens are read from environment variables (e.g. TELEGRAM_TOKEN_DOC)
+# to keep credentials out of version control.
+#
+# To add a new bot:
+#   1. Create a bot with @BotFather on Telegram
+#   2. Add the token as an env var in your .env or launchd plist
+#   3. Add an entry below
+bots:
+  - agent: doc
+    tokenEnvVar: TELEGRAM_TOKEN_DOC
+  - agent: libby
+    tokenEnvVar: TELEGRAM_TOKEN_LIBBY
