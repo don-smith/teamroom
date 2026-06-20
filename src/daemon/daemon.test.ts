@@ -23,6 +23,7 @@ describe("daemon shutdown", () => {
 
   const baseDaemonOpts = {
     openrouter: { upstreamUrl: "http://example.invalid", realKey: "openrouter-test" },
+    staleContainerKiller: async () => [],
   };
 
   it("unlinks the PID file on clean stop", async () => {

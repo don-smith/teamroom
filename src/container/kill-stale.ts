@@ -14,7 +14,11 @@ export interface DockerExec {
 }
 
 export const realDockerExec: DockerExec = async (cmd, args) => {
-  const { stdout, stderr } = await execFile(cmd, args, { encoding: "utf8" });
+  const { stdout, stderr } = await execFile(cmd, args, {
+    encoding: "utf8",
+    timeout: 3000,
+    killSignal: "SIGKILL",
+  });
   return { stdout, stderr };
 };
 

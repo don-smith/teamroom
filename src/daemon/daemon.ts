@@ -58,6 +58,11 @@ export interface DaemonOptions {
   runner?: ContainerRunner;
   /** Path to telegram.yaml. Defaults to <agentsDir>/../telegram.yaml. */
   telegramYamlPath?: string;
+  /**
+   * Stale Team Room container cleanup. Defaults to Docker-backed cleanup;
+   * tests inject a no-op so daemon composition does not depend on Docker.
+   */
+  staleContainerKiller?: (opts: { logger: Logger }) => Promise<string[]>;
 }
 
 export interface StartedDaemon {
@@ -81,7 +86,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   installSafetyNets(obs.rootLogger);
 
   // --- 3. Stale-container cleanup ---
-  const killed = await killStaleTeamroomContainers({ logger: obs.rootLogger });
+  const staleContainerKiller = opts.staleContainerKiller ?? killStaleTeamroomContainers;
+  const killed = await staleContainerKiller({ logger: obs.rootLogger });
   if (killed.length > 0) {
     obs.rootLogger.info("stale containers killed", { count: killed.length, ids: killed });
   }
