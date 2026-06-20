@@ -6,6 +6,8 @@ import {
   DefaultResourceLoader,
   ModelRegistry,
   SessionManager,
+  formatSkillsForPrompt,
+  loadSkillsFromDir,
   type AgentSession,
   type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
@@ -151,14 +153,37 @@ async function createProductionSession(): Promise<AgentSession> {
   };
 
   const agentsContent = existsSync("/AGENTS.md") ? readFileSync("/AGENTS.md", "utf8") : "";
+
+  // Load myflow skills from the mounted /myflow-skills directory when present
+  const additionalSkillPaths: string[] = [];
+  const myflowSkillsPromptParts: string[] = [];
+  if (existsSync("/myflow-skills")) {
+    additionalSkillPaths.push("/myflow-skills");
+    const { skills, diagnostics } = loadSkillsFromDir({ dir: "/myflow-skills", source: "myflow" });
+    if (diagnostics.length > 0) {
+      for (const d of diagnostics) {
+        process.stderr.write(`[pi-skills-diagnostic] ${d.message}\n`);
+      }
+    }
+    if (skills.length > 0) {
+      const formatted = formatSkillsForPrompt(skills);
+      myflowSkillsPromptParts.push(
+        "You have access to the following myflow workflow skills. " +
+        "When a task matches a skill's description, read its SKILL.md at the path shown and follow the instructions."
+      );
+      myflowSkillsPromptParts.push(formatted);
+    }
+  }
+
   const resourceLoader = new DefaultResourceLoader({
     cwd,
     agentDir,
+    additionalSkillPaths: additionalSkillPaths.length > 0 ? additionalSkillPaths : undefined,
     extensionFactories: [mailExtension],
     agentsFilesOverride: () => ({
       agentsFiles: [{ path: "/AGENTS.md", content: agentsContent }],
     }),
-    appendSystemPromptOverride: (base) => [...base, TEAMROOM_APPEND_PROMPT],
+    appendSystemPromptOverride: (base) => [...base, TEAMROOM_APPEND_PROMPT, ...myflowSkillsPromptParts],
   });
   await resourceLoader.reload();
 

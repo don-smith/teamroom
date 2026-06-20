@@ -139,6 +139,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
   const codebasePath = resolveCodebasePath(opts.dataDir, obs.rootLogger);
   validateCodebaseRequiredRuntimes(agentConfigs, codebasePath);
 
+  // --- 7b. MyFlow skills-path resolution ---
+  const myflowSkillsPath = resolveMyflowSkillsPath(obs.rootLogger);
+
   // --- 8. Model proxy ---
   const modelProxy = await composeModelProxy({
     logger: obs.rootLogger,
@@ -174,6 +177,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
       modelBaseUrl: modelProxy.modelBaseUrl,
       mailPort,
       codebasePath,
+      myflowSkillsPath,
       genId,
     }),
     genToken: () => randomUUID(),
@@ -327,6 +331,20 @@ function validateCodebaseRequiredRuntimes(agentConfigs: Map<string, AgentConfig>
   throw new Error(
     `TEAMROOM_CODEBASE_PATH is required for runtime: deepagents agents (${requiringCodebase.join(", ")})`,
   );
+}
+
+function resolveMyflowSkillsPath(logger: Logger): string | null {
+  const raw = process.env.TEAMROOM_MYFLOW_PATH;
+  if (raw == null || raw.trim() === "") {
+    logger.info("myflow skills mount skipped (TEAMROOM_MYFLOW_PATH not set)");
+    return null;
+  }
+  const skillsDir = join(raw, "skills");
+  if (!existsSync(skillsDir)) {
+    throw new Error(`TEAMROOM_MYFLOW_PATH/skills does not exist: ${skillsDir}`);
+  }
+  logger.info("myflow skills mount", { path: skillsDir });
+  return skillsDir;
 }
 
 function resolveCodebasePath(dataDir: string, logger: Logger): string | null {

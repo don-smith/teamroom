@@ -10,6 +10,8 @@ export interface BuildSpecArgs {
   modelBaseUrl: string;
   mailPort: number;
   codebasePath: string | null;
+  /** Optional path to the myflow skills directory, mounted read-only at /myflow-skills */
+  myflowSkillsPath: string | null;
   genId: () => string;
 }
 
@@ -34,6 +36,9 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
   ];
   if (args.codebasePath) {
     mounts.push({ hostPath: args.codebasePath, containerPath: "/codebase", readOnly: false });
+  }
+  if (args.myflowSkillsPath) {
+    mounts.push({ hostPath: args.myflowSkillsPath, containerPath: "/myflow-skills", readOnly: true });
   }
   const spec: DockerRunSpec = {
     imageTag: cfg.imageTag,

@@ -28,6 +28,7 @@ describe("buildSpec", () => {
       modelBaseUrl: "http://host.docker.internal:9000",
       mailPort: 7777,
       codebasePath: "/codebase",
+      myflowSkillsPath: "/myflow-skills",
       genId: () => "trace-1",
     });
 
@@ -43,6 +44,12 @@ describe("buildSpec", () => {
     expect(spec.mounts.find((m) => m.containerPath === "/codebase")).toBeDefined();
     expect(spec.mounts.find((m) => m.containerPath === "/AGENTS.md")).toBeDefined();
     expect(spec.mounts.find((m) => m.containerPath === "/store")).toBeDefined();
+    expect(spec.mounts.find((m) => m.containerPath === "/myflow-skills")).toBeDefined();
+    const skillsMount = spec.mounts.find((m) => m.containerPath === "/myflow-skills");
+    expect(skillsMount).toBeDefined();
+    if (skillsMount) {
+      expect(skillsMount.readOnly).toBe(true);
+    }
   });
 
   it("omits the codebase mount when codebasePath is null", () => {
@@ -55,9 +62,26 @@ describe("buildSpec", () => {
       modelBaseUrl: "http://host.docker.internal:9000",
       mailPort: 7777,
       codebasePath: null,
+      myflowSkillsPath: null,
       genId: () => "trace-1",
     });
     expect(spec.mounts.find((m) => m.containerPath === "/codebase")).toBeUndefined();
+  });
+
+  it("omits the myflow-skills mount when myflowSkillsPath is null", () => {
+    const tokenRegistry = new TokenRegistry();
+    const spec = buildSpec({
+      agentId: "alice",
+      mcpToken: "x",
+      agentConfigs: new Map([["alice", cfg]]),
+      tokenRegistry,
+      modelBaseUrl: "http://host.docker.internal:9000",
+      mailPort: 7777,
+      codebasePath: null,
+      myflowSkillsPath: null,
+      genId: () => "trace-1",
+    });
+    expect(spec.mounts.find((m) => m.containerPath === "/myflow-skills")).toBeUndefined();
   });
 
   it("sets runtime and provider env vars for pi agents", () => {
@@ -78,6 +102,7 @@ describe("buildSpec", () => {
       modelBaseUrl: "http://host.docker.internal:9000",
       mailPort: 7777,
       codebasePath: "/codebase",
+      myflowSkillsPath: "/myflow-skills",
       genId: () => "trace-1",
     });
 
@@ -110,6 +135,7 @@ describe("buildSpec", () => {
       modelBaseUrl: "http://proxy",
       mailPort: 9000,
       codebasePath: null,
+      myflowSkillsPath: null,
       genId: () => "trace-1",
     });
 
@@ -134,6 +160,7 @@ describe("buildSpec", () => {
         modelBaseUrl: "http://host.docker.internal:9000",
         mailPort: 7777,
         codebasePath: null,
+        myflowSkillsPath: null,
         genId: () => "trace-1",
       }),
     ).toThrow(/no agent config for 'ghost'/);
@@ -149,6 +176,7 @@ describe("buildSpec", () => {
       modelBaseUrl: "http://host.docker.internal:9000",
       mailPort: 7777,
       codebasePath: null,
+      myflowSkillsPath: null,
       genId: () => "trace-1",
     });
     const { labels } = spec;
