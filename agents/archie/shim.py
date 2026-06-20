@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -53,7 +54,7 @@ mail, read requested codebase files before making architectural claims, and
 reply in-thread. Cite file paths when relevant. Prefer the smallest useful
 inspection over broad codebase exploration."""
 
-PER_WAKE_RECURSION_LIMIT = int(os.environ.get("TEAMROOM_ARCHIE_RECURSION_LIMIT", "16"))
+PER_WAKE_RECURSION_LIMIT = int(os.environ.get("TEAMROOM_ARCHIE_RECURSION_LIMIT", "50"))
 MAX_BUILD_RETRIES = 3
 
 
@@ -140,6 +141,42 @@ def emit_log(level: str, msg: str, **fields) -> None:
     print(json.dumps({"type": "log", "level": level, "msg": msg, **fields}), flush=True)
 
 
+def extract_body_from_raw_args(raw_args: str) -> str | None:
+    """Extract the intended body from raw tool call arguments.
+
+    The model generates tool call arguments as a JSON string. When the body
+    contains unescaped quotes this JSON is malformed and LangChain's json.loads
+    fails. This function tries multiple strategies to recover the body:
+
+    1. Standard json.loads (if the model happened to produce valid JSON)
+    2. Lenient regex extraction when quotes inside the body break parsing
+    """
+    if not raw_args or not isinstance(raw_args, str):
+        return None
+
+    # Strategy 1: full JSON parse
+    try:
+        parsed = json.loads(raw_args)
+        if isinstance(parsed, dict) and "body" in parsed:
+            return parsed["body"]
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: recover from the common malformed case where the model
+    # starts a JSON body string but never closes it:
+    #   {"body": "long markdown text...
+    body_prefix = re.search(r'"body"\s*:\s*"', raw_args)
+    if body_prefix:
+        body = raw_args[body_prefix.end():]
+        # If the model did close the string and object, strip that suffix.
+        body = re.sub(r'"\s*[,}]\s*$', "", body, flags=re.DOTALL)
+        # Unescape common JSON escape sequences the model might have included.
+        body = body.replace('\\"', '"').replace('\\n', '\n').replace('\\\\', '\\')
+        return body.strip()
+
+    return None
+
+
 def has_successful_mail_reply(result: dict) -> bool:
     for message in result.get("messages", []):
         if getattr(message, "type", None) == "tool" and getattr(message, "name", None) == "mail_reply":
@@ -158,6 +195,7 @@ def invalid_tool_calls(result: dict) -> list[dict]:
                 {
                     "id": call.get("id"),
                     "name": call.get("name"),
+                    "args": call.get("args", ""),
                     "error": call.get("error"),
                 }
             )
@@ -353,12 +391,31 @@ async def handle_wake(
             invalidToolCalls=invalid_calls,
         )
 
+    mail_reply_sent = has_successful_mail_reply(result)
+
+    # Attempt to recover from failed mail_reply tool calls by extracting
+    # the intended body from the raw tool call args and sending it directly
+    # via the MCP HTTP API (which properly JSON-encodes the body).
+    if not mail_reply_sent and event and event.get("replyExpected") and event.get("messageId"):
+        for call in invalid_calls:
+            if call.get("name") in ("mail_reply", "mail.reply"):
+                raw_args = call.get("args", "") or ""
+                recovered_body = extract_body_from_raw_args(raw_args)
+                if recovered_body:
+                    print(
+                        "[archie] recovering failed mail_reply via fallback with extracted body",
+                        file=sys.stderr,
+                    )
+                    await fallback_mail_reply(str(event["messageId"]), recovered_body)
+                    mail_reply_sent = True
+                    break
+
     if (
-        event
+        not mail_reply_sent
+        and event
         and event.get("replyExpected")
         and event.get("messageId")
         and text
-        and not has_successful_mail_reply(result)
     ):
         print(
             "[archie] replyExpected wake ended without successful mail_reply; sending fallback mail.reply",

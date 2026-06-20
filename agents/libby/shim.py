@@ -22,8 +22,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
+
+import httpx
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
@@ -38,7 +41,7 @@ Use available tools when needed, then answer concisely. For mail wakes, inspect
 mail, read requested files before making claims, and reply in-thread. Cite file
 paths when relevant. Prefer focused reading over broad exploration."""
 
-PER_WAKE_RECURSION_LIMIT = int(os.environ.get("TEAMROOM_LIBBY_RECURSION_LIMIT", "16"))
+PER_WAKE_RECURSION_LIMIT = int(os.environ.get("TEAMROOM_LIBBY_RECURSION_LIMIT", "50"))
 MAX_BUILD_RETRIES = 3
 
 
@@ -84,17 +87,78 @@ async def build_agent(checkpointer: AsyncSqliteSaver):
     return agent, mcp_client
 
 
+def mail_event(envelope: dict) -> dict | None:
+    events = envelope.get("events", [])
+    for event in reversed(events):
+        if isinstance(event, dict) and event.get("type") == "mail.delivered":
+            return event
+    return None
+
+
 def checkpoint_thread_id(envelope: dict) -> str:
     """Derive a stable thread id from the wake envelope."""
-    events = envelope.get("events", [])
-    for e in events:
-        if isinstance(e, dict) and e.get("type") == "mail.delivered":
-            return e.get("threadId", "") or e.get("messageId", "default")
+    event = mail_event(envelope)
+    if event:
+        return event.get("threadId", "") or event.get("messageId", "default")
     return "default"
 
 
-async def run_wake(agent, event: dict):
-    thread_id = checkpoint_thread_id(event)
+def extract_body_from_raw_args(raw_args: str) -> str | None:
+    """Extract the intended body from raw tool call arguments.
+
+    Tries standard json.loads first, then falls back to a lenient regex
+    extraction when the body contains unescaped characters that break JSON.
+    """
+    if not raw_args or not isinstance(raw_args, str):
+        return None
+
+    try:
+        parsed = json.loads(raw_args)
+        if isinstance(parsed, dict) and "body" in parsed:
+            return parsed["body"]
+    except json.JSONDecodeError:
+        pass
+
+    body_prefix = re.search(r'"body"\s*:\s*"', raw_args)
+    if body_prefix:
+        body = raw_args[body_prefix.end():]
+        body = re.sub(r'"\s*[,}]\s*$', "", body, flags=re.DOTALL)
+        body = body.replace('\\"', '"').replace('\\n', '\n').replace('\\\\', '\\')
+        return body.strip()
+
+    return None
+
+
+async def fallback_mail_reply(message_id: str, body: str) -> None:
+    """Send a mail.reply directly via the MCP HTTP API with proper JSON encoding."""
+    mcp_url = os.environ["TEAMROOM_MCP_URL"]
+    mcp_token = os.environ["TEAMROOM_MCP_TOKEN"]
+    request = {
+        "jsonrpc": "2.0",
+        "id": "libby-fallback-mail-reply",
+        "method": "tools/call",
+        "params": {
+            "name": "mail.reply",
+            "arguments": {"id": message_id, "body": body},
+        },
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            mcp_url,
+            json=request,
+            headers={
+                "accept": "application/json, text/event-stream",
+                "x-teamroom-mcp-token": mcp_token,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict) and payload.get("error"):
+            raise RuntimeError(f"fallback mail.reply failed: {payload['error']}")
+
+
+async def run_wake(agent, envelope: dict):
+    thread_id = checkpoint_thread_id(envelope)
     wake_prompt = "You received a Team Room wake notification. Check unread mail first."
     config = {
         "configurable": {"thread_id": thread_id},
@@ -104,6 +168,24 @@ async def run_wake(agent, event: dict):
         {"messages": [{"role": "user", "content": wake_prompt}]},
         config=config,
     )
+
+    # Recover from failed mail_reply tool calls (unescaped chars in body)
+    event = mail_event(envelope)
+    message_id = event.get("messageId") if event else None
+    for message in result.get("messages", []):
+        for call in getattr(message, "invalid_tool_calls", []) or []:
+            if not isinstance(call, dict):
+                continue
+            if call.get("name") in ("mail_reply", "mail.reply"):
+                raw_args = call.get("args", "") or ""
+                body = extract_body_from_raw_args(raw_args)
+                if body and message_id:
+                    print(f"libby: recovering failed mail_reply with extracted body", file=sys.stderr)
+                    try:
+                        await fallback_mail_reply(str(message_id), body)
+                    except Exception as e:
+                        print(f"libby: fallback failed: {e}", file=sys.stderr)
+
     return result
 
 
