@@ -3,7 +3,7 @@ import { OpenAICompatAdapter } from "./openai-compat-adapter.js";
 
 describe("OpenAICompatAdapter (bearer auth)", () => {
   const base = {
-    id: "lm-studio" as const,
+    id: "openrouter" as const,
     upstreamUrl: "http://localhost:1234",
     auth: { mode: "bearer" as const, key: "real-tok" },
   };
@@ -32,7 +32,7 @@ describe("OpenAICompatAdapter (bearer auth)", () => {
 
 describe("OpenAICompatAdapter (none auth)", () => {
   const base = {
-    id: "ollama" as const,
+    id: "openrouter" as const,
     upstreamUrl: "http://localhost:11434",
     auth: { mode: "none" as const },
   };
@@ -61,7 +61,7 @@ describe("OpenAICompatAdapter (none auth)", () => {
 
 describe("OpenAICompatAdapter.extractUsage", () => {
   const a = new OpenAICompatAdapter({
-    id: "lm-studio",
+    id: "openrouter",
     upstreamUrl: "http://x",
     auth: { mode: "bearer", key: "k" },
   });

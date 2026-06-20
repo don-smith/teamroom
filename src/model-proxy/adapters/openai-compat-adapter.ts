@@ -7,9 +7,9 @@ export type OpenAICompatAuth =
   | { mode: "none" };
 
 export interface OpenAICompatAdapterOpts {
-  /** Proxy-level provider id (`"lm-studio"` or `"ollama"`). */
+  /** Proxy-level provider id. Team Room currently routes all agents through `"openrouter"`. */
   id: Provider;
-  /** Upstream base URL (e.g. `http://localhost:1234` or `http://localhost:11434`). */
+  /** Upstream base URL (for example, OpenRouter's OpenAI-compatible API root). */
   upstreamUrl: string;
   /** Auth mode — `bearer` for LM Studio/OpenAI-style token, `none` for Ollama-style unauthenticated. */
   auth: OpenAICompatAuth;

@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { TokenRegistry } from "./token-registry.js";
 
 const baseEntry = {
-  agentId: "a", turnId: "t", traceId: "tr", provider: "anthropic" as const, model: "m",
+  agentId: "a", turnId: "t", traceId: "tr", provider: "openrouter" as const, model: "m",
 };
 
 describe("TokenRegistry", () => {
