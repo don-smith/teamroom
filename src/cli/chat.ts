@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { createConnection } from "node:net";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 
@@ -17,6 +18,25 @@ export interface RunChatArgs {
   interactive?: boolean;
 }
 
+async function assertChatServerReachable(port: number): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    let settled = false;
+    const fail = () => new Error(`chat server unavailable on 127.0.0.1:${port} — is the daemon running?`);
+    const finish = (err?: Error): void => {
+      if (settled) return;
+      settled = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      if (err) reject(err);
+      else resolve();
+    };
+    socket.setTimeout(1000, () => finish(fail()));
+    socket.once("connect", () => finish());
+    socket.once("error", () => finish(fail()));
+  });
+}
+
 /**
  * Interactive chat REPL over the chat WebSocket. Registers as
  * channel:cli:<user>, optionally sends an initial body, then reads stdin
@@ -29,6 +49,8 @@ export interface RunChatArgs {
  * go with threadId=null (dispatcher allocates).
  */
 export async function runChat(args: RunChatArgs): Promise<void> {
+  await assertChatServerReachable(args.port);
+
   const ws = new WebSocket(`ws://127.0.0.1:${args.port}/`);
 
   // Connect

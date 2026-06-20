@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { createServer } from "node:net";
 import { PassThrough } from "node:stream";
 import { runChat } from "./chat.js";
 import { composeStorage, type Storage } from "../modules/storage/storage.js";
@@ -8,6 +9,16 @@ import { composeChannels, type Channels } from "../modules/channels/channels.js"
 import { JsonLinesLogger } from "../logger/logger.js";
 import { ControllableClock } from "../clock/clock.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
+
+async function getClosedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("expected TCP address");
+  const port = address.port;
+  await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  return port;
+}
 
 describe("teamroom chat (interactive REPL)", () => {
   let storage: Storage;
@@ -23,8 +34,8 @@ describe("teamroom chat (interactive REPL)", () => {
       name: "alice",
       model: "m",
       imageTag: "img",
-      provider: "anthropic",
-      runtime: "anthropic",
+      provider: "openrouter",
+      runtime: "pi",
       configPath: "/a",
       agentsMdPath: "/a/AGENTS.md",
       storePath: "/a/store",
@@ -50,6 +61,20 @@ describe("teamroom chat (interactive REPL)", () => {
   afterEach(async () => {
     await channels.stop();
     storage.close();
+  });
+
+  it("reports a clear error when the chat server is unreachable", async () => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    stdin.end();
+
+    await expect(runChat({
+      port: await getClosedPort(),
+      agent: "alice",
+      user: "don",
+      stdin,
+      stdout,
+    })).rejects.toThrow(/chat server unavailable.*daemon running/);
   });
 
   it("sends initial body, prints replies, exits on /quit", async () => {
