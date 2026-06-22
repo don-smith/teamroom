@@ -18,6 +18,10 @@
 > stale, become process content, or stopped earning its keep is removed —
 > consult the milestone retro for what was decided.
 
+- [Team Room — Libby owns MyFlow stages 1 and 5](project_teamroom_libby_stage_owner.md) — Libby (librarian) is the current owner of Stage 1: Discover & Align and Stage 5: Land & Learn; Hisa the historian is a future rename decision, not current reality
+- [Team Room — agent runtime changes require live manual verification](project_teamroom_live_validation_required.md) — unit tests are not sufficient for container mounts, skill prompts, mail tools, daemon startup, or chat UX — run smoke test before closeout
+- [Team Room — runtime hardening: bounded cleanup, actionable CLI errors](project_teamroom_runtime_hardening_pattern.md) — best-effort startup operations must be bounded with timeouts, log failures loudly, and never silently block; interactive CLIs must preflight connectivity
+
 ## Feedback
 - [Team Room — minimize long-running process dependencies](feedback_teamroom_minimize_process_deps.md) — prefer in-process/embedded deps over separate long-running services
 - [Team Room — see only as far as needed, not further](feedback_teamroom_see_only_as_far_as_needed.md) — defer formalization and abstraction until a concrete second example forces the shape

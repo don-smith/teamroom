@@ -15,6 +15,7 @@
 | M5.1 | LangGraph filesystem/shell tooling (LangGraph runtime removed — not applicable) | **Obsoleted** | — | LangGraph runtime was removed during persona realignment; this work is no longer relevant. |
 | M6 | DeepAgents runtime + Archie architect | Shipped | 2026-06-07 | [As-built](as-built/2026-06-07-teamroom-m6.md) |
 | Persona <br>realignment | 4 core agents, 2 runtimes, OpenRouter-only | Shipped | 2026-06-19 | [As-built](as-built/2026-06-19-teamroom-persona-realignment.md) |
+| MyFlow agent <br>onboarding | Skills mount, stage ownership, resilient startup | Shipped | 2026-06-20 | [As-built](as-built/2026-06-20-myflow-agent-onboarding.md) |
 | M7 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4), AI-native harness (M4.5), the LangGraph runtime (M5), and Archie/DeepAgents (M6). Memory substrate is the load-bearing dependency for durable agent personas — once it lands, personas can hold state across containers and the "architect has seen this codebase for weeks" type of role becomes real. |
 | M8 | Scheduling | Future | — | Originally M5 in `team-room-context §7`. |
 | M9 | Evaluations — agent-level + process-level, eval provider selection | Future | — | Originally M6 in `team-room-context §7`. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer. Encompasses agent-level evals (task completion, response quality) and process-level evals (pipeline effectiveness). Eval provider selection (MLflow, LangSmith, or other) is an open decision. |
@@ -69,7 +70,7 @@ Named personas we've identified so far. Each is a slot to fill, not a build task
 - **Archie — the architect.** ✅ **Shipped (M6).** Holds and tracks the project's architecture, notices smells, suggests improvements over time.
 - **Doc — the doctor / health monitor.** ✅ **Shipped (persona realignment).** Runs tests, checks for failures, keeps the team informed.
 - **Micah — the mechanic / coder.** ✅ **Shipped (persona realignment).** Implements changes, writes tests, fixes bugs. Renamed from pi-coder.
-- **Hisa — the historian.** Partially filled by Libby (librarian, shipped in persona realignment). The historian role adds temporality — git archaeology, decision-trace reconstruction, connecting past epiphanies to present constraints. Backed by vector store / graph DB / Super Memory in M7.
+- **Hisa — the historian.** (Future persona; currently filled by Libby as librarian.) The historian role adds temporality — git archaeology, decision-trace reconstruction, connecting past epiphanies to present constraints. Backed by vector store / graph DB / Super Memory in M7. The Libby → Hisa rename is a future decision, not current shipped behavior.
 - **Pam — the product manager.**
 - **Dev — the developer.**
 - **Desi — the designer.**

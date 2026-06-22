@@ -12,6 +12,34 @@ End-to-end verification that the full stack — daemon, in-process model proxy, 
 - **Agent images built:** `bun run docker:build` (builds all 4 agents) or individual `bun run docker:build:micah`, etc.
 - **Branch in the state you want to test.** Data is transient.
 
+## Agent runtime change checklist
+
+Use this expanded checklist when the change touches container mounts, skill prompts, mail tools, daemon startup, or chat UX — unit tests alone are not sufficient for these surfaces.
+
+1. **Rebuild agent images before verification.** Runtime fixes live in the container image, not the daemon:
+   ```bash
+   bun run docker:build
+   ```
+2. **Restart the daemon from a clean state.** Stale data can mask startup issues:
+   ```bash
+   rm -rf data
+   bun run cli serve
+   ```
+3. **Verify daemon startup logs are clean.** Check for `kill-stale.list-failed`, mount errors, or silent hangs.
+4. **Send a round-trip message to every agent.** Each agent must receive mail and reply:
+   ```bash
+   bun run cli send micah "Reply with exactly: micah-ok"
+   bun run cli send doc "Reply with exactly: doc-ok"
+   bun run cli send archie "Reply with exactly: archie-ok"
+   bun run cli send libby "Reply with exactly: libby-ok"
+   ```
+5. **For DeepAgents agents (Archie, Libby):** verify mail replies specifically — malformed JSON fallback paths are runtime-only. Check the daemon log for `mail_reply` tool-call diagnostics.
+6. **For Pi agents (Micah, Doc):** verify MyFlow skill mounts are present if `TEAMROOM_MYFLOW_PATH` is set. Check daemon startup log for skill-discovery diagnostics.
+7. **Verify interactive chat:** `bun run cli chat micah "Check unread mail and report back"` — confirm the CLI preflight succeeds and the WebSocket connects cleanly.
+8. **Verify proxy spans reach OpenRouter:** `grep '"event":"model.call.completed"' data/logs/teamroom-*.jsonl | grep '"provider":"openrouter"'`
+
+If any step fails, fix before closeout or explicitly table with a documented decision.
+
 ## Scripts reference
 
 All CLI and Docker commands are available as npm scripts:
