@@ -12,10 +12,10 @@ The source tree is split by runtime responsibility. Most of it runs on the **hos
 - [`bus/`](bus/README.md) — in-process `EventBus` only (`FileNotifyBus`/`NotifyBus`/`InMemoryBus` removed in M4.5).
 - [`container/`](container/README.md) — `ContainerRunner` seam; `DockerRunner` (prod), `FakeRunner` (tests).
 - [`agent-config/`](agent-config/README.md) — host-only loader for per-agent folder metadata.
-- [`daemon/`](daemon/README.md) — composition root; `startDaemon` wires eight `compose*` modules and opens four daemon ports.
+- [`daemon/`](daemon/README.md) — composition roots; `startDaemon` (legacy monolithic), `startMetaDaemon` (meta-process), `startRepoDaemon` (per-repo daemon).
 - [`model-proxy/`](model-proxy/README.md) — `ModelProxy` seam; in-daemon HTTP proxy that swaps routing tokens for real upstream credentials. Two-mode Anthropic auth.
-- [`modules/`](modules/README.md) — compose-pattern module factories: `observability`, `storage`, `messaging`, `mcp-mail`, `model-proxy`, `session-management`, `channels`, `mail`.
-- [`cli/`](cli/README.md) — `teamroom` binary (`serve`, `send`, `chat`, `inbox`, `thread`, `status`).
+- [`modules/`](modules/README.md) — compose-pattern module factories: `observability`, `storage`, `messaging`, `mcp-mail`, `model-proxy`, `session-management`, `channels`, `mail`, `meta-ws`.
+- [`cli/`](cli/README.md) — `teamroom` binary (`serve`, `send`, `chat`, `inbox`, `thread`, `status`, `repo init|list|remove`).
 - [`agent-runtime/`](agent-runtime/README.md) — the shim that runs *inside* each agent container. `pi` and `deepagents` are the two supported runtimes.
 - [`agents/archie/shim.py`](../agents/archie/shim.py) — the DeepAgents runtime, implemented in Python.
 

@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -125,6 +126,12 @@ export interface MailMcpServerDeps {
   /** Bind host; defaults to 127.0.0.1 for local-only trust. */
   host?: string;
   logger?: Logger;
+  /**
+   * Admin token that bypasses per-session MCP token resolution.
+   * Used by the meta-process to deliver inbound mail without a
+   * per-session agent token.
+   */
+  adminToken?: string;
 }
 
 export class MailMcpServer {
@@ -182,7 +189,14 @@ export class MailMcpServer {
 
     // Validate the bearer token before handing off to the SDK transport.
     const token = (req.headers["x-teamroom-mcp-token"] ?? "") as string;
-    const agentId = this.deps.tokenResolver(token);
+    let agentId = this.deps.tokenResolver(token);
+    if (!agentId && this.deps.adminToken && token.length === this.deps.adminToken.length) {
+      const tokenBuf = Buffer.from(token);
+      const adminBuf = Buffer.from(this.deps.adminToken);
+      if (timingSafeEqual(tokenBuf, adminBuf)) {
+        agentId = "admin";
+      }
+    }
     if (!agentId) {
       res.statusCode = 401;
       res.setHeader("content-type", "application/json");

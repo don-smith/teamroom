@@ -112,6 +112,18 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 
 ### Code quality
 
+#### Meta-process daemon split — deferred review follow-ups (2026-06-26)
+
+Tabled from code review `.myflow/artifacts/reviews/2026-06-22_phase5-chat-routing-auto-spawn.md`. All findings are low-priority suggestions, not blockers.
+
+- **Q3: Test coverage for new CLI and daemon files.** `repo-init/list/remove`, `serve-meta`, `serve-repo`, `meta-daemon.ts`, `repo-daemon.ts` have limited test coverage. Three targeted test files cover the highest-risk WS paths. Add incremental coverage as these files are touched. Trigger: next feature touching these areas.
+- **Q9: `resolveRepoFromEnv()` pattern dedup.** Same env-check + port-file-read pattern repeated in 5 CLI commands. Extract a helper. Trigger: when adding a new CLI command or refactoring the CLI layer.
+- **Q10: `repo-init` rollback safety.** Directories created before `repos.yaml` write — inconsistent state if YAML write fails. Reorder to write YAML first. Trigger: when touching the repo onboarding flow.
+- **Q11: Health endpoint / liveness probe.** Daemon processes hang forever with `new Promise(() => {})`. A `/healthz` endpoint or PID+uptime file would let auto-spawn distinguish "running but not connected" from "dead." Trigger: when working on daemon supervision or auto-recovery.
+- **Q12: `@anthropic-ai/sdk` version fork audit.** Two copies in `package-lock.json` (0.65 direct, 0.81 nested). Moderate GHSA for filesystem memory tool defaults. Trigger: next `npm audit` or claude-agent-sdk upgrade.
+
+### Code quality
+
 - **WebSocket protocol parser dedup.** `src/modules/channels/protocol.ts` and `src/modules/mail/protocol.ts` share validation scaffolding (object-shape narrowing, type-discrimination, error message style). A shared `src/modules/protocol-helpers.ts` with generic narrowing helpers would shrink both. Pure cleanup; no behavior change. Trigger: third WebSocket protocol, or a non-trivial change to one of the two parsers where the duplication makes the diff awkward.
 - **Extract `composeMailTestHarness()` helper.** `src/mail-mcp/server.test.ts`, `src/modules/mcp-mail/mcp-mail.test.ts`, and others each compose their own in-process mail stack. `feedback_teamroom_composition_parity.md` memory called out the smell. Pure cleanup; would pay down debt across 4+ call sites. Trigger: next test that needs a mail harness, or a non-trivial change to one existing harness.
 

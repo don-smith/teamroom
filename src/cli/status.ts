@@ -2,9 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readPortFile } from "./ports.js";
 
-export async function status(): Promise<void> {
-  const root = resolve(process.cwd());
-  const dataDir = join(root, "data");
+export async function status(dataDir?: string): Promise<void> {
+  dataDir = dataDir ?? join(resolve(process.cwd()), "data");
   const pidFile = join(dataDir, "teamroom.pid");
 
   if (!existsSync(pidFile)) {

@@ -138,6 +138,7 @@ export class MailDispatcher {
           threadId,
           from: input.from,
           to: toStrings,
+          body: input.body,
         });
       }
       // `list` is already expanded out of the list — not reachable here.

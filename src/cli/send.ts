@@ -47,3 +47,44 @@ export async function send(args: SendArgs): Promise<void> {
     });
   }
 }
+
+/**
+ * Send via meta-process chat WebSocket with repo context.
+ * Mirrors send() but routes through the meta-process.
+ *
+ * The register message carries a `repo` field so the meta chat WS
+ * knows which per-repo daemon to deliver to.
+ */
+export async function sendViaMeta(opts: { port: number; user: string; agent: string; body: string; repo: string }): Promise<void> {
+  const ws = new WebSocket(`ws://127.0.0.1:${opts.port}/`);
+  await new Promise<void>((ok, fail) => {
+    ws.once("open", () => ok());
+    ws.once("error", (err) => fail(err));
+  });
+  try {
+    ws.send(JSON.stringify({
+      type: "register",
+      channel: "cli",
+      externalId: opts.user,
+      repo: opts.repo,
+    }));
+    ws.send(JSON.stringify({
+      type: "publish",
+      to: [`agent:${opts.agent}`],
+      body: opts.body,
+      threadId: null,
+      cc: [],
+    }));
+    // Brief wait for the meta-process to deliver the publish.
+    await new Promise((r) => setTimeout(r, 30));
+  } finally {
+    await new Promise<void>((resolve) => {
+      if (ws.readyState === ws.CLOSED) {
+        resolve();
+        return;
+      }
+      ws.once("close", () => resolve());
+      ws.close();
+    });
+  }
+}
