@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { DockerRunSpec, Mount } from "../container/docker-command.js";
 import type { AgentConfig } from "../agent-config/agent-config.js";
 import type { TokenRegistry } from "../model-proxy/token-registry.js";
@@ -11,6 +12,14 @@ export interface BuildSpecArgs {
   mailPort: number;
   codebasePath: string | null;
   genId: () => string;
+  /**
+   * Base directory for per-repo agent stores.
+   * e.g. ~/.teamroom/repos/<name>/stores
+   * When provided, the store mount is constructed as
+   * `join(storeBasePath, cfg.name)` instead of `cfg.storePath`.
+   * Optional — defaults to cfg.storePath for backward compat (tests).
+   */
+  storeBasePath?: string;
 }
 
 /**
@@ -28,9 +37,15 @@ export function buildSpec(args: BuildSpecArgs): DockerRunSpec {
     provider: cfg.provider,
     model: cfg.model,
   });
+
+  // Resolve store mount: per-repo override if storeBasePath provided, else default
+  const storeMount = args.storeBasePath
+    ? join(args.storeBasePath, cfg.name)
+    : cfg.storePath;
+
   const mounts: Mount[] = [
     { hostPath: cfg.agentsMdPath, containerPath: "/AGENTS.md", readOnly: false },
-    { hostPath: cfg.storePath, containerPath: "/store", readOnly: false },
+    { hostPath: storeMount, containerPath: "/store", readOnly: false },
   ];
   if (args.codebasePath) {
     mounts.push({ hostPath: args.codebasePath, containerPath: "/codebase", readOnly: false });

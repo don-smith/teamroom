@@ -129,3 +129,115 @@ export async function runChat(args: RunChatArgs): Promise<void> {
     });
   }
 }
+
+/**
+ * Interactive chat via meta-process WebSocket with repo context.
+ * Mirrors runChat() but routes through the meta-process.
+ *
+ * The register message carries a `repo` field so the meta chat WS
+ * knows which per-repo daemon to deliver publishes to. Everything else
+ * — REPL loop, session tracking, prompt rendering — is identical to the
+ * direct-chat path.
+ */
+export async function runChatViaMeta(opts: {
+  port: number;
+  agent: string;
+  user: string;
+  initialBody?: string;
+  repo: string;
+  stdin: NodeJS.ReadStream;
+  stdout: NodeJS.WriteStream;
+  interactive: boolean;
+}): Promise<void> {
+  const ws = new WebSocket(`ws://127.0.0.1:${opts.port}/`);
+
+  // Connect
+  await new Promise<void>((ok, fail) => {
+    ws.once("open", () => ok());
+    ws.once("error", (err) => fail(err));
+  });
+
+  let sessionThreadId: string | null = null;
+
+  const interactive = opts.interactive === true;
+  const writePrompt = (): void => {
+    if (interactive) opts.stdout.write("you: ");
+  };
+
+  // Set up message handling
+  ws.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString()) as { type: string; from?: string; body?: string; code?: string; message?: string; threadId?: string };
+      if (msg.type === "mail") {
+        if (sessionThreadId === null && typeof msg.threadId === "string" && msg.threadId.length > 0) {
+          sessionThreadId = msg.threadId;
+        }
+        if (interactive) opts.stdout.write("\n");
+        opts.stdout.write(`${msg.from ?? ""}: ${msg.body ?? ""}\n`);
+        if (interactive) opts.stdout.write("\n");
+        writePrompt();
+      } else if (msg.type === "error") {
+        opts.stdout.write(`error: ${msg.code ?? ""} — ${msg.message ?? ""}\n`);
+        writePrompt();
+      }
+    } catch {
+      /* ignore malformed server frames */
+    }
+  });
+
+  // Register as the user's CLI channel — with repo for meta routing
+  ws.send(
+    JSON.stringify({
+      type: "register",
+      channel: "cli",
+      externalId: opts.user,
+      repo: opts.repo,
+    }),
+  );
+
+  const publish = (body: string): void => {
+    ws.send(
+      JSON.stringify({
+        type: "publish",
+        to: [`agent:${opts.agent}`],
+        body,
+        threadId: sessionThreadId,
+        cc: [],
+      }),
+    );
+  };
+
+  const rl = createInterface({ input: opts.stdin, terminal: false });
+
+  ws.on("error", (err) => {
+    opts.stdout.write(`error: transport — ${err.message}\n`);
+    rl.close();
+  });
+
+  if (opts.initialBody) publish(opts.initialBody);
+
+  writePrompt();
+
+  try {
+    for await (const line of rl) {
+      const trimmed = line.trim();
+      if (trimmed === "/quit" || trimmed === "/exit") break;
+      if (trimmed.length === 0) {
+        writePrompt();
+        continue;
+      }
+      publish(trimmed);
+      writePrompt();
+    }
+  } finally {
+    rl.close();
+    await new Promise<void>((resolve) => {
+      if (ws.readyState === ws.CLOSED) {
+        resolve();
+        return;
+      }
+      ws.once("close", () => resolve());
+      ws.close();
+    });
+  }
+}

@@ -71,3 +71,40 @@ export interface SpanFields {
   agentId?: string;
   turnId?: string;  // model-proxy trace identifier; distinct from the now-removed DB turns.turn_id
 }
+
+// ── Types for meta-process + per-repo daemon architecture ──
+
+/** Per-repo daemon identity and routing information. */
+export interface RepoRegistration {
+  name: string;
+  codebasePath: string;
+  configDir: string;
+  telegramChannels?: Record<string, string>;
+}
+
+/** Overrides applied to a shared agent definition for a specific repo. */
+export interface AgentOverride {
+  model?: string;
+}
+
+/**
+ * Contents of ~/.teamroom/repos.yaml.
+ * Used exclusively by the meta-process.
+ */
+export interface ReposYaml {
+  repos: Record<string, {
+    codebasePath: string;
+    agents?: Record<string, AgentOverride>;
+    telegramChannels?: Record<string, string>;
+  }>;
+}
+
+/**
+ * Contents of ~/.teamroom/repos/<name>/.config.
+ * Read by the per-repo daemon on startup.
+ */
+export interface RepoConfig {
+  name: string;
+  codebasePath: string;
+  agents: string[];
+}

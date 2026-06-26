@@ -19,7 +19,7 @@ export interface AgentConfig {
   lifecycle: AgentLifecycle;
 }
 
-export function loadAgentConfig(agentDir: string): AgentConfig {
+export function loadAgentConfig(agentDir: string, relaxedStoreValidation = false): AgentConfig {
   const configPath = resolve(agentDir);
   const yamlPath = join(configPath, "agent.yaml");
   const agentsMdPath = join(configPath, "AGENTS.md");
@@ -28,7 +28,13 @@ export function loadAgentConfig(agentDir: string): AgentConfig {
   if (!existsSync(yamlPath)) throw new Error(`missing agent.yaml at ${yamlPath}`);
   if (!existsSync(agentsMdPath)) throw new Error(`missing AGENTS.md at ${agentsMdPath}`);
   if (!existsSync(storePath) || !statSync(storePath).isDirectory()) {
-    throw new Error(`missing store/ directory at ${storePath}`);
+    if (relaxedStoreValidation) {
+      console.warn(
+        `store/ directory missing at ${storePath} — will use per-repo store override`,
+      );
+    } else {
+      throw new Error(`missing store/ directory at ${storePath}`);
+    }
   }
 
   const parsed = YAML.parse(readFileSync(yamlPath, "utf8")) as Record<string, unknown>;

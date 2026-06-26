@@ -1,6 +1,7 @@
 import { LocalModelProxy } from "../../model-proxy/local-model-proxy.js";
 import { TokenRegistry } from "../../model-proxy/token-registry.js";
 import { OpenAICompatAdapter } from "../../model-proxy/adapters/openai-compat-adapter.js";
+import { randomUUID } from "node:crypto";
 import type { Logger } from "../../logger/logger.js";
 
 export interface ModelProxyModule {
@@ -14,10 +15,12 @@ export interface ModelProxyModule {
 export interface ModelProxyDeps {
   logger: Logger;
   openrouter: { upstreamUrl: string; realKey: string };
+  /** Shared secret for verifying daemon-signed tokens (HMAC). */
+  sharedSecret?: string;
 }
 
 export async function composeModelProxy(deps: ModelProxyDeps): Promise<ModelProxyModule> {
-  const tokenRegistry = new TokenRegistry();
+  const tokenRegistry = new TokenRegistry(randomUUID, deps.sharedSecret);
   const adapters = {
     openrouter: new OpenAICompatAdapter({
       id: "openrouter",
