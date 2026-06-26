@@ -60,6 +60,45 @@ describe("buildSpec", () => {
     expect(spec.mounts.find((m) => m.containerPath === "/codebase")).toBeUndefined();
   });
 
+  it("uses storeBasePath for per-repo store mount when provided", () => {
+    const tokenRegistry = new TokenRegistry();
+    const spec = buildSpec({
+      agentId: "alice",
+      mcpToken: "x",
+      agentConfigs: new Map([["alice", cfg]]),
+      tokenRegistry,
+      modelBaseUrl: "http://host.docker.internal:9000",
+      mailPort: 7777,
+      codebasePath: null,
+      genId: () => "trace-1",
+      storeBasePath: "/home/user/.teamroom/repos/myproject/stores",
+    });
+
+    const storeMount = spec.mounts.find((m) => m.containerPath === "/store");
+    expect(storeMount).toBeDefined();
+    expect(storeMount!.hostPath).toBe(
+      "/home/user/.teamroom/repos/myproject/stores/alice",
+    );
+  });
+
+  it("falls back to cfg.storePath when storeBasePath is not provided", () => {
+    const tokenRegistry = new TokenRegistry();
+    const spec = buildSpec({
+      agentId: "alice",
+      mcpToken: "x",
+      agentConfigs: new Map([["alice", cfg]]),
+      tokenRegistry,
+      modelBaseUrl: "http://host.docker.internal:9000",
+      mailPort: 7777,
+      codebasePath: null,
+      genId: () => "trace-1",
+    });
+
+    const storeMount = spec.mounts.find((m) => m.containerPath === "/store");
+    expect(storeMount).toBeDefined();
+    expect(storeMount!.hostPath).toBe("/agents/alice/store");
+  });
+
   it("sets runtime and provider env vars for pi agents", () => {
     const tokenRegistry = new TokenRegistry(() => "proxy-token");
     const piCfg: AgentConfig = {

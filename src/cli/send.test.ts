@@ -19,7 +19,7 @@ describe("teamroom send (channel-based)", () => {
     storage = composeStorage({ dataDir: ":memory:" });
     storage.agentRepo.create({ id: "alice", configPath: "/a", createdAt: "2026-04-20T00:00:00Z" });
     const cfg: AgentConfig = {
-      name: "alice", model: "m", imageTag: "img", provider: "anthropic", runtime: "anthropic",
+      name: "alice", model: "m", imageTag: "img", provider: "openrouter", runtime: "pi",
       configPath: "/a", agentsMdPath: "/a/AGENTS.md", storePath: "/a/store",
       subscriptions: [], allowedTools: [],
       lifecycle: "session",
