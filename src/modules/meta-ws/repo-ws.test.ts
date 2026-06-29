@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import type { AddressInfo } from "node:net";
 import { EventBus } from "../../bus/event-bus.js";
 import { ControllableClock } from "../../clock/clock.js";
@@ -73,7 +73,79 @@ describe("repo-ws", () => {
       });
     } finally {
       client.close();
-      clientSocket?.terminate();
+      (clientSocket as WebSocket | null)?.terminate();
+      for (const ws of wss.clients) ws.terminate();
+      wss.close();
+      httpServer.close();
+    }
+  });
+
+  test("relays non-CLI channel.out events to meta-process", async () => {
+    const httpServer = createServer();
+    const wss = new WebSocketServer({ server: httpServer });
+    await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", () => resolve()));
+    const port = (httpServer.address() as AddressInfo).port;
+
+    const outboundMessages: Record<string, unknown>[] = [];
+    let clientSocket: WebSocket | null = null;
+    wss.on("connection", (ws: WebSocket) => {
+      clientSocket = ws;
+      ws.on("message", (raw: Buffer) => {
+        const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        if (msg.type === "register") {
+          ws.send(JSON.stringify({
+            type: "ack",
+            repoName: "teamroom",
+            adminToken: "admin-token",
+            daemonSecret: "daemon-secret",
+          }));
+        }
+        if (msg.type === "outbound") {
+          outboundMessages.push(msg);
+        }
+      });
+    });
+
+    const eventBus = new EventBus();
+    const dispatcher = {
+      sendMail: () => {},
+    } as unknown as MailDispatcher;
+
+    const client = connectToMeta({
+      metaWsUrl: `ws://127.0.0.1:${port}`,
+      repoName: "teamroom",
+      mailMcpPort: 1111,
+      mailPort: 2222,
+      eventBus,
+      dispatcher,
+      logger: new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z")),
+    });
+
+    try {
+      await waitFor(() => clientSocket !== null && clientSocket!.readyState === WebSocket.OPEN);
+
+      eventBus.publish("channel.out", {
+        channel: "telegram",
+        user: "doc:12345",
+        messageId: "msg-1",
+        agentId: "doc",
+        threadId: "thread-1",
+        body: "hello from telegram",
+      });
+
+      await waitFor(() => outboundMessages.length > 0);
+      const msg = outboundMessages[0]!;
+      expect(outboundMessages).toHaveLength(1);
+      expect(msg).toMatchObject({
+        type: "outbound",
+        target: "channel:telegram:doc:12345",
+        messageId: "msg-1",
+        from: "doc",
+        body: "hello from telegram",
+      });
+    } finally {
+      client.close();
+      (clientSocket as WebSocket | null)?.terminate();
       for (const ws of wss.clients) ws.terminate();
       wss.close();
       httpServer.close();

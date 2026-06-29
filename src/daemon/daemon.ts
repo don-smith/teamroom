@@ -124,9 +124,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<StartedDaemon> {
     }
     const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : undefined;
     const telegram = composeTelegram({
-      messageRepo: storage.messageRepo,
       bus: messaging.eventBus,
-      dispatcher: mcpMail.dispatcher,
+      deliverInbound: (msg) => { mcpMail.dispatcher.sendMail(msg); },
       logger: obs.rootLogger,
       bots: telegramConfig.bots,
       genId,

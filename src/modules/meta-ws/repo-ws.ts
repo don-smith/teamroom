@@ -72,17 +72,30 @@ export function connectToMeta(opts: RepoWsClientOpts): { close: () => void } {
     });
   }
 
-  const unsubOutbound = eventBus.subscribe<{ user: string; messageId: string; agentId: string; threadId: string; channel?: string; body: string }>(
-    "channel.out",
-    (payload) => {
-      if (payload.channel && payload.channel !== "cli") return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        logger.warn("repo-ws.drop_outbound", { repoName, reason: "not connected", target: payload.user });
-        return;
-      }
-      ws.send(JSON.stringify({ type: "outbound", target: `channel:cli:${payload.user}`, messageId: payload.messageId, from: payload.agentId, to: [`channel:cli:${payload.user}`], body: payload.body, threadId: payload.threadId, ts: new Date().toISOString() }));
-    },
-  );
+  const unsubOutbound = eventBus.subscribe<{
+    user: string;
+    messageId: string;
+    agentId: string;
+    threadId: string;
+    channel: string;
+    body: string;
+  }>("channel.out", (payload) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      logger.warn("repo-ws.drop_outbound", { repoName, reason: "not connected", target: payload.user });
+      return;
+    }
+    const target = `channel:${payload.channel}:${payload.user}`;
+    ws.send(JSON.stringify({
+      type: "outbound",
+      target,
+      messageId: payload.messageId,
+      from: payload.agentId,
+      to: [target],
+      body: payload.body,
+      threadId: payload.threadId,
+      ts: new Date().toISOString(),
+    }));
+  });
 
   connect();
   return { close: () => { closed = true; unsubOutbound(); if (ws) { ws.close(1001, "repo-shutdown"); ws = null; } } };

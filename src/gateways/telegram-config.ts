@@ -6,6 +6,8 @@ export interface TelegramBotEntry {
   agent: string;
   /** Name of the env var holding this bot's Telegram token (e.g. "TELEGRAM_TOKEN_DOC") */
   tokenEnvVar: string;
+  /** Name of the repo this bot targets (e.g. "my-repo") — used by meta-process for routing */
+  repo: string;
 }
 
 export interface TelegramConfig {
@@ -21,8 +23,10 @@ export interface TelegramConfig {
  * bots:
  *   - agent: doc
  *     tokenEnvVar: TELEGRAM_TOKEN_DOC
+ *     repo: my-repo
  *   - agent: libby
  *     tokenEnvVar: TELEGRAM_TOKEN_LIBBY
+ *     repo: other-repo
  * ```
  */
 export function loadTelegramYaml(path: string): TelegramConfig {
@@ -50,7 +54,11 @@ export function loadTelegramYaml(path: string): TelegramConfig {
         `telegram.yaml: env var '${tokenEnvVar}' is not set or empty (agent=${agent})`,
       );
     }
-    bots.push({ agent, tokenEnvVar });
+    const repo = e.repo;
+    if (typeof repo !== "string" || repo.length === 0) {
+      throw new Error(`telegram.yaml: bot entry missing 'repo' (agent=${agent})`);
+    }
+    bots.push({ agent, tokenEnvVar, repo });
   }
   return { bots };
 }

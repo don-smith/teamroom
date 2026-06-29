@@ -59,21 +59,6 @@ export async function startMetaDaemon(opts: MetaDaemonOptions): Promise<StartedM
   obs.rootLogger.info("model proxy started", { port: modelProxyModule.port, modelBaseUrl: modelProxyModule.modelBaseUrl });
 
   let telegramStop: (() => Promise<void>) | undefined;
-  const telegramYamlPath = opts.telegramYamlPath ?? (opts.agentsDir ? join(opts.agentsDir, "..", "telegram.yaml") : undefined);
-  if (telegramYamlPath && existsSync(telegramYamlPath)) {
-    const telegramConfig = loadTelegramYaml(telegramYamlPath);
-    const openaiKey = process.env.TEAMROOM_OPENAI_API_KEY;
-    if (!openaiKey) obs.rootLogger.warn("telegram: TEAMROOM_OPENAI_API_KEY not set — voice disabled");
-    const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : undefined;
-    const telegram = composeTelegram({
-      messageRepo: undefined as any, bus: undefined as any, dispatcher: undefined as any,
-      logger: obs.rootLogger, bots: telegramConfig.bots, genId: () => randomUUID(), openai,
-    });
-    telegramStop = () => telegram.stop();
-    obs.rootLogger.info("telegram gateway composed (activated in Phase 4)", { botCount: telegramConfig.bots.length });
-  } else {
-    obs.rootLogger.info("telegram gateway skipped (no telegram.yaml)");
-  }
 
   const metaWs = composeMetaWs({
     logger: obs.rootLogger, clock: obs.clock,
@@ -205,6 +190,58 @@ export async function startMetaDaemon(opts: MetaDaemonOptions): Promise<StartedM
       repoName,
       waitedMs: Date.now() - start,
     });
+  }
+
+  // --- Telegram gateway (composed after metaWs + ensureDaemon so deliverInbound
+  //     can resolve repos and auto-spawn per-repo daemons) ---
+  const telegramYamlPath = opts.telegramYamlPath ?? (opts.agentsDir ? join(opts.agentsDir, "..", "telegram.yaml") : undefined);
+  if (telegramYamlPath && existsSync(telegramYamlPath)) {
+    const telegramConfig = loadTelegramYaml(telegramYamlPath);
+    const openaiKey = process.env.TEAMROOM_OPENAI_API_KEY;
+    if (!openaiKey) obs.rootLogger.warn("telegram: TEAMROOM_OPENAI_API_KEY not set — voice disabled");
+    const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : undefined;
+    const telegram = composeTelegram({
+      bus: messaging.eventBus,
+      deliverInbound: (msg) => {
+        // Resolve agent → repo from bot config.
+        const toAgent = msg.to[0]?.replace("agent:", "");
+        const bot = telegramConfig.bots.find((b) => b.agent === toAgent);
+        if (!bot) {
+          obs.rootLogger.error("telegram.inbound.no_bot_config", { toAgent });
+          return;
+        }
+        // Auto-spawn the per-repo daemon if not connected.
+        if (!metaWs.routeTable.has(bot.repo)) {
+          ensureDaemon(bot.repo).catch((err) => {
+            obs.rootLogger.error("telegram.inbound.spawn_failed", {
+              repo: bot.repo,
+              agent: toAgent,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+          // Don't await — spawn is fire-and-forget; if the daemon isn't
+          // ready by the time deliverToDaemon runs, it will throw and
+          // the error is caught by the caller.
+        }
+        metaWs.deliverToDaemon(bot.repo, {
+          type: "deliver",
+          from: msg.from,
+          to: msg.to,
+          body: msg.body,
+          threadId: msg.threadId,
+          cc: msg.cc,
+        });
+      },
+      logger: obs.rootLogger,
+      bots: telegramConfig.bots,
+      genId: () => randomUUID(),
+      openai,
+    });
+    await telegram.start();
+    telegramStop = () => telegram.stop();
+    obs.rootLogger.info("telegram gateway started", { botCount: telegramConfig.bots.length });
+  } else {
+    obs.rootLogger.info("telegram gateway skipped (no telegram.yaml)");
   }
 
   let stopped = false;

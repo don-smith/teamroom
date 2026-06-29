@@ -107,6 +107,62 @@ describe("meta-ws", () => {
       ]);
     }
   });
+
+  test("parses channel from outbound target for Telegram events", async () => {
+    const published: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const manager = composeMetaWs({
+      logger: new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z")),
+      clock: new ControllableClock("2026-06-23T00:00:00.000Z"),
+      tokenRegistry: new TokenRegistry(() => "token"),
+      genAdminToken: () => "admin-token",
+      daemonSecret: "daemon-secret",
+      eventBus: {
+        publish: (event, payload) => published.push({ event, payload }),
+      },
+    });
+    const port = await manager.start(0);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+
+    try {
+      await waitOpen(ws);
+      ws.send(JSON.stringify({
+        type: "register",
+        repoName: "teamroom",
+        mailMcpPort: 1111,
+        mailPort: 2222,
+      }));
+      await waitForAck(ws);
+
+      ws.send(JSON.stringify({
+        type: "outbound",
+        target: "channel:telegram:doc:12345",
+        messageId: "msg-1",
+        from: "doc",
+        to: ["channel:telegram:doc:12345"],
+        body: "hello back",
+        threadId: "thread-1",
+        ts: "2026-06-23T00:00:00.000Z",
+      }));
+
+      await waitFor(() => published.some((entry) => entry.event === "channel.out"));
+      const channelOut = published.find((entry) => entry.event === "channel.out")!;
+      expect(channelOut.payload).toMatchObject({
+        channel: "telegram",
+        user: "doc:12345",
+        messageId: "msg-1",
+        agentId: "doc",
+        threadId: "thread-1",
+        from: "doc",
+        body: "hello back",
+      });
+    } finally {
+      ws.terminate();
+      await Promise.race([
+        manager.stop(),
+        new Promise<void>((resolve) => setTimeout(resolve, 50)),
+      ]);
+    }
+  });
 });
 
 async function waitOpen(ws: WebSocket): Promise<void> {

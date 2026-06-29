@@ -32,10 +32,11 @@ describe("loadTelegramYaml", () => {
     const p = write(`bots:
   - agent: doc
     tokenEnvVar: TELEGRAM_TOKEN_DOC
+    repo: my-repo
 `);
     try {
       const cfg = loadTelegramYaml(p);
-      expect(cfg).toEqual({ bots: [{ agent: "doc", tokenEnvVar: "TELEGRAM_TOKEN_DOC" }] });
+      expect(cfg).toEqual({ bots: [{ agent: "doc", tokenEnvVar: "TELEGRAM_TOKEN_DOC", repo: "my-repo" }] });
     } finally {
       rmSync(p, { force: true });
     }
@@ -45,15 +46,17 @@ describe("loadTelegramYaml", () => {
     const p = write(`bots:
   - agent: doc
     tokenEnvVar: TELEGRAM_TOKEN_DOC
+    repo: my-repo
   - agent: libby
     tokenEnvVar: TELEGRAM_TOKEN_LIBBY
+    repo: other-repo
 `);
     try {
       const cfg = loadTelegramYaml(p);
       expect(cfg).toEqual({
         bots: [
-          { agent: "doc", tokenEnvVar: "TELEGRAM_TOKEN_DOC" },
-          { agent: "libby", tokenEnvVar: "TELEGRAM_TOKEN_LIBBY" },
+          { agent: "doc", tokenEnvVar: "TELEGRAM_TOKEN_DOC", repo: "my-repo" },
+          { agent: "libby", tokenEnvVar: "TELEGRAM_TOKEN_LIBBY", repo: "other-repo" },
         ],
       });
     } finally {
@@ -156,6 +159,31 @@ describe("loadTelegramYaml", () => {
 `);
     try {
       expect(() => loadTelegramYaml(p)).toThrow(/env var 'TELEGRAM_TOKEN_DOC' is not set/);
+    } finally {
+      rmSync(p, { force: true });
+    }
+  });
+
+  it("throws on bot entry missing 'repo'", () => {
+    const p = write(`bots:
+  - agent: doc
+    tokenEnvVar: TELEGRAM_TOKEN_DOC
+`);
+    try {
+      expect(() => loadTelegramYaml(p)).toThrow(/missing 'repo'/);
+    } finally {
+      rmSync(p, { force: true });
+    }
+  });
+
+  it("throws on empty repo string", () => {
+    const p = write(`bots:
+  - agent: doc
+    tokenEnvVar: TELEGRAM_TOKEN_DOC
+    repo: ""
+`);
+    try {
+      expect(() => loadTelegramYaml(p)).toThrow(/missing 'repo'/);
     } finally {
       rmSync(p, { force: true });
     }

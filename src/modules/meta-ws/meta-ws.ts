@@ -49,14 +49,31 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
               logger.info("repo-daemon.connected", { repoName, mailMcpPort: msg.mailMcpPort });
               ws.send(JSON.stringify({ type: "ack", repoName, adminToken, daemonSecret: deps.daemonSecret }));
               break;
-            case "outbound":
-              logger.info("meta-daemon.outbound_relayed", { repoName, target: msg.target });
+            case "outbound": {
+              const target = msg.target;
+              let channel = "cli";
+              let user = target;
+              if (target.startsWith("channel:")) {
+                const afterPrefix = target.slice("channel:".length);
+                const colonIdx = afterPrefix.indexOf(":");
+                if (colonIdx > 0) {
+                  channel = afterPrefix.slice(0, colonIdx);
+                  user = afterPrefix.slice(colonIdx + 1);
+                }
+              }
+              logger.info("meta-daemon.outbound_relayed", { repoName, channel, user });
               deps.eventBus.publish("channel.out", {
-                channel: "cli", user: msg.target.replace("channel:cli:", ""),
-                messageId: msg.messageId, agentId: msg.from, threadId: msg.threadId, from: msg.from, to: msg.to,
+                channel,
+                user,
+                messageId: msg.messageId,
+                agentId: msg.from,
+                threadId: msg.threadId,
+                from: msg.from,
+                to: msg.to,
                 body: msg.body,
               });
               break;
+            }
             case "event":
               logger.info("meta-daemon.event_relayed", { repoName, event: msg.event });
               if (msg.event === "delivery_error") {

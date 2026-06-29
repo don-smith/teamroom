@@ -1,16 +1,24 @@
 import { Bot, GrammyError, InputFile } from "grammy";
 import https from "node:https";
 import OpenAI from "openai";
-import type { MessageRepo } from "../db/message-repo.js";
 import type { EventBus } from "../bus/event-bus.js";
-import type { MailDispatcher } from "../mail-dispatcher/mail-dispatcher.js";
 import type { Logger } from "../logger/logger.js";
 import type { TelegramBotEntry } from "./telegram-config.js";
 
+export interface DeliverInboundInput {
+  from: string;
+  to: string[];
+  body: string;
+  threadId: string | null;
+  cc: string[];
+}
+
 export interface TelegramGatewayDeps {
-  messageRepo: MessageRepo;
   bus: EventBus;
-  dispatcher: MailDispatcher;
+  /** Deliver an inbound message to the agent. In the meta-process this
+   *  resolves repo from bot config and calls deliverToDaemon. In the
+   *  monolithic daemon this wraps the local mail delivery path. */
+  deliverInbound: (msg: DeliverInboundInput) => void;
   logger: Logger;
   bots: TelegramBotEntry[];
   genId: () => string;
@@ -38,7 +46,7 @@ const MAX_TELEGRAM_LENGTH = 4096;
 /**
  * Multi-bot Telegram gateway. Manages one grammy Bot instance per
  * configured agent. Handles:
- *   - Inbound text messages → dispatcher.sendMail()
+ *   - Inbound text messages → deliverInbound()
  *   - Outbound delivery via channel.out event subscription
  *   - 4096-char message splitting
  *   - Markdown parse mode with plain text fallback
@@ -87,11 +95,12 @@ export class TelegramGateway {
         });
 
         try {
-          this.deps.dispatcher.sendMail({
+          this.deps.deliverInbound({
             from: `channel:telegram:${agent}:${chatId}`,
             to: [`agent:${agent}`],
             body: text,
             threadId: null,
+            cc: [],
           });
         } catch (err) {
           this.deps.logger.error("telegram.inbound.dispatch_error", {
@@ -157,15 +166,16 @@ export class TelegramGateway {
 
         // Send transcribed text to the agent
         try {
-          const result = this.deps.dispatcher.sendMail({
+          const threadId = this.deps.genId();
+          this.deps.deliverInbound({
             from: `channel:telegram:${agent}:${chatId}`,
             to: [`agent:${agent}`],
             body: text,
-            threadId: null,
+            threadId,
+            cc: [],
           });
-          // Track this thread as voice-originated — sendMail returns the
-          // threadId synchronously so we can mark it immediately.
-          this.voiceThreadIds.add(result.threadId);
+          // Track this thread as voice-originated
+          this.voiceThreadIds.add(threadId);
         } catch (err) {
           this.deps.logger.error("telegram.inbound.voice_dispatch_error", {
             agent,
@@ -231,6 +241,7 @@ export class TelegramGateway {
       threadId: string;
       from: string;
       to: string[];
+      body: string;
     }>("channel.out", (payload) => {
       if (payload.channel !== "telegram") return;
       this.deliverOutbound(payload).catch((err) => {
@@ -275,6 +286,7 @@ export class TelegramGateway {
     threadId: string;
     from: string;
     to: string[];
+    body: string;
   }): Promise<void> {
     // user format: "<botName>:<chatId>" (e.g. "doc:12345")
     const colonIdx = payload.user.indexOf(":");
@@ -305,16 +317,8 @@ export class TelegramGateway {
       return;
     }
 
-    // Look up the full message row for the body text
-    const row = this.deps.messageRepo.findById(payload.messageId);
-    if (!row) {
-      this.deps.logger.warn("telegram.outbound.row_missing", {
-        messageId: payload.messageId,
-      });
-      return;
-    }
-
-    const text = row.body;
+    // Body is in the channel.out event payload — no DB lookup needed
+    const text = payload.body;
     await this.sendText(inst.bot, chatId, text);
 
     // Fire-and-forget TTS for voice-originated threads

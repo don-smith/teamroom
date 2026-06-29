@@ -19,6 +19,7 @@ export async function serveMeta(): Promise<void> {
 
   const meta = await startMetaDaemon({
     dataDir,
+    telegramYamlPath: join(TEAMROOM_DIR, "telegram.yaml"),
     openrouter: {
       upstreamUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api",
       realKey: openrouterToken,
