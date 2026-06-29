@@ -2,32 +2,32 @@ import { WebSocket } from "ws";
 import type { EventBus } from "../../bus/event-bus.js";
 import type { Logger } from "../../logger/logger.js";
 import type { MailDispatcher } from "../../mail-dispatcher/mail-dispatcher.js";
-import { parseMetaToDaemon } from "./protocol.js";
-import type { MetaToDaemon } from "./protocol.js";
+import { parseTeamRoomToRepo } from "./protocol.js";
+import type { TeamRoomToRepo } from "./protocol.js";
 
 export interface RepoWsClientOpts {
-  metaWsUrl: string; repoName: string; mailMcpPort: number; mailPort: number;
+  teamRoomWsUrl: string; repoName: string; mailMcpPort: number; mailPort: number;
   eventBus: EventBus; dispatcher: MailDispatcher; logger: Logger;
-  /** Called when the meta-process sends its ack with admin token and daemon secret. */
+  /** Called when the Team Room daemon sends its ack with admin token and daemon secret. */
   onAck?: (info: { adminToken: string; daemonSecret: string }) => void;
 }
 
-export function connectToMeta(opts: RepoWsClientOpts): { close: () => void } {
-  const { metaWsUrl, repoName, mailMcpPort, mailPort, eventBus, dispatcher, logger, onAck } = opts;
+export function connectToTeamRoom(opts: RepoWsClientOpts): { close: () => void } {
+  const { teamRoomWsUrl, repoName, mailMcpPort, mailPort, eventBus, dispatcher, logger, onAck } = opts;
   let ws: WebSocket | null = null;
   let closed = false;
   let retryCount = 0;
 
   function connect(): void {
     if (closed) return;
-    ws = new WebSocket(metaWsUrl);
+    ws = new WebSocket(teamRoomWsUrl);
     ws.on("open", () => {
-      logger.info("repo-ws.connected", { repoName, metaWsUrl });
+      logger.info("repo-ws.connected", { repoName, teamRoomWsUrl });
       ws!.send(JSON.stringify({ type: "register", repoName, mailMcpPort, mailPort }));
     });
     ws.on("message", (raw: Buffer) => {
-      let msg: MetaToDaemon;
-      try { msg = parseMetaToDaemon(raw.toString("utf8")); } catch { return; }
+      let msg: TeamRoomToRepo;
+      try { msg = parseTeamRoomToRepo(raw.toString("utf8")); } catch { return; }
       switch (msg.type) {
         case "ack":
           logger.info("repo-ws.registered", { repoName });

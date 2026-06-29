@@ -2,14 +2,14 @@
 import { Command } from "commander";
 import { resolve, join } from "node:path";
 import os from "node:os";
-import { serveMeta } from "./serve-meta.js";
+import { serveTeamRoom } from "./serve-teamroom.js";
 import { serveRepo } from "./serve-repo.js";
-import { send, sendViaMeta } from "./send.js";
+import { send, sendViaTeamRoom } from "./send.js";
 import { status } from "./status.js";
 import { readPortFile } from "./ports.js";
 import { runInbox } from "./inbox.js";
 import { runThread } from "./thread.js";
-import { runChat, runChatViaMeta } from "./chat.js";
+import { runChat, runChatViaTeamRoom } from "./chat.js";
 import { repoInit } from "./repo-init.js";
 import { repoList } from "./repo-list.js";
 import { repoRemove } from "./repo-remove.js";
@@ -18,18 +18,18 @@ import { TEAMROOM_DIR } from "../daemon/repo-config.js";
 const program = new Command();
 program.name("teamroom").description("Team Room CLI").version("0.1.0");
 
-// ── serve (meta-process is the default; --repo starts a per-repo daemon) ──
+// ── serve (Team Room daemon is the default; --repo starts a per-repo daemon) ──
 program
   .command("serve")
-  .description("Start a teamroom process (default: meta-process gateway)")
-  .option("--meta", "Start the meta-process gateway (default)")
+  .description("Start a teamroom process (default: Team Room daemon gateway)")
+  .option("--teamroom", "Start the Team Room daemon gateway (default)")
   .option("--repo <name>", "Start a per-repo daemon")
   .action(async (opts) => {
     if (opts.repo) {
       await serveRepo(opts.repo);
     } else {
-      // Default: meta-process
-      await serveMeta();
+      // Default: Team Room daemon
+      await serveTeamRoom();
     }
   });
 
@@ -57,9 +57,9 @@ program
     const repo = resolveRepoFromEnv();
     const user = process.env["TEAMROOM_USER"] ?? os.userInfo().username;
     if (repo) {
-      const metaPort = readPortFile(join(TEAMROOM_DIR, "meta", "data"), "chat");
-      if (!metaPort) { process.stderr.write("error: meta-process not running\n"); process.exit(1); }
-      await sendViaMeta({ port: metaPort, user, agent, body: text.join(" "), repo });
+      const teamRoomPort = readPortFile(join(TEAMROOM_DIR, "teamroom", "data"), "chat");
+      if (!teamRoomPort) { process.stderr.write("error: Team Room daemon not running\n"); process.exit(1); }
+      await sendViaTeamRoom({ port: teamRoomPort, user, agent, body: text.join(" "), repo });
     } else {
       const dataDir = join(resolve(process.cwd()), "data");
       const port = readPortFile(dataDir, "chat");
@@ -116,9 +116,9 @@ program
     const user = process.env["TEAMROOM_USER"] ?? os.userInfo().username;
     process.once("SIGINT", () => process.exit(0));
     if (repo) {
-      const metaPort = readPortFile(join(TEAMROOM_DIR, "meta", "data"), "chat");
-      if (!metaPort) { process.stderr.write("error: meta-process not running\n"); process.exit(1); }
-      await runChatViaMeta({ port: metaPort, agent, user, initialBody, repo, stdin: process.stdin, stdout: process.stdout, interactive: true });
+      const teamRoomPort = readPortFile(join(TEAMROOM_DIR, "teamroom", "data"), "chat");
+      if (!teamRoomPort) { process.stderr.write("error: Team Room daemon not running\n"); process.exit(1); }
+      await runChatViaTeamRoom({ port: teamRoomPort, agent, user, initialBody, repo, stdin: process.stdin, stdout: process.stdout, interactive: true });
     } else {
       const dataDir = join(resolve(process.cwd()), "data");
       const port = readPortFile(dataDir, "chat");

@@ -12,7 +12,7 @@ import { writePortFile, deletePortFile } from "../cli/ports.js";
 import { MailMcpServer, type MailMcpServerDeps } from "../mail-mcp/server.js";
 import { realTimerFactory } from "../session-manager/session-manager.js";
 import { loadListsYaml } from "../mailing-lists/loader.js";
-import { connectToMeta } from "../modules/meta-ws/repo-ws.js";
+import { connectToTeamRoom } from "../modules/teamroom-ws/repo-ws.js";
 import { composeObservability } from "../modules/observability/observability.js";
 import { composeStorage } from "../modules/storage/storage.js";
 import { composeMessaging } from "../modules/messaging/messaging.js";
@@ -109,7 +109,7 @@ export async function startRepoDaemon(opts: RepoDaemonOptions): Promise<StartedR
       // minting an unregistered token.
       if (!daemonSecret) {
         throw new Error(
-          "daemon not yet registered with meta-process",
+          "daemon not yet registered with Team Room daemon",
         );
       }
       return signEntry(entry, daemonSecret);
@@ -156,23 +156,21 @@ export async function startRepoDaemon(opts: RepoDaemonOptions): Promise<StartedR
   writePortFile(dataDir, "mail", mail.port);
   obs.rootLogger.info("mail query server started", { port: mail.port });
 
-  const repoWsUrl = process.env.TEAMROOM_META_WS_URL;
-  let adminTokenFromMeta: string | undefined;
+  const teamRoomWsUrl = process.env.TEAMROOM_DAEMON_WS_URL;
   let daemonSecret: string | undefined;
-  const repoWsClient = repoWsUrl
-    ? connectToMeta({
-        metaWsUrl: repoWsUrl, repoName: opts.repoName,
+  const repoWsClient = teamRoomWsUrl
+    ? connectToTeamRoom({
+        teamRoomWsUrl, repoName: opts.repoName,
         mailMcpPort: mailPort, mailPort: mail.port,
         eventBus: messaging.eventBus, dispatcher: mcpMail.dispatcher,
         logger: obs.rootLogger,
         onAck: (info) => {
-          adminTokenFromMeta = info.adminToken;
           mcpDeps.adminToken = info.adminToken;
           daemonSecret = info.daemonSecret;
         },
       })
     : null;
-  if (repoWsClient) obs.rootLogger.info("repo-ws.client_started", { metaWsUrl: repoWsUrl });
+  if (repoWsClient) obs.rootLogger.info("repo-ws.client_started", { teamRoomWsUrl });
 
   let stopped = false;
   const stop = async () => {

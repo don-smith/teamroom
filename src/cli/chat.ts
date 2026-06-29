@@ -153,15 +153,15 @@ export async function runChat(args: RunChatArgs): Promise<void> {
 }
 
 /**
- * Interactive chat via meta-process WebSocket with repo context.
- * Mirrors runChat() but routes through the meta-process.
+ * Interactive chat via Team Room daemon WebSocket with repo context.
+ * Mirrors runChat() but routes through the Team Room daemon.
  *
- * The register message carries a `repo` field so the meta chat WS
+ * The register message carries a `repo` field so the Team Room chat WS
  * knows which per-repo daemon to deliver publishes to. Everything else
  * — REPL loop, session tracking, prompt rendering — is identical to the
  * direct-chat path.
  */
-export async function runChatViaMeta(opts: {
+export async function runChatViaTeamRoom(opts: {
   port: number;
   agent: string;
   user: string;
@@ -207,7 +207,7 @@ export async function runChatViaMeta(opts: {
     }
   });
 
-  // Register as the user's CLI channel — with repo for meta routing
+  // Register as the user's CLI channel — with repo for Team Room daemon routing
   ws.send(
     JSON.stringify({
       type: "register",

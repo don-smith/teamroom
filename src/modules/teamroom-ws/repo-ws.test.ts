@@ -6,10 +6,10 @@ import { EventBus } from "../../bus/event-bus.js";
 import { ControllableClock } from "../../clock/clock.js";
 import { CapturingLogger } from "../../logger/logger.js";
 import type { MailDispatcher } from "../../mail-dispatcher/mail-dispatcher.js";
-import { connectToMeta } from "./repo-ws.js";
+import { connectToTeamRoom } from "./repo-ws.js";
 
 describe("repo-ws", () => {
-  test("reports deliver failures back to meta as delivery_error events", async () => {
+  test("reports deliver failures back to Team Room daemon as delivery_error events", async () => {
     const httpServer = createServer();
     const wss = new WebSocketServer({ server: httpServer });
     await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", () => resolve()));
@@ -49,8 +49,8 @@ describe("repo-ws", () => {
       },
     } as unknown as MailDispatcher;
 
-    const client = connectToMeta({
-      metaWsUrl: `ws://127.0.0.1:${port}`,
+    const client = connectToTeamRoom({
+      teamRoomWsUrl: `ws://127.0.0.1:${port}`,
       repoName: "teamroom",
       mailMcpPort: 1111,
       mailPort: 2222,
@@ -80,7 +80,7 @@ describe("repo-ws", () => {
     }
   });
 
-  test("relays non-CLI channel.out events to meta-process", async () => {
+  test("relays non-CLI channel.out events to Team Room daemon", async () => {
     const httpServer = createServer();
     const wss = new WebSocketServer({ server: httpServer });
     await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", () => resolve()));
@@ -111,8 +111,8 @@ describe("repo-ws", () => {
       sendMail: () => {},
     } as unknown as MailDispatcher;
 
-    const client = connectToMeta({
-      metaWsUrl: `ws://127.0.0.1:${port}`,
+    const client = connectToTeamRoom({
+      teamRoomWsUrl: `ws://127.0.0.1:${port}`,
       repoName: "teamroom",
       mailMcpPort: 1111,
       mailPort: 2222,

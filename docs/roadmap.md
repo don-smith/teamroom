@@ -112,11 +112,11 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 
 ### Code quality
 
-#### Meta-process daemon split — deferred review follow-ups (2026-06-26)
+#### Team Room daemon split — deferred review follow-ups (2026-06-26)
 
 Tabled from code review `.myflow/artifacts/reviews/2026-06-22_phase5-chat-routing-auto-spawn.md`. All findings are low-priority suggestions, not blockers.
 
-- **Q3: Test coverage for new CLI and daemon files.** `repo-init/list/remove`, `serve-meta`, `serve-repo`, `meta-daemon.ts`, `repo-daemon.ts` have limited test coverage. Three targeted test files cover the highest-risk WS paths. Add incremental coverage as these files are touched. Trigger: next feature touching these areas.
+- **Q3: Test coverage for new CLI and daemon files.** `repo-init/list/remove`, `serve-teamroom`, `serve-repo`, `teamroom-daemon.ts`, `repo-daemon.ts` have limited test coverage. Three targeted test files cover the highest-risk WS paths. Add incremental coverage as these files are touched. Trigger: next feature touching these areas.
 - **Q9: `resolveRepoFromEnv()` pattern dedup.** Same env-check + port-file-read pattern repeated in 5 CLI commands. Extract a helper. Trigger: when adding a new CLI command or refactoring the CLI layer.
 - **Q10: `repo-init` rollback safety.** Directories created before `repos.yaml` write — inconsistent state if YAML write fails. Reorder to write YAML first. Trigger: when touching the repo onboarding flow.
 - **Q11: Health endpoint / liveness probe.** Daemon processes hang forever with `new Promise(() => {})`. A `/healthz` endpoint or PID+uptime file would let auto-spawn distinguish "running but not connected" from "dead." Trigger: when working on daemon supervision or auto-recovery.

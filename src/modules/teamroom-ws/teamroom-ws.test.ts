@@ -3,12 +3,12 @@ import { WebSocket } from "ws";
 import { ControllableClock } from "../../clock/clock.js";
 import { CapturingLogger } from "../../logger/logger.js";
 import { TokenRegistry } from "../../model-proxy/token-registry.js";
-import { composeMetaWs } from "./meta-ws.js";
+import { composeTeamRoomWs } from "./teamroom-ws.js";
 
-describe("meta-ws", () => {
+describe("teamroom-ws", () => {
   test("sends a distinct admin token to each registered repo daemon", async () => {
     let tokenCounter = 0;
-    const manager = composeMetaWs({
+    const manager = composeTeamRoomWs({
       logger: new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z")),
       clock: new ControllableClock("2026-06-23T00:00:00.000Z"),
       tokenRegistry: new TokenRegistry(() => "token"),
@@ -48,9 +48,9 @@ describe("meta-ws", () => {
     }
   });
 
-  test("publishes delivery_error daemon events onto the meta event bus", async () => {
+  test("publishes delivery_error daemon events onto the Team Room daemon event bus", async () => {
     const published: Array<{ event: string; payload: Record<string, unknown> }> = [];
-    const manager = composeMetaWs({
+    const manager = composeTeamRoomWs({
       logger: new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z")),
       clock: new ControllableClock("2026-06-23T00:00:00.000Z"),
       tokenRegistry: new TokenRegistry(() => "token"),
@@ -110,7 +110,7 @@ describe("meta-ws", () => {
 
   test("parses channel from outbound target for Telegram events", async () => {
     const published: Array<{ event: string; payload: Record<string, unknown> }> = [];
-    const manager = composeMetaWs({
+    const manager = composeTeamRoomWs({
       logger: new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z")),
       clock: new ControllableClock("2026-06-23T00:00:00.000Z"),
       tokenRegistry: new TokenRegistry(() => "token"),

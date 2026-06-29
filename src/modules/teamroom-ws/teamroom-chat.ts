@@ -3,11 +3,11 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Logger } from "../../logger/logger.js";
 
 /**
- * Meta-process chat WebSocket server.
+ * Team Room daemon chat WebSocket server.
  *
  * Accepts connections from CLI clients and routes publishes to per-repo
- * daemons via deliverToDaemon. Receives channel.out events from the meta
- * event bus (republished from per-repo daemon outbound messages) and
+ * daemons via deliverToDaemon. Receives channel.out events from the Team Room
+ * daemon event bus (republished from per-repo daemon outbound messages) and
  * forwards them as `mail` frames to matching CLI clients.
  *
  * Unlike the per-repo daemon's ChatServer, this server has no DB access —
@@ -21,14 +21,14 @@ interface RegisteredConnection {
 }
 
 /**
- * Client→Meta messages extend the base chat protocol with a `repo` field
- * on register so the meta-process knows which per-repo daemon to target.
+ * Client→Team Room daemon messages extend the base chat protocol with a `repo` field
+ * on register so the Team Room daemon knows which per-repo daemon to target.
  */
-type MetaClientMessage =
+type TeamRoomClientMessage =
   | { type: "register"; channel: string; externalId: string; repo: string }
   | { type: "publish"; to: string[]; body: string; threadId: string | null; cc: string[] };
 
-function parseMetaClientMessage(raw: string): MetaClientMessage {
+function parseTeamRoomClientMessage(raw: string): TeamRoomClientMessage {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -92,11 +92,11 @@ function parseMetaClientMessage(raw: string): MetaClientMessage {
   throw new Error(`unknown client message type: ${String(p.type)}`);
 }
 
-export interface MetaChatServerDeps {
+export interface TeamRoomChatServerDeps {
   logger: Logger;
   /**
    * Deliver a publish payload to a per-repo daemon via its MCP endpoint.
-   * The meta-process bakes in auth (adminToken) before calling the
+   * The Team Room daemon bakes in auth (adminToken) before calling the
    * transport layer — callers don't see tokens.
    */
   deliverToDaemon: (
@@ -110,14 +110,14 @@ export interface MetaChatServerDeps {
     },
   ) => Promise<void>;
   /**
-   * Subscribe to channel.out events on the meta event bus.
+   * Subscribe to channel.out events on the Team Room daemon event bus.
    * Returns an unsubscribe function.
    */
   subscribeChannelOut: (
     handler: (payload: Record<string, unknown>) => void,
   ) => () => void;
   /**
-   * Subscribe to delivery.error events on the meta event bus.
+   * Subscribe to delivery.error events on the Team Room daemon event bus.
    * Used to surface per-repo delivery failures back to the CLI client
    * that originated the failed publish, when that origin is a CLI channel.
    */
@@ -126,23 +126,23 @@ export interface MetaChatServerDeps {
   ) => () => void;
 }
 
-export interface MetaChatServer {
+export interface TeamRoomChatServer {
   start(port: number): Promise<number>;
   stop(): Promise<void>;
 }
 
-export function composeMetaChat(deps: MetaChatServerDeps): MetaChatServer {
+export function composeTeamRoomChat(deps: TeamRoomChatServerDeps): TeamRoomChatServer {
   const connections = new Set<RegisteredConnection>();
   let httpServer: ReturnType<typeof createServer> | null = null;
   let wss: WebSocketServer | null = null;
   const unsubscribes: Array<() => void> = [];
 
-  const server: MetaChatServer = {
+  const server: TeamRoomChatServer = {
     async start(port: number): Promise<number> {
       httpServer = createServer();
       wss = new WebSocketServer({ server: httpServer });
 
-      // Subscribe to channel.out on the meta event bus so we can forward
+      // Subscribe to channel.out on the Team Room daemon event bus so we can forward
       // outbound mail from per-repo daemons to CLI clients.
       unsubscribes.push(
         deps.subscribeChannelOut((payload) => {
@@ -162,9 +162,9 @@ export function composeMetaChat(deps: MetaChatServerDeps): MetaChatServer {
         let repoName: string | null = null;
 
         ws.on("message", (raw: Buffer) => {
-          let msg: MetaClientMessage;
+          let msg: TeamRoomClientMessage;
           try {
-            msg = parseMetaClientMessage(raw.toString("utf8"));
+            msg = parseTeamRoomClientMessage(raw.toString("utf8"));
           } catch (err) {
             ws.send(
               JSON.stringify({
@@ -186,7 +186,7 @@ export function composeMetaChat(deps: MetaChatServerDeps): MetaChatServer {
               ws: ws as unknown as WebSocket,
             };
             connections.add(registered);
-            deps.logger.info("meta-chat.client_registered", {
+            deps.logger.info("teamroom-chat.client_registered", {
               channel: msg.channel,
               externalId: msg.externalId,
               repo: msg.repo,
@@ -214,7 +214,7 @@ export function composeMetaChat(deps: MetaChatServerDeps): MetaChatServer {
                 cc: msg.cc,
               })
               .catch((err) => {
-                deps.logger.error("meta-chat.delivery_failed", {
+                deps.logger.error("teamroom-chat.delivery_failed", {
                   repo: repoName,
                   error:
                     err instanceof Error ? err.message : String(err),
@@ -279,7 +279,7 @@ export function composeMetaChat(deps: MetaChatServerDeps): MetaChatServer {
 
     // No DB lookup — body/from/threadId flow through the channel.out
     // event payload (see the body-gap fix in mail-dispatcher + repo-ws
-    // + meta-ws).
+    // + teamroom-ws).
     target.ws.send(
       JSON.stringify({
         type: "mail",

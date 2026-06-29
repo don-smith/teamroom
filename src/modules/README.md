@@ -19,7 +19,7 @@ for the architecture rationale.
 - [`session-management/`](session-management/) — session lifecycle; subscribes to bus events to drive agent turns.
 - [`channels/`](channels/) — `ChannelRegistry`, `ChatServer` (WebSocket); exposes the chat port.
 - [`mail/`](mail/) — `QueryServer` (WebSocket); exposes the mail query port.
-- [`meta-ws/`](meta-ws/) — meta-process ↔ per-repo daemon WebSocket protocol and handlers (`meta-ws.ts` server-side route table, `repo-ws.ts` client-side connect+relay, `meta-chat.ts` CLI chat routing, `protocol.ts` typed message definitions).
+- [`teamroom-ws/`](teamroom-ws/) — Team Room daemon ↔ per-repo daemon WebSocket protocol and handlers (`teamroom-ws.ts` server-side route table, `repo-ws.ts` client-side connect+relay, `teamroom-chat.ts` CLI chat routing, `protocol.ts` typed message definitions).
 
 ## Related
 

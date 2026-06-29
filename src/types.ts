@@ -72,7 +72,7 @@ export interface SpanFields {
   turnId?: string;  // model-proxy trace identifier; distinct from the now-removed DB turns.turn_id
 }
 
-// ── Types for meta-process + per-repo daemon architecture ──
+// ── Types for Team Room daemon + per-repo daemon architecture ──
 
 /** Per-repo daemon identity and routing information. */
 export interface RepoRegistration {
@@ -89,7 +89,7 @@ export interface AgentOverride {
 
 /**
  * Contents of ~/.teamroom/repos.yaml.
- * Used exclusively by the meta-process.
+ * Used exclusively by the Team Room daemon.
  */
 export interface ReposYaml {
   repos: Record<string, {

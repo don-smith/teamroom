@@ -1,13 +1,13 @@
 export interface RegisterMessage { type: "register"; repoName: string; mailMcpPort: number; mailPort: number; }
 export interface OutboundMessage { type: "outbound"; target: string; messageId: string; from: string; to: string[]; body: string; threadId: string; ts: string; }
 export interface DaemonEventMessage { type: "event"; event: string; payload: unknown; }
-export type DaemonToMeta = RegisterMessage | OutboundMessage | DaemonEventMessage;
+export type RepoToTeamRoom = RegisterMessage | OutboundMessage | DaemonEventMessage;
 
 export interface AckMessage { type: "ack"; repoName: string; adminToken: string; daemonSecret: string; }
 export interface DeliverMessage { type: "deliver"; from: string; to: string[]; body: string; threadId: string | null; cc: string[]; }
-export type MetaToDaemon = AckMessage | DeliverMessage;
+export type TeamRoomToRepo = AckMessage | DeliverMessage;
 
-export function parseDaemonToMeta(raw: string): DaemonToMeta {
+export function parseRepoToTeamRoom(raw: string): RepoToTeamRoom {
   const p: Record<string, unknown> = JSON.parse(raw);
   if (!p.type || typeof p.type !== "string") throw new Error("missing or invalid type");
   switch (p.type) {
@@ -29,10 +29,10 @@ export function parseDaemonToMeta(raw: string): DaemonToMeta {
       if (typeof p.event !== "string") throw new Error("event: missing or invalid event");
       break;
   }
-  return p as unknown as DaemonToMeta;
+  return p as unknown as RepoToTeamRoom;
 }
 
-export function parseMetaToDaemon(raw: string): MetaToDaemon {
+export function parseTeamRoomToRepo(raw: string): TeamRoomToRepo {
   const p: Record<string, unknown> = JSON.parse(raw);
   if (!p.type || typeof p.type !== "string") throw new Error("missing or invalid type");
   switch (p.type) {
@@ -47,5 +47,5 @@ export function parseMetaToDaemon(raw: string): MetaToDaemon {
       if (typeof p.body !== "string") throw new Error("deliver: missing or invalid body");
       break;
   }
-  return p as unknown as MetaToDaemon;
+  return p as unknown as TeamRoomToRepo;
 }

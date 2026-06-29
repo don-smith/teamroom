@@ -49,13 +49,13 @@ export async function send(args: SendArgs): Promise<void> {
 }
 
 /**
- * Send via meta-process chat WebSocket with repo context.
- * Mirrors send() but routes through the meta-process.
+ * Send via Team Room daemon chat WebSocket with repo context.
+ * Mirrors send() but routes through the Team Room daemon.
  *
- * The register message carries a `repo` field so the meta chat WS
+ * The register message carries a `repo` field so the Team Room chat WS
  * knows which per-repo daemon to deliver to.
  */
-export async function sendViaMeta(opts: { port: number; user: string; agent: string; body: string; repo: string }): Promise<void> {
+export async function sendViaTeamRoom(opts: { port: number; user: string; agent: string; body: string; repo: string }): Promise<void> {
   const ws = new WebSocket(`ws://127.0.0.1:${opts.port}/`);
   await new Promise<void>((ok, fail) => {
     ws.once("open", () => ok());
@@ -75,7 +75,7 @@ export async function sendViaMeta(opts: { port: number; user: string; agent: str
       threadId: null,
       cc: [],
     }));
-    // Brief wait for the meta-process to deliver the publish.
+    // Brief wait for the Team Room daemon to deliver the publish.
     await new Promise((r) => setTimeout(r, 30));
   } finally {
     await new Promise<void>((resolve) => {

@@ -23,20 +23,20 @@ export async function serveRepo(repoName: string): Promise<void> {
     throw new Error(`codebase path does not exist: ${codebasePath}`);
   }
 
-  // Auto-discover the meta-process WebSocket URL from its port file.
-  // Falls back to the TEAMROOM_META_WS_URL env var if set (e.g. when
-  // spawned by the meta-process itself).
-  const metaWsUrl =
-    process.env.TEAMROOM_META_WS_URL ??
+  // Auto-discover the Team Room daemon WebSocket URL from its port file.
+  // Falls back to the TEAMROOM_DAEMON_WS_URL env var if set (e.g. when
+  // spawned by the Team Room daemon itself).
+  const teamRoomWsUrl =
+    process.env.TEAMROOM_DAEMON_WS_URL ??
     (() => {
-      const portFile = join(TEAMROOM_DIR, "meta", "data", "ports", "daemon-ws.port");
+      const portFile = join(TEAMROOM_DIR, "teamroom", "data", "ports", "daemon-ws.port");
       if (existsSync(portFile)) {
         return `ws://127.0.0.1:${readFileSync(portFile, "utf8").trim()}`;
       }
       return undefined;
     })();
-  if (metaWsUrl) {
-    process.env.TEAMROOM_META_WS_URL = metaWsUrl;
+  if (teamRoomWsUrl) {
+    process.env.TEAMROOM_DAEMON_WS_URL = teamRoomWsUrl;
   }
 
   const dataDir = repoDataDir(repoName);
@@ -52,7 +52,7 @@ export async function serveRepo(repoName: string): Promise<void> {
   const modelBaseUrl =
     process.env.TEAMROOM_MODEL_BASE_URL ??
     (() => {
-      const portFile = join(TEAMROOM_DIR, "meta", "data", "ports", "model-proxy.port");
+      const portFile = join(TEAMROOM_DIR, "teamroom", "data", "ports", "model-proxy.port");
       if (existsSync(portFile)) {
         return `http://host.docker.internal:${readFileSync(portFile, "utf8").trim()}`;
       }

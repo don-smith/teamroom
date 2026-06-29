@@ -128,7 +128,7 @@ export interface MailMcpServerDeps {
   logger?: Logger;
   /**
    * Admin token that bypasses per-session MCP token resolution.
-   * Used by the meta-process to deliver inbound mail without a
+   * Used by the Team Room daemon to deliver inbound mail without a
    * per-session agent token.
    */
   adminToken?: string;

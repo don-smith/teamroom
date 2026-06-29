@@ -26,6 +26,6 @@ export async function repoInit(path: string): Promise<void> {
     `  Codebase: ${path}`,
     `  Agents: ${DEFAULT_AGENTS.join(", ")}`,
     `Start: teamroom serve --repo ${name}`,
-    `  Meta: teamroom serve --meta`,
+    `  Team Room daemon: teamroom serve --teamroom`,
   ].join("\n") + "\n");
 }

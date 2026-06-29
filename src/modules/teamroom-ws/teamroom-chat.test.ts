@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { WebSocket } from "ws";
 import { CapturingLogger } from "../../logger/logger.js";
 import { ControllableClock } from "../../clock/clock.js";
-import { composeMetaChat } from "./meta-chat.js";
+import { composeTeamRoomChat } from "./teamroom-chat.js";
 
-describe("meta-chat", () => {
+describe("teamroom-chat", () => {
   test("routes delivery.error events to the originating CLI connection", async () => {
     let deliveryErrorHandler: ((payload: Record<string, unknown>) => void) | null = null;
     const logger = new CapturingLogger(new ControllableClock("2026-06-23T00:00:00.000Z"));
-    const chat = composeMetaChat({
+    const chat = composeTeamRoomChat({
       logger,
       deliverToDaemon: async () => {},
       subscribeChannelOut: () => () => {},
@@ -37,7 +37,7 @@ describe("meta-chat", () => {
       }));
 
       await waitFor(() => deliveryErrorHandler !== null);
-      await waitFor(() => logger.entries.some((entry) => entry.msg === "meta-chat.client_registered"));
+      await waitFor(() => logger.entries.some((entry) => entry.msg === "teamroom-chat.client_registered"));
       deliveryErrorHandler!({
         repoName: "teamroom",
         target: "channel:cli:don",

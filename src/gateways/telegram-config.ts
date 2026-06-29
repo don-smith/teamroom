@@ -6,7 +6,7 @@ export interface TelegramBotEntry {
   agent: string;
   /** Name of the env var holding this bot's Telegram token (e.g. "TELEGRAM_TOKEN_DOC") */
   tokenEnvVar: string;
-  /** Name of the repo this bot targets (e.g. "my-repo") — used by meta-process for routing */
+  /** Name of the repo this bot targets (e.g. "my-repo") — used by Team Room daemon for routing */
   repo: string;
 }
 

@@ -3,20 +3,20 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Logger } from "../../logger/logger.js";
 import type { Clock } from "../../clock/clock.js";
 import type { TokenRegistry } from "../../model-proxy/token-registry.js";
-import { parseDaemonToMeta } from "./protocol.js";
-import type { DaemonToMeta, DeliverMessage } from "./protocol.js";
+import { parseRepoToTeamRoom } from "./protocol.js";
+import type { RepoToTeamRoom, DeliverMessage } from "./protocol.js";
 
 export interface DaemonConnection {
   repoName: string; ws: WebSocket; mailMcpPort: number; mailPort: number; connectedAt: string; adminToken: string;
 }
 
-export interface MetaWsManagerDeps {
+export interface TeamRoomWsManagerDeps {
   logger: Logger; clock: Clock; tokenRegistry: TokenRegistry;
   genAdminToken: () => string; daemonSecret: string;
   eventBus: { publish: (event: string, payload: Record<string, unknown>) => void; };
 }
 
-export interface MetaWsManager {
+export interface TeamRoomWsManager {
   routeTable: Map<string, DaemonConnection>;
   start(port: number): Promise<number>;
   stop(): Promise<void>;
@@ -24,13 +24,13 @@ export interface MetaWsManager {
   deliverToDaemon(repoName: string, msg: DeliverMessage): void;
 }
 
-export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
+export function composeTeamRoomWs(deps: TeamRoomWsManagerDeps): TeamRoomWsManager {
   const routeTable = new Map<string, DaemonConnection>();
   const logger = deps.logger;
   let httpServer: ReturnType<typeof createServer> | null = null;
   let wss: WebSocketServer | null = null;
 
-  const manager: MetaWsManager = {
+  const manager: TeamRoomWsManager = {
     routeTable,
     async start(port: number): Promise<number> {
       httpServer = createServer();
@@ -38,8 +38,8 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
       wss.on("connection", (ws: WebSocket) => {
         let repoName: string | null = null;
         ws.on("message", (raw: Buffer) => {
-          let msg: DaemonToMeta;
-          try { msg = parseDaemonToMeta(raw.toString("utf8")); } catch { logger.warn("meta-ws.invalid_message", { raw: raw.toString("utf8").slice(0, 200) }); return; }
+          let msg: RepoToTeamRoom;
+          try { msg = parseRepoToTeamRoom(raw.toString("utf8")); } catch { logger.warn("teamroom-ws.invalid_message", { raw: raw.toString("utf8").slice(0, 200) }); return; }
           switch (msg.type) {
             case "register":
               repoName = msg.repoName;
@@ -61,7 +61,7 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
                   user = afterPrefix.slice(colonIdx + 1);
                 }
               }
-              logger.info("meta-daemon.outbound_relayed", { repoName, channel, user });
+              logger.info("teamroom-daemon.outbound_relayed", { repoName, channel, user });
               deps.eventBus.publish("channel.out", {
                 channel,
                 user,
@@ -75,7 +75,7 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
               break;
             }
             case "event":
-              logger.info("meta-daemon.event_relayed", { repoName, event: msg.event });
+              logger.info("teamroom-daemon.event_relayed", { repoName, event: msg.event });
               if (msg.event === "delivery_error") {
                 deps.eventBus.publish(
                   "delivery.error",
@@ -97,7 +97,7 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
       });
     },
     async stop(): Promise<void> {
-      for (const [, conn] of routeTable) { try { conn.ws.close(1001, "meta-shutdown"); } catch {} }
+      for (const [, conn] of routeTable) { try { conn.ws.close(1001, "teamroom-shutdown"); } catch {} }
       routeTable.clear();
       if (wss) { await new Promise<void>((r) => wss!.close(() => r())); wss = null; }
       if (httpServer) { await new Promise<void>((r) => httpServer!.close(() => r())); httpServer = null; }
@@ -105,7 +105,7 @@ export function composeMetaWs(deps: MetaWsManagerDeps): MetaWsManager {
     deliverToDaemon(repoName: string, msg: DeliverMessage): void {
       const conn = routeTable.get(repoName);
       if (!conn) throw new Error(`no daemon connected for repo: ${repoName}`);
-      logger.info("meta-ws.delivering", { repoName, to: msg.to, from: msg.from });
+      logger.info("teamroom-ws.delivering", { repoName, to: msg.to, from: msg.from });
       conn.ws.send(JSON.stringify(msg));
     },
   };

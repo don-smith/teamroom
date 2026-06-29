@@ -15,7 +15,7 @@ export interface DeliverInboundInput {
 
 export interface TelegramGatewayDeps {
   bus: EventBus;
-  /** Deliver an inbound message to the agent. In the meta-process this
+  /** Deliver an inbound message to the agent. In the Team Room daemon this
    *  resolves repo from bot config and calls deliverToDaemon. In the
    *  monolithic daemon this wraps the local mail delivery path. */
   deliverInbound: (msg: DeliverInboundInput) => void;
