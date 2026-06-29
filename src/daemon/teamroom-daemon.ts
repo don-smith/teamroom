@@ -19,7 +19,7 @@ import type { TokenEntry } from "../model-proxy/token-registry.js";
 export interface TeamRoomDaemonOptions {
   dataDir: string;
   openrouter: { upstreamUrl: string; realKey: string; };
-  telegramYamlPath?: string;
+  telegramYamlPath: string;
   agentsDir?: string;
   daemonWsPort?: number;
   chatPort?: number;
@@ -45,6 +45,28 @@ export async function startTeamRoomDaemon(opts: TeamRoomDaemonOptions): Promise<
   const obs = composeObservability({ dataDir: opts.dataDir });
   installSafetyNets(obs.rootLogger);
   obs.rootLogger.info("teamroom-daemon.starting", { dataDir: opts.dataDir });
+
+  if (!existsSync(opts.telegramYamlPath)) {
+    obs.rootLogger.error("telegram.config_missing", { path: opts.telegramYamlPath });
+    throw new Error(`telegram.yaml required for Team Room daemon: ${opts.telegramYamlPath}`);
+  }
+
+  let telegramConfig: ReturnType<typeof loadTelegramYaml>;
+  try {
+    telegramConfig = loadTelegramYaml(opts.telegramYamlPath);
+    const repos = loadReposYaml().repos;
+    for (const bot of telegramConfig.bots) {
+      if (!repos[bot.repo]) {
+        throw new Error(`telegram.yaml: unknown repo '${bot.repo}' (agent=${bot.agent})`);
+      }
+    }
+  } catch (err) {
+    obs.rootLogger.error("telegram.config_invalid", {
+      path: opts.telegramYamlPath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 
   const messaging = composeMessaging({ logger: obs.rootLogger });
 
@@ -194,9 +216,7 @@ export async function startTeamRoomDaemon(opts: TeamRoomDaemonOptions): Promise<
 
   // --- Telegram gateway (composed after teamRoomWs + ensureDaemon so deliverInbound
   //     can resolve repos and auto-spawn per-repo daemons) ---
-  const telegramYamlPath = opts.telegramYamlPath ?? (opts.agentsDir ? join(opts.agentsDir, "..", "telegram.yaml") : undefined);
-  if (telegramYamlPath && existsSync(telegramYamlPath)) {
-    const telegramConfig = loadTelegramYaml(telegramYamlPath);
+  {
     const openaiKey = process.env.TEAMROOM_OPENAI_API_KEY;
     if (!openaiKey) obs.rootLogger.warn("telegram: TEAMROOM_OPENAI_API_KEY not set — voice disabled");
     const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : undefined;
@@ -240,8 +260,6 @@ export async function startTeamRoomDaemon(opts: TeamRoomDaemonOptions): Promise<
     await telegram.start();
     telegramStop = () => telegram.stop();
     obs.rootLogger.info("telegram gateway started", { botCount: telegramConfig.bots.length });
-  } else {
-    obs.rootLogger.info("telegram gateway skipped (no telegram.yaml)");
   }
 
   let stopped = false;

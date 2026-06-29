@@ -12,5 +12,7 @@
 bots:
   - agent: doc
     tokenEnvVar: TELEGRAM_TOKEN_DOC
+    repo: test
   - agent: archie
     tokenEnvVar: TELEGRAM_TOKEN_ARCHIE
+    repo: test

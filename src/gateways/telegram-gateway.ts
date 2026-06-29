@@ -24,6 +24,8 @@ export interface TelegramGatewayDeps {
   genId: () => string;
   /** OpenAI client for voice transcription/synthesis. Undefined = voice disabled. */
   openai: OpenAI | undefined;
+  /** Optional test seam for bot construction; production uses grammy Bot directly. */
+  createBot?: (token: string, entry: TelegramBotEntry) => Bot;
 }
 
 /**
@@ -65,10 +67,11 @@ export class TelegramGateway {
    * Start all bot instances and subscribe to channel.out for outbound delivery.
    */
   async start(): Promise<void> {
+    const failures: string[] = [];
     for (const entry of this.deps.bots) {
       try {
         const token = process.env[entry.tokenEnvVar]!;
-        const bot = new Bot(token, {
+        const bot = this.deps.createBot?.(token, entry) ?? new Bot(token, {
           client: {
             baseFetchConfig: {
               // Force IPv4 — broken IPv6 routing (e.g. WireGuard/Tailscale split
@@ -225,11 +228,18 @@ export class TelegramGateway {
           stop: () => bot.stop(),
         });
       } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        failures.push(`${entry.agent}: ${error}`);
         this.deps.logger.error("telegram.bot_init_failed", {
           agent: entry.agent,
-          error: String(err),
+          error,
         });
       }
+    }
+
+    if (failures.length > 0) {
+      await this.stop();
+      throw new Error(`telegram bot init failed: ${failures.join("; ")}`);
     }
 
     // Subscribe to channel.out for outbound delivery to Telegram channels

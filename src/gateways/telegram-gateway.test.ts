@@ -48,4 +48,24 @@ describe("TelegramGateway", () => {
     expect(typeof gateway.start).toBe("function");
     expect(typeof gateway.stop).toBe("function");
   });
+
+  test("start fails loudly when a configured bot cannot initialize", async () => {
+    const previousToken = process.env.TELEGRAM_TOKEN;
+    process.env.TELEGRAM_TOKEN = "123:abc";
+    const deps: TelegramGatewayDeps = {
+      ...depsWith(() => {}),
+      createBot: () => {
+        throw new Error("simulated bot init failure");
+      },
+    };
+    const gateway = composeTelegram(deps);
+
+    try {
+      await expect(gateway.start()).rejects.toThrow(/telegram bot init failed: doc: simulated bot init failure/);
+    } finally {
+      await gateway.stop();
+      if (previousToken === undefined) delete process.env.TELEGRAM_TOKEN;
+      else process.env.TELEGRAM_TOKEN = previousToken;
+    }
+  });
 });
