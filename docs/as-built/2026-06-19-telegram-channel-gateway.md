@@ -1,18 +1,20 @@
 # Telegram Channel Gateway — Multi-Bot DM Gateway
 
 ## Quick Reference
-- **Date:** 2026-06-19
-- **Key files:** `src/gateways/telegram-config.ts`, `src/gateways/telegram-gateway.ts`, `src/mail-dispatcher/mail-dispatcher.ts`, `src/modules/channels/chat-server.ts`, `src/modules/channels/channels.ts`, `src/daemon/daemon.ts`, `telegram.yaml`
-- **Key concepts:** channel.out event, grammy long-polling, Whisper STT, fire-and-forget TTS, ChannelRegistry
-- **One-line summary:** Each agent gets its own Telegram bot for direct-message interaction, with voice message transcription and text-to-speech, running in-process inside the daemon.
+- **Date:** 2026-06-29
+- **Key files:** `src/gateways/telegram-config.ts`, `src/gateways/telegram-gateway.ts`, `src/daemon/teamroom-daemon.ts`, `src/modules/teamroom-ws/{repo-ws,teamroom-ws}.ts`, `src/mail-dispatcher/mail-dispatcher.ts`, `telegram.yaml`
+- **Key concepts:** channel.out event, grammy long-polling, Whisper STT, fire-and-forget TTS, Team Room daemon, repo routing
+- **One-line summary:** Each agent gets its own Telegram bot for direct-message interaction; the Team Room daemon owns Telegram and routes inbound/outbound messages across per-repo daemon WebSockets.
 
 ## How It Works Now
 
 ### Event Architecture
-The `channel.cli.out` event has been generalized to `channel.out`. The mail dispatcher now publishes a `channel.out` event for every message delivered to a `channel:*` recipient, with a `channel` field in the payload (e.g. `channel: "cli"` or `channel: "telegram"`). Subscribers filter by channel name:
+The `channel.cli.out` event has been generalized to `channel.out`. The mail dispatcher now publishes a `channel.out` event for every message delivered to a `channel:*` recipient, with a `channel` field in the payload (e.g. `channel: "cli"` or `channel: "telegram"`) and the message `body`. Subscribers filter by channel name:
 
-- **ChatServer** (`src/modules/channels/chat-server.ts`): subscribes to `channel.out`, filters to `channel === "cli"`, delivers to registered WebSocket clients.
-- **TelegramGateway** (`src/gateways/telegram-gateway.ts`): subscribes to `channel.out`, filters to `channel === "telegram"`, delivers to Telegram chats via grammy.
+- **TeamRoomChat** (`src/modules/teamroom-ws/teamroom-chat.ts`): subscribes to the Team Room daemon bus, filters to `channel === "cli"`, and delivers to registered CLI WebSocket clients.
+- **TelegramGateway** (`src/gateways/telegram-gateway.ts`): subscribes to the Team Room daemon bus, filters to `channel === "telegram"`, and delivers to Telegram chats via grammy.
+
+Per-repo daemons relay all local `channel.out` events to the Team Room daemon over WS as `target: channel:<channel>:<user>`. The Team Room daemon parses the target back into `channel` and `user` before republishing on its bus.
 
 ### Address Format
 Channel addresses use the 4-part format `channel:<channelName>:<botName>:<chatId>`, e.g. `channel:telegram:doc:12345`. The existing address parser at `src/mail-dispatcher/address.ts` already handles this — `externalId` captures everything after the channel name (i.e. `<botName>:<chatId>`).
@@ -20,12 +22,12 @@ Channel addresses use the 4-part format `channel:<channelName>:<botName>:<chatId
 ### Telegram Gateway
 The gateway lives in `src/gateways/` and follows the existing `compose*` factory pattern:
 
-**`telegram-config.ts`** — YAML config loader following the `lists.yaml` pattern. Reads `telegram.yaml`, validates each bot entry requires `agent` (agent name) and `tokenEnvVar` (env var holding the Telegram bot token). Throws if any env var is unset or empty. 11 unit tests.
+**`telegram-config.ts`** — YAML config loader following the `lists.yaml` pattern. Reads `telegram.yaml`, validates each bot entry requires `agent` (agent name), `tokenEnvVar` (env var holding the Telegram bot token), and `repo` (registered repo target). Throws if any env var is unset/empty or any required field is missing.
 
 **`telegram-gateway.ts`** — `TelegramGateway` class managing one grammy `Bot` instance per configured agent:
 
-- **Inbound text**: `bot.on("message:text")` → `dispatcher.sendMail()` from `channel:telegram:<agent>:<chatId>` to `agent:<agent>`.
-- **Inbound voice**: `bot.on("message:voice")` → downloads from Telegram → OpenAI Whisper STT → `dispatcher.sendMail()`. Thread is tracked as voice-originated in an in-memory `Set<string>`. Falls back to `"Voice processing is unavailable, please send text."` on any failure.
+- **Inbound text**: `bot.on("message:text")` → `deliverInbound()` from `channel:telegram:<agent>:<chatId>` to `agent:<agent>`. In the Team Room daemon, `deliverInbound` resolves the bot's configured repo and sends a WS `deliver` message to that repo daemon.
+- **Inbound voice**: `bot.on("message:voice")` → downloads from Telegram → OpenAI Whisper STT → `deliverInbound()`. Thread is tracked as voice-originated in an in-memory `Set<string>`. Falls back to `"Voice processing is unavailable, please send text."` on any failure.
 - **Outbound text**: Subscribes to `channel.out` filtered to `channel === "telegram"`. Parses `user` field as `<botName>:<chatId>`. Sends with Markdown parse mode, falling back to plain text on parse error. Splits messages >4096 chars.
 - **Outbound voice** (fire-and-forget): For voice-originated threads, after text is sent, fires `ttsSendVoice()` in the background. OpenAI TTS (tts-1, alloy) → `bot.api.sendVoice()`. Never blocks text delivery. Minimum 200-char threshold.
 - **IPv4 forced**: `https.Agent({ family: 4 })` in grammy's `baseFetchConfig` — Nanoclaw lesson for Tailscale/WireGuard compatibility.
@@ -34,15 +36,16 @@ The gateway lives in `src/gateways/` and follows the existing `compose*` factory
 ### Channel Registry
 `ChannelRegistry` now registers both `"cli"` and `"telegram"` at daemon startup (`src/modules/channels/channels.ts`). The `telegram` channel is used by the gateway for address validation.
 
-### Daemon Wiring (Section 6)
-The Telegram gateway is conditionally started in a new Section 6 of `startDaemon()`, between messaging (5) and codebase-mount resolution (7):
+### Team Room Daemon Wiring
+The production Telegram gateway is started by `startTeamRoomDaemon()`:
 
-1. Checks for `telegram.yaml` at `<agentsDir>/../telegram.yaml` (or `opts.telegramYamlPath`)
-2. If absent: logs `"telegram gateway skipped"` — no crash
-3. If present: loads config, creates OpenAI client lazily (voice disabled if `TEAMROOM_OPENAI_API_KEY` unset), calls `composeTelegram()`, starts gateway
-4. Shuts down ingress-first alongside ChatServer on stop
+1. `teamroom serve` loads `~/.teamroom/.env` and passes `~/.teamroom/telegram.yaml` explicitly.
+2. `startTeamRoomDaemon()` fails loudly before runtime ports are written if the file is missing, invalid, references an unknown repo, or if bot initialization fails.
+3. The gateway is composed after Team Room WS and `ensureDaemon()` exist, so inbound Telegram can resolve agent → repo and deliver to the correct per-repo daemon.
+4. OpenAI client creation remains lazy; if `TEAMROOM_OPENAI_API_KEY` is absent, voice features are disabled with a startup warning.
+5. Shutdown stops the Telegram gateway with the other Team Room daemon ingress surfaces.
 
-Bus observability logging for `channel.out` events is registered alongside existing `mail.delivered`, `mail.sent`, `tool.call` subscribers.
+The legacy monolithic `startDaemon()` still supports optional Telegram wiring for older/local compositions, but the Team Room daemon runtime path treats Telegram as required.
 
 ## Key Decisions
 
@@ -65,10 +68,10 @@ Bus observability logging for `channel.out` events is registered alongside exist
 - **Why:** User never waits for voice processing to read the reply; TTS failure never blocks communication
 - **Regression risk:** low
 
-### In-process gateway (no separate service)
-- **What:** Gateway runs inside the daemon process
-- **Why:** Single deployment, no process management, shares event bus in-memory
-- **Regression risk:** low — follows Team Room's principle of minimizing long-running process dependencies
+### Gateway stays in the Team Room daemon
+- **What:** Gateway runs inside the Team Room daemon process, not inside per-repo daemons and not as a separate service
+- **Why:** Single deployment for external ingress, no extra process manager, one Telegram long-polling owner, and a stable place to route to many repo daemons
+- **Regression risk:** medium — future multi-repo work may be tempted to move Telegram into repo daemons. Keep it centralized so each bot has one long-polling owner.
 
 ### Address format: channel:telegram:<botName>:<chatId>
 - **What:** 4-part address with both bot name and chat ID
@@ -82,7 +85,8 @@ Bus observability logging for `channel.out` events is registered alongside exist
 
 ## Constraints & Gotchas
 
-- **Grammy token validation**: Grammy throws at `bot.start()` if the token is invalid. The daemon does not catch this — a misconfigured token will crash the daemon. This is intentional: don't run with broken Telegram connectivity.
+- **Runtime Telegram config is required for the Team Room daemon**: `~/.teamroom/telegram.yaml` must exist, every bot must include `agent`, `tokenEnvVar`, and `repo`, token env vars must be set, and each `repo` must exist in `repos.yaml`. Missing/invalid config fails startup before runtime port files are written.
+- **Grammy token validation**: Grammy throws at `bot.start()` if the token is invalid. `TelegramGateway.start()` logs the failing bot, stops any initialized bot instances, and rejects startup. This is intentional: don't run with broken Telegram connectivity.
 - **OpenAI key is optional**: `TEAMROOM_OPENAI_API_KEY` is read at daemon startup. If absent, voice features are disabled with a startup warning. The `openai` dep is left `undefined` and voice handlers gracefully reply with "Voice processing is unavailable."
 - **Voice thread tracking is in-memory only**: `voiceThreadIds` is a `Set<string>` that resets on daemon restart. Voice-originated threads lose TTS after restart. Acceptable for single-operator use.
 - **Single human operator assumed**: No multi-user patterns are implemented. The grammy long-polling model supports one bot per agent for one operator.
@@ -92,4 +96,4 @@ Bus observability logging for `channel.out` events is registered alongside exist
 
 ## Background Context
 
-Built for the Telegram Channel milestone. The goal was to let humans DM any Team Room agent without startup ceremony or routing syntax. Each agent gets its own Telegram bot (configured in `telegram.yaml`), and the gateway runs inside the daemon as a first-class compose module. Voice was included from the start to match the NanoClaw reference implementation, using OpenAI Whisper for STT and TTS with a fire-and-forget pattern so text is never delayed by voice processing.
+Built for the Telegram Channel milestone and updated during the Team Room daemon/per-repo daemon split follow-up. The goal was to let humans DM any Team Room agent without routing syntax while preserving multi-repo isolation. Each agent gets its own Telegram bot (configured in `~/.teamroom/telegram.yaml`), and the gateway runs inside the Team Room daemon as a first-class compose module. Voice was included from the start to match the NanoClaw reference implementation, using OpenAI Whisper for STT and TTS with a fire-and-forget pattern so text is never delayed by voice processing.

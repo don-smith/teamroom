@@ -1,10 +1,10 @@
 # Team Room Daemon + Per-Repo Daemon Split
 
 ## Quick Reference
-- **Date:** 2026-06-26
-- **Key files:** `src/daemon/teamroom-daemon.ts`, `src/daemon/repo-daemon.ts`, `src/modules/teamroom-ws/{protocol,teamroom-ws,repo-ws,teamroom-chat}.ts`, `src/daemon/repo-config.ts`, `src/model-proxy/token-registry.ts`
-- **Key concepts:** Team Room daemon, per-repo-daemon, cross-process-websocket, hmac-tokens, auto-spawn, delivery-error-relay, admin-token-isolation
-- **One-line summary:** Split the monolithic daemon into a Team Room daemon (model proxy, chat WS, Telegram, daemon supervision) and per-repo daemons (containers, mail DB, mail-MCP) connected by a typed WebSocket protocol with HMAC-signed model proxy tokens and per-daemon admin token isolation.
+- **Date:** 2026-06-29
+- **Key files:** `src/daemon/teamroom-daemon.ts`, `src/daemon/repo-daemon.ts`, `src/modules/teamroom-ws/{protocol,teamroom-ws,repo-ws,teamroom-chat}.ts`, `src/gateways/{telegram-config,telegram-gateway}.ts`, `src/daemon/repo-config.ts`, `src/model-proxy/token-registry.ts`
+- **Key concepts:** Team Room daemon, per-repo-daemon, cross-process-websocket, hmac-tokens, auto-spawn, delivery-error-relay, admin-token-isolation, telegram-config-preflight
+- **One-line summary:** Split the monolithic daemon into a Team Room daemon (model proxy, chat WS, Telegram, daemon supervision) and per-repo daemons (containers, mail DB, mail-MCP) connected by a typed WebSocket protocol with HMAC-signed model proxy tokens, per-daemon admin token isolation, and required runtime Telegram config.
 
 ## How It Works Now
 
@@ -14,8 +14,8 @@
 Team Room daemon (one instance, always running)
 ├── Model proxy (HTTP, shared by all per-repo daemons)
 ├── Chat WebSocket (WS, CLI users connect here)
-├── Telegram gateway (composed, activated when telegram.yaml present)
-│   Listens on channel.out for telegram-scoped replies
+├── Telegram gateway (requires valid ~/.teamroom/telegram.yaml at startup)
+│   Receives Telegram text/voice inbound and listens on channel.out for telegram-scoped replies
 ├── Per-repo daemon WS listener
 │   Maintains routeTable: Map<repoName, DaemonConnection>
 │   Registers daemons on connect, tears down on close
@@ -37,6 +37,8 @@ Per-repo daemon (one per repo, started by Team Room daemon auto-spawn or manuall
 
 ```
 ~/.teamroom/
+├── .env                    # Team Room daemon: OpenRouter, Telegram bot tokens, OpenAI key
+├── telegram.yaml           # Team Room daemon: bot agent/tokenEnvVar/repo routing config
 ├── repos.yaml              # Team Room daemon: repo index
 │   repos:
 │     <name>:
@@ -56,6 +58,12 @@ Per-repo daemon (one per repo, started by Team Room daemon auto-spawn or manuall
         ├── Dockerfile
         └── shim.py
 ```
+
+### Telegram routing
+
+`teamroom serve` passes `~/.teamroom/telegram.yaml` to `startTeamRoomDaemon()`. The Team Room daemon preflights the file before network services start: it must exist, parse successfully, have configured token env vars, and every bot `repo` must be present in `repos.yaml`. Missing/invalid config, unknown repos, and bot startup failures are loud startup failures because Telegram is the primary operator path for this version.
+
+Inbound Telegram messages stay in the Team Room daemon until routing is known. The gateway converts a text or transcribed voice DM into mail from `channel:telegram:<agent>:<chatId>` to `agent:<agent>`, then `deliverInbound` resolves the bot's configured repo and sends a WS `deliver` message to that per-repo daemon. Outbound replies flow the other direction: the per-repo daemon relays every `channel.out` event as `target: channel:<channel>:<user>`, and the Team Room daemon parses the channel before publishing to its bus for CLI or Telegram subscribers.
 
 ### WebSocket protocol (`src/modules/teamroom-ws/protocol.ts`)
 
@@ -158,13 +166,21 @@ All agents in the per-repo daemon run as `lifecycle: session` regardless of what
 
 **Regression risk:** low.
 
+### Runtime Telegram config is required
+
+**What:** `teamroom serve` requires a valid `~/.teamroom/telegram.yaml` and fails before runtime ports are written if the file is missing, invalid, points at an unknown repo, or if configured bots fail to initialize.
+
+**Why:** Telegram is a central operator surface for this version of Team Room. A daemon that appears healthy while Telegram is absent is more misleading than a loud startup failure.
+
+**Regression risk:** medium — future work may be tempted to restore optional Telegram startup for convenience. Keep legacy `startDaemon()` optional behavior separate from the Team Room daemon runtime path.
+
 ## Constraints & Gotchas
 
 - **Per-repo daemon must connect before deliveries work.** Team Room daemon auto-spawns the daemon and waits 15s for connection. If the daemon fails to register, deliveries will fail with "no daemon connected."
 - **daemonSecret must be available before remoteMint.** Token minting throws if the shared secret hasn't arrived via `ack`. The WS protocol ensures ack is sent before any `deliver` message, so the window is theoretically closed — but the code fails loudly rather than silently minting invalid tokens.
 - **Agent definitions are shared; stores are per-repo.** `~/.teamroom/agents/<name>/agent.yaml` is the single source of truth for agent configuration. Per-repo stores live at `~/.teamroom/repos/<name>/stores/<agent>/`. `buildSpec` overrides the store mount path via `storeBasePath`.
 - **All agents run as `lifecycle: session` in per-repo daemons.** The daemon overrides `lifecycle` to `session` at load time. Persistent lifecycle is not supported in the per-repo architecture.
-- **Telegram gateway wiring is now implemented.** Cross-process Telegram routing flows inbound from Telegram through the Team Room daemon to the target repo daemon, and outbound from the repo daemon over the Team Room daemon bus to the Telegram gateway.
+- **Telegram gateway wiring is required in the Team Room daemon.** Cross-process Telegram routing flows inbound from Telegram through the Team Room daemon to the target repo daemon, and outbound from the repo daemon over the Team Room daemon bus to the Telegram gateway. `telegram.yaml` entries route each bot by `(agent, tokenEnvVar, repo)`, and repo names must exist in `repos.yaml` at startup.
 - **`channel.out` body propagation.** The `mail-dispatcher` now includes `body` in `channel.out` events so the reply content reaches CLI/Telegram clients through the Team Room daemon relay.
 - **Orphaned daemon cleanup.** `ensureDaemon` kills the spawned child with SIGTERM if `waitForConnection` times out, preventing process leaks.
 
@@ -172,6 +188,6 @@ All agents in the per-repo daemon run as `lifecycle: session` regardless of what
 
 Team Room was a single-process daemon that composed nine modules: observability, storage, messaging, MCP mail, Telegram, model proxy, session management, channels, and mail query — all sharing one in-process event bus and one SQLite database. This worked for a single repo but couldn't scale to multiple repos.
 
-The Team Room daemon/per-repo daemon split makes Team Room multi-repo by design: a single Team Room daemon gateways all external communication (CLI, Telegram, model proxy) while per-repo daemons own per-repo state (containers, mail DB, agent stores). The split also isolates failure domains — a crashed repo daemon doesn't affect other repos' operations.
+The Team Room daemon/per-repo daemon split makes Team Room multi-repo by design: a single Team Room daemon gateways all external communication (CLI, Telegram, model proxy) while per-repo daemons own per-repo state (containers, mail DB, agent stores). The split also isolates failure domains — a crashed repo daemon doesn't affect other repos' operations. The Telegram cross-process follow-up restored Telegram after the split and made runtime Telegram config a required, fail-loud startup dependency.
 
 The implementation follows a 5-phase plan inherited from `.myflow/artifacts/plans/2026-06-19_Team Room daemon-per-repo-daemon.md`. A code review (`.myflow/artifacts/reviews/2026-06-22_phase5-chat-routing-auto-spawn.md`) found 12 findings; 8 were resolved in implementation and 4 suggestions were tabled. Manual verification confirmed end-to-end multi-turn chat through the Team Room daemon route.

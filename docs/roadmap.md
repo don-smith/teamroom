@@ -16,6 +16,8 @@
 | M6 | DeepAgents runtime + Archie architect | Shipped | 2026-06-07 | [As-built](as-built/2026-06-07-teamroom-m6.md) |
 | Persona <br>realignment | 4 core agents, 2 runtimes, OpenRouter-only | Shipped | 2026-06-19 | [As-built](as-built/2026-06-19-teamroom-persona-realignment.md) |
 | MyFlow agent <br>onboarding | Skills mount, stage ownership, resilient startup | Shipped | 2026-06-20 | [As-built](as-built/2026-06-20-myflow-agent-onboarding.md) |
+| Team Room daemon split | Team Room daemon + per-repo daemon architecture | Shipped | 2026-06-26 | [As-built](as-built/2026-06-26-team-room-daemon-per-repo-daemon-split.md) |
+| Telegram cross-process wiring | Telegram restored across Team Room daemon↔repo daemon boundary | Shipped | 2026-06-29 | [Telegram as-built](as-built/2026-06-19-telegram-channel-gateway.md), [daemon split as-built](as-built/2026-06-26-team-room-daemon-per-repo-daemon-split.md) |
 | M7 | Per-agent memory | Future | — | Originally M4 in `team-room-context §7`; shifted behind mail (M4), AI-native harness (M4.5), the LangGraph runtime (M5), and Archie/DeepAgents (M6). Memory substrate is the load-bearing dependency for durable agent personas — once it lands, personas can hold state across containers and the "architect has seen this codebase for weeks" type of role becomes real. |
 | M8 | Scheduling | Future | — | Originally M5 in `team-room-context §7`. |
 | M9 | Evaluations — agent-level + process-level, eval provider selection | Future | — | Originally M6 in `team-room-context §7`. Gains weight as the long-term answer to "did the agent actually do its job" questions that unit tests can't answer. Encompasses agent-level evals (task completion, response quality) and process-level evals (pipeline effectiveness). Eval provider selection (MLflow, LangSmith, or other) is an open decision. |
@@ -33,7 +35,7 @@ At every milestone close:
 - Mark the completed milestone's status (Shipped) and link its as-built.
 - Re-examine the "Future" order in light of what the milestone taught us.
 - If the order changes, note why (a one-liner in the rationale column is enough; deeper rationale goes in the milestone's retro).
-- Process [`docs/tabled.md`](tabled.md): outstanding items worth keeping roll into the Backlog below; completed/obsolete items are dropped; the file ends the milestone empty (or near-empty).
+- Process the repo's personal MyFlow tabled file (`node /Users/don/projects/myflow/skills/_shared/repo-store.mjs state tabled`): outstanding items worth keeping roll into the Backlog below; completed/obsolete items are dropped; the file ends the milestone empty.
 
 ## Backlog
 
@@ -41,10 +43,9 @@ Items identified during prior milestones, still outstanding, not yet slotted int
 
 ### Channel architecture evolution
 
-- **Second channel (Telegram, Slack, voice, etc.).** M4 ships one channel adapter (CLI). When a concrete need for a non-CLI channel arrives: introduce a plugin registry, extract the CLI adapter to a plugin, implement the new channel. Telegram is the leading candidate — the biggest near-term unlock after Archie is a non-CLI external channel.
-- **`channel.cli.out` event generalization.** The dispatcher hard-codes `channel.cli.out` for CLI delivery; a second channel requires either a generic `channel.out` event (preferred) or per-channel event names. See M4.5 Backlog §3 for the fix shape. Trigger: second channel implementation.
-- **`ChannelRegistry` → dispatcher strict-deliver wiring.** The dispatcher accepts channel-kind addresses unconditionally; the registry is consulted only by `ChatServer`. Adding `knownChannels` to `MailDispatcherOpts` closes the gap. Trigger: when the second channel lands, or as a standalone hardening pass.
-- **Unified mail across external channels.** Each external channel (Telegram, etc.) delivers messages as mail to agents and receives agent replies as outbound channel messages. Deferred pending first external channel integration; same design pass as the second-channel work.
+- **Additional external channels after Telegram.** Telegram is now the first non-CLI channel. If a third channel (Slack, Discord, email, etc.) arrives, use the established pattern: channel-addressed mail, `channel.out` payloads with `body`, per-repo WS relay to the Team Room daemon, and channel-specific subscribers on the Team Room daemon bus. Trigger: concrete third-channel need.
+- **`ChannelRegistry` → dispatcher strict-deliver wiring.** The dispatcher accepts channel-kind addresses unconditionally; the registry is consulted by channel servers/gateways. Adding `knownChannels` to `MailDispatcherOpts` closes the gap. Trigger: when adding another channel or as a standalone hardening pass.
+- **Telegram cold-repo first-message reliability.** Telegram inbound currently fire-and-forgets repo daemon auto-spawn and immediately attempts delivery. If the repo daemon is cold, the first Telegram message can be dropped while the daemon connects. Trigger: observed operational friction, or daemon delivery reliability hardening.
 
 ### Mailing lists and event bus
 
@@ -101,6 +102,8 @@ Runtimes: M6 shipped DeepAgents as the first external-runtime proof with Archie.
 - **Agent-container observability.** When a container runs but produces no visible progress, there's no way to tell why — tool calls are captured at the daemon side but container runtime output (wake received, LLM start/done, errors) is on stderr, returned only at exit. Options: `{type:"log"}` stdout envelopes from the runtime forwarded by the session manager; or an MCP logging tool so agents log structured events from inside the turn. Trigger: next time a container is stuck and the cause is unclear.
 - **Per-agent volume mount permissions.** All mounts (`/codebase`, `/AGENTS.md`, `/store`) are `readOnly: false` regardless of persona. A config field for mount permissions per agent would let restrictive personas (e.g. librarian) mount `/codebase` read-only. Spec needed before implementing. Trigger: pre-M7 cleanup or M7 persona-maturity pass.
 - **Per-wake `AbortSignal` wall-clock cap.** `RECURSION_LIMIT: 50` bounds step count; wall clock can still run away on a slow upstream. Deferred until a runaway is observed in production.
+- **Repo daemon self-termination lifecycle.** Auto-spawned repo daemons currently survive Team Room daemon shutdown and older worktrees can leave stale repo daemons/containers running. Design disconnect TTL and/or idle TTL behavior with loud logs and operator commands such as `teamroom repo stop <name>` / `teamroom stop --all`. Trigger: daemon lifecycle hardening.
+- **Central exception log.** Add a focused exceptions/observability file under `~/.teamroom/` so startup/runtime exceptions are inspectable in one place without enabling verbose normal logs or filling disk. Trigger: observability/logging hardening.
 
 ### Future infrastructure
 
@@ -124,6 +127,7 @@ Tabled from code review `.myflow/artifacts/reviews/2026-06-22_phase5-chat-routin
 
 ### Code quality
 
+- **Replace `serve-teamroom.test.ts` source grep with behavior-level coverage.** The current test protects the canonical `~/.teamroom/telegram.yaml` path by reading source text. Prefer a behavior-level CLI/composition test when the CLI startup seam is next touched, while still avoiding mock libraries.
 - **WebSocket protocol parser dedup.** `src/modules/channels/protocol.ts` and `src/modules/mail/protocol.ts` share validation scaffolding (object-shape narrowing, type-discrimination, error message style). A shared `src/modules/protocol-helpers.ts` with generic narrowing helpers would shrink both. Pure cleanup; no behavior change. Trigger: third WebSocket protocol, or a non-trivial change to one of the two parsers where the duplication makes the diff awkward.
 - **Extract `composeMailTestHarness()` helper.** `src/mail-mcp/server.test.ts`, `src/modules/mcp-mail/mcp-mail.test.ts`, and others each compose their own in-process mail stack. `feedback_teamroom_composition_parity.md` memory called out the smell. Pure cleanup; would pay down debt across 4+ call sites. Trigger: next test that needs a mail harness, or a non-trivial change to one existing harness.
 
