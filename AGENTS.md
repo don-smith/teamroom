@@ -41,4 +41,7 @@ Every multi-file module under `src/` has a README following this shape:
 
 Follow `## Related` links to navigate the knowledge graph of the codebase without having to search or guess at filenames.
 
+## Worktrees
+Worktree directory: `~/projects/teamroom/teamroom-worktrees/` (sibling directory).
+
 Single-file modules (e.g., `clock/`, `logger/`, `env/`, `types.ts`) intentionally do not have READMEs — the TypeScript source documents the contract directly. A README gets added when a module grows to multiple files or when its boundary is non-obvious from the code.
