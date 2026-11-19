@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team Room architecture</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #566273;
+    --line: #dde2e9;
+    --flow: #334155;
+    --model: #b4541a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 40px 24px 48px; }
+  h1 { font-size: 32px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 72ch; }
+  .figure { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; overflow-x: auto; }
+  .figure svg { display: block; width: 100%; min-width: 940px; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 14px 2px 0; color: var(--muted); font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 30px; height: 0; border-top: 2px solid var(--flow); }
+  .legend i.model { border-top-color: var(--model); }
+  .legend i.start { border-top-style: dashed; }
+  h2 { font-size: 20px; letter-spacing: -0.01em; margin: 36px 0 14px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; }
+  ol.steps li { display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start; }
+  ol.steps b { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--flow); color: #fff; font-size: 13px; font-weight: 700; }
+  footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  @media (max-width: 760px) {
+    main { padding: 24px 16px 32px; }
+    h1 { font-size: 26px; }
+    ol.steps { grid-template-columns: 1fr; }
+  }
+
+  /* Diagram */
+  .panel-label { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; }
+  .panel-note { font-size: 13px; font-weight: 500; fill: #566273; }
+  .t { font-size: 16px; font-weight: 650; fill: #1c2430; text-anchor: middle; }
+  .s { font-size: 12.5px; fill: #566273; text-anchor: middle; }
+  .l { font-size: 12px; fill: #566273; }
+  .box { fill: #ffffff; stroke-width: 1.25; }
+  .ext { fill: #f4effa; stroke: #6a4c93; stroke-width: 1.25; }
+  .tr { stroke: #2f5fa8; }
+  .rp { stroke: #0f766e; }
+  .ag { stroke: #b4541a; }
+  .bus-tr { fill: #e3ecf9; stroke: #2f5fa8; stroke-width: 1.25; }
+  .bus-rp { fill: #d9f1ec; stroke: #0f766e; stroke-width: 1.25; }
+  .flow { fill: none; stroke: #334155; stroke-width: 1.75; }
+  .model { fill: none; stroke: #b4541a; stroke-width: 2; }
+  .start { fill: none; stroke: #334155; stroke-width: 1.5; stroke-dasharray: 6 5; }
+  .badge circle { fill: #334155; stroke: #ffffff; stroke-width: 2; }
+  .badge.m circle { fill: #b4541a; }
+  .badge text { font-size: 12px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Team Room architecture</h1>
+  <p class="lede">Team Room runs a team of AI agents in isolated containers. One daemon handles connections and model access for the machine, and each repository gets its own daemon for mail, storage and agent sessions.</p>
+
+  <div class="figure">
+    <svg viewBox="0 0 1400 1040" role="img" aria-labelledby="dt dd" xmlns="http://www.w3.org/2000/svg">
+      <title id="dt">Team Room high-level architecture</title>
+      <desc id="dd">The CLI and Telegram connect to the Team Room daemon, which links to a daemon for each repository. Repository daemons store mail and start agent containers. Containers use mail tools on the repository daemon and reach OpenRouter through the model proxy.</desc>
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#334155"/></marker>
+        <marker id="m" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#b4541a"/></marker>
+      </defs>
+
+      <!-- External systems -->
+      <g>
+        <rect class="ext" x="70" y="24" width="240" height="72" rx="8"/>
+        <text class="t" x="190" y="55">teamroom CLI</text>
+        <text class="s" x="190" y="76">chat · send · inbox · thread</text>
+        <rect class="ext" x="340" y="24" width="260" height="72" rx="8"/>
+        <text class="t" x="470" y="55">Telegram</text>
+        <text class="s" x="470" y="76">One bot per configured agent</text>
+        <rect class="ext" x="640" y="24" width="260" height="72" rx="8"/>
+        <text class="t" x="770" y="55">OpenAI</text>
+        <text class="s" x="770" y="76">Voice transcription and speech</text>
+        <rect class="ext" x="1080" y="24" width="250" height="72" rx="8"/>
+        <text class="t" x="1205" y="55">OpenRouter</text>
+        <text class="s" x="1205" y="76">Model provider</text>
+      </g>
+
+      <!-- Team Room daemon -->
+      <rect x="40" y="140" width="1320" height="240" rx="12" fill="#eef4fc" stroke="#2f5fa8" stroke-width="1.5"/>
+      <text x="640" y="167"><tspan class="panel-label" fill="#2f5fa8">TEAM ROOM DAEMON</tspan><tspan class="panel-note" dx="10">One per machine</tspan></text>
+
+      <rect class="box tr" x="70" y="184" width="240" height="80" rx="8"/>
+      <text class="t" x="190" y="218">Chat server</text>
+      <text class="s" x="190" y="240">WebSocket for the CLI</text>
+
+      <rect class="box tr" x="340" y="184" width="260" height="80" rx="8"/>
+      <text class="t" x="470" y="218">Telegram gateway</text>
+      <text class="s" x="470" y="240">Bot messages and voice</text>
+
+      <rect class="box tr" x="640" y="184" width="400" height="80" rx="8"/>
+      <text class="t" x="840" y="218">Daemon WebSocket</text>
+      <text class="s" x="840" y="240">Routes to repo daemons and starts them on demand</text>
+
+      <rect class="box tr" x="1080" y="184" width="250" height="80" rx="8"/>
+      <text class="t" x="1205" y="212">Model proxy</text>
+      <text class="s" x="1205" y="233">Swaps routing tokens for</text>
+      <text class="s" x="1205" y="250">the real OpenRouter key</text>
+
+      <rect class="bus-tr" x="70" y="312" width="830" height="44" rx="8"/>
+      <text class="t" x="485" y="339" style="font-size:14.5px">Event bus <tspan style="font-weight:400;fill:#566273;font-size:12.5px" dx="8">channel.out · delivery.error</tspan></text>
+
+      <!-- Per-repo daemon -->
+      <rect x="54" y="434" width="1000" height="350" rx="12" fill="#f4fbf9" stroke="#0f766e" stroke-width="1"/>
+      <rect x="40" y="420" width="1000" height="350" rx="12" fill="#ecf8f5" stroke="#0f766e" stroke-width="1.5"/>
+      <text x="60" y="447"><tspan class="panel-label" fill="#0f766e">PER-REPO DAEMON</tspan><tspan class="panel-note" dx="10">One per registered repository</tspan></text>
+
+      <rect class="box rp" x="70" y="466" width="240" height="80" rx="8"/>
+      <text class="t" x="190" y="500">Mail query server</text>
+      <text class="s" x="190" y="522">WebSocket for inbox and thread</text>
+
+      <rect class="box rp" x="340" y="466" width="260" height="80" rx="8"/>
+      <text class="t" x="470" y="500">Mail dispatcher</text>
+      <text class="s" x="470" y="522">Single entry point for all mail</text>
+
+      <rect class="box rp" x="640" y="466" width="370" height="80" rx="8"/>
+      <text class="t" x="825" y="500">Team Room link</text>
+      <text class="s" x="825" y="522">Registers the repo, relays deliveries and replies</text>
+
+      <rect class="bus-rp" x="640" y="580" width="370" height="44" rx="8"/>
+      <text class="t" x="825" y="607" style="font-size:14.5px">Event bus <tspan style="font-weight:400;fill:#566273;font-size:12.5px" dx="8">mail.delivered · channel.out</tspan></text>
+
+      <rect class="box rp" x="70" y="654" width="240" height="92" rx="8"/>
+      <text class="t" x="190" y="694">SQLite storage</text>
+      <text class="s" x="190" y="716">Agents and messages</text>
+
+      <rect class="box rp" x="340" y="654" width="260" height="92" rx="8"/>
+      <text class="t" x="470" y="694">Mail MCP server</text>
+      <text class="s" x="470" y="716">Mail tools for agents</text>
+
+      <rect class="box rp" x="640" y="654" width="370" height="92" rx="8"/>
+      <text class="t" x="825" y="688">Session management</text>
+      <text class="s" x="825" y="709">Starts, wakes and idles agent containers</text>
+      <text class="s" x="825" y="727">through the Docker runner</text>
+
+      <!-- Agent containers -->
+      <rect x="40" y="830" width="1320" height="190" rx="12" fill="#fdf3ea" stroke="#b4541a" stroke-width="1.5"/>
+      <text x="60" y="857"><tspan class="panel-label" fill="#b4541a">AGENT CONTAINERS</tspan><tspan class="panel-note" dx="10">One Docker container per agent</tspan></text>
+
+      <rect class="box ag" x="70" y="874" width="240" height="118" rx="8"/>
+      <text class="t" x="190" y="914">Micah</text>
+      <text class="s" x="190" y="936">Coder</text>
+      <text class="s" x="190" y="966" style="font-weight:600;fill:#b4541a">Pi runtime</text>
+
+      <rect class="box ag" x="330" y="874" width="240" height="118" rx="8"/>
+      <text class="t" x="450" y="914">Doc</text>
+      <text class="s" x="450" y="936">Health monitor</text>
+      <text class="s" x="450" y="966" style="font-weight:600;fill:#b4541a">Pi runtime</text>
+
+      <rect class="box ag" x="590" y="874" width="240" height="118" rx="8"/>
+      <text class="t" x="710" y="914">Libby</text>
+      <text class="s" x="710" y="936">Librarian</text>
+      <text class="s" x="710" y="966" style="font-weight:600;fill:#b4541a">DeepAgents runtime</text>
+
+      <rect class="box ag" x="850" y="874" width="240" height="118" rx="8"/>
+      <text class="t" x="970" y="914">Archie</text>
+      <text class="s" x="970" y="936">Architect</text>
+      <text class="s" x="970" y="966" style="font-weight:600;fill:#b4541a">DeepAgents runtime</text>
+
+      <rect x="1110" y="874" width="220" height="118" rx="8" fill="none" stroke="#b4541a" stroke-width="1.25" stroke-dasharray="5 4"/>
+      <text class="t" x="1220" y="902" style="font-size:14px">Mounted in each</text>
+      <text class="s" x="1220" y="926">/AGENTS.md</text>
+      <text class="s" x="1220" y="947">/store</text>
+      <text class="s" x="1220" y="968">/codebase, when configured</text>
+
+      <!-- Connections: clients -->
+      <path class="flow" d="M190 96V178" marker-end="url(#a)"/>
+      <path class="flow" d="M470 102V178" marker-start="url(#a)" marker-end="url(#a)"/>
+      <path class="flow" d="M585 184V120H770V102" marker-end="url(#a)"/>
+      <text class="l" x="600" y="113">Voice</text>
+      <path class="flow" d="M90 96V118H20V506H64" marker-end="url(#a)"/>
+      <text class="l" transform="translate(15 330) rotate(-90)">inbox, thread</text>
+
+      <!-- Connections: Team Room daemon -->
+      <path class="flow" d="M240 264V288H760V270" marker-end="url(#a)"/>
+      <path class="flow" d="M530 264V288"/>
+      <text class="l" x="620" y="282">Inbound messages</text>
+      <path class="flow" d="M120 312V270" marker-end="url(#a)"/>
+      <path class="flow" d="M400 312V270" marker-end="url(#a)"/>
+      <text class="l" x="128" y="302">Replies</text>
+      <path class="flow" d="M860 264V306" marker-end="url(#a)"/>
+
+      <!-- Connections: between daemons -->
+      <path class="flow" d="M960 270V460" marker-start="url(#a)" marker-end="url(#a)"/>
+      <text class="l" x="942" y="404" text-anchor="end">WebSocket</text>
+      <path class="start" d="M1020 264V414" marker-end="url(#a)"/>
+      <text class="l" x="1030" y="404">Starts on demand</text>
+
+      <!-- Connections: per-repo daemon -->
+      <path class="flow" d="M640 506H606" marker-end="url(#a)"/>
+      <path class="flow" d="M600 530H620V602H634" marker-end="url(#a)"/>
+      <path class="flow" d="M780 580V552" marker-end="url(#a)"/>
+      <text class="l" x="790" y="569">Replies</text>
+      <path class="flow" d="M825 624V648" marker-end="url(#a)"/>
+      <path class="flow" d="M190 546V648" marker-end="url(#a)"/>
+      <text class="l" x="200" y="602">Reads</text>
+      <path class="flow" d="M340 530H325V700H316" marker-end="url(#a)"/>
+      <text class="l" transform="translate(337 628) rotate(-90)">Writes</text>
+      <path class="flow" d="M470 654V552" marker-end="url(#a)"/>
+      <text class="l" x="480" y="604">Sends mail</text>
+
+      <!-- Connections: containers -->
+      <path class="flow" d="M825 746V824" marker-end="url(#a)"/>
+      <text class="l" x="850" y="812">Start and wake</text>
+      <path class="flow" d="M470 830V752" marker-end="url(#a)"/>
+      <text class="l" x="495" y="812">Mail tools over HTTP</text>
+      <path class="model" d="M1205 830V270" marker-end="url(#m)"/>
+      <text class="l" x="1218" y="592" style="fill:#b4541a;font-weight:600">Model calls with</text>
+      <text class="l" x="1218" y="609" style="fill:#b4541a;font-weight:600">a routing token</text>
+      <path class="model" d="M1205 184V102" marker-end="url(#m)"/>
+      <text class="l" x="1218" y="130" style="fill:#b4541a;font-weight:600">Real API key</text>
+
+      <!-- Step badges -->
+      <g class="badge"><circle cx="190" cy="124" r="12"/><text x="190" y="128.5">1</text></g>
+      <g class="badge"><circle cx="470" cy="124" r="12"/><text x="470" y="128.5">1</text></g>
+      <g class="badge"><circle cx="590" cy="288" r="12"/><text x="590" y="292.5">2</text></g>
+      <g class="badge"><circle cx="960" cy="400" r="12"/><text x="960" y="404.5">3</text></g>
+      <g class="badge"><circle cx="620" cy="484" r="12"/><text x="620" y="488.5">4</text></g>
+      <g class="badge"><circle cx="620" cy="566" r="12"/><text x="620" y="570.5">5</text></g>
+      <g class="badge"><circle cx="825" cy="800" r="12"/><text x="825" y="804.5">6</text></g>
+      <g class="badge m"><circle cx="1205" cy="560" r="12"/><text x="1205" y="564.5">7</text></g>
+      <g class="badge"><circle cx="470" cy="800" r="12"/><text x="470" y="804.5">8</text></g>
+    </svg>
+  </div>
+
+  <div class="legend" aria-label="Line styles">
+    <span><i></i>Messages and control</span>
+    <span><i class="model"></i>Model traffic</span>
+    <span><i class="start"></i>Process start</span>
+  </div>
+
+  <h2>How a message travels</h2>
+  <ol class="steps">
+    <li><b>1</b><div>You send a message from the CLI or Telegram.</div></li>
+    <li><b>2</b><div>The Team Room daemon finds the repository that should receive it.</div></li>
+    <li><b>3</b><div>The message crosses the WebSocket link. The repo daemon is started first if it is not running.</div></li>
+    <li><b>4</b><div>The mail dispatcher receives the message and saves it to SQLite.</div></li>
+    <li><b>5</b><div>The dispatcher announces the delivery on the repo's event bus.</div></li>
+    <li><b>6</b><div>Session management starts the agent's container or wakes the running one.</div></li>
+    <li><b>7</b><div>The agent calls its model through the proxy. The container holds only a routing token, never the real key.</div></li>
+    <li><b>8</b><div>The agent replies with its mail tools. The reply returns over the link to the CLI or Telegram.</div></li>
+  </ol>
+
+  <footer>Drawn from the Team Room source at commit 097d3a3 on November 19, 2026.</footer>
+</main>
+</body>
+</html>
